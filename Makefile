@@ -122,22 +122,50 @@ format:
 
 # Database commands
 db-init:
-	@echo "🗄️ Initializing database..."
-	@docker-compose exec postgres psql -U splunk_mcp_user -d splunk_mcp -f /docker-entrypoint-initdb.d/init.sql
+	@echo "🗄️ Initializing database with Alembic..."
+	@docker-compose exec api-gateway python manage_db.py init
 	@echo "✅ Database initialized!"
 
 db-migrate:
 	@echo "🗄️ Running database migrations..."
-	@docker-compose exec api-gateway alembic upgrade head
+	@docker-compose exec api-gateway python manage_db.py upgrade
 	@echo "✅ Migrations complete!"
+
+db-create-migration:
+	@echo "📝 Creating new migration..."
+	@if [ -z "$(MESSAGE)" ]; then \
+		echo "❌ Error: MESSAGE is required"; \
+		echo "Usage: make db-create-migration MESSAGE='Your migration message'"; \
+		exit 1; \
+	fi
+	@docker-compose exec api-gateway python manage_db.py create "$(MESSAGE)"
+	@echo "✅ Migration created!"
+
+db-status:
+	@echo "📊 Checking migration status..."
+	@docker-compose exec api-gateway python manage_db.py status
+
+db-current:
+	@echo "📍 Current database revision:"
+	@docker-compose exec api-gateway python manage_db.py current
+
+db-history:
+	@echo "📜 Migration history:"
+	@docker-compose exec api-gateway python manage_db.py history
+
+db-downgrade:
+	@echo "⬇️ Downgrading database..."
+	@if [ -z "$(REVISION)" ]; then \
+		echo "❌ Error: REVISION is required"; \
+		echo "Usage: make db-downgrade REVISION=revision_id"; \
+		exit 1; \
+	fi
+	@docker-compose exec api-gateway python manage_db.py downgrade $(REVISION)
+	@echo "✅ Database downgraded!"
 
 db-reset:
 	@echo "⚠️ This will destroy all data. Are you sure? [y/N]" && read ans && [ $${ans:-N} = y ]
-	@docker-compose down postgres
-	@docker volume rm mcp_postgres_data
-	@docker-compose up -d postgres
-	@sleep 5
-	@make db-init
+	@docker-compose exec api-gateway python manage_db.py reset
 	@echo "✅ Database reset complete!"
 
 db-backup:
@@ -145,6 +173,10 @@ db-backup:
 	@mkdir -p backups
 	@docker-compose exec postgres pg_dump -U splunk_mcp_user -d splunk_mcp > backups/backup_$(shell date +%Y%m%d_%H%M%S).sql
 	@echo "✅ Database backup created in backups/ directory!"
+
+db-shell:
+	@echo "🐚 Opening database shell..."
+	@docker-compose exec postgres psql -U splunk_mcp_user -d splunk_mcp
 
 # Monitoring commands
 health:

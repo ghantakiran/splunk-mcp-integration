@@ -120,25 +120,36 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Initialize database connection and create tables if needed"""
-    from .base import Base
-    
+    """Initialize database connection and run migrations if needed"""
     try:
         engine = await create_engine()
         
-        # Create all tables
-        async with engine.begin() as conn:
-            # Check if we need to create tables
-            # In production, this should be handled by migrations
-            if settings.environment == "development":
-                await conn.run_sync(Base.metadata.create_all)
-                logger.info("Database tables created/verified")
-        
-        # Test connection
+        # Test connection first
         session_maker = await create_session_maker()
         async with session_maker() as session:
             await session.execute("SELECT 1")
             logger.info("Database connection established successfully")
+        
+        # Handle migrations based on environment
+        if settings.environment == "development":
+            # In development, we can auto-create tables or run migrations
+            try:
+                from .migrations import init_database_with_migrations
+                await init_database_with_migrations()
+                logger.info("Database migrations completed")
+            except Exception as migration_error:
+                logger.warning(
+                    "Migration failed, falling back to table creation", 
+                    error=str(migration_error)
+                )
+                # Fallback to direct table creation
+                from .base import Base
+                async with engine.begin() as conn:
+                    await conn.run_sync(Base.metadata.create_all)
+                    logger.info("Database tables created directly")
+        else:
+            # In production, migrations should be run separately
+            logger.info("Production environment - skipping automatic migrations")
         
     except Exception as e:
         logger.error("Database initialization failed", error=str(e), exc_info=True)
