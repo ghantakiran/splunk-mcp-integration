@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=30, env="JWT_EXPIRE_MINUTES")
     jwt_refresh_expire_days: int = Field(default=7, env="JWT_REFRESH_EXPIRE_DAYS")
+    jwt_refresh_expire_days_extended: int = Field(default=30, env="JWT_REFRESH_EXPIRE_DAYS_EXTENDED")
+    
+    # User Registration
+    registration_enabled: bool = Field(default=True, env="REGISTRATION_ENABLED")
     
     # CORS
     cors_origins: List[str] = Field(
