@@ -7,6 +7,8 @@ from .endpoints import (
     health,
     auth,
     users,
+    profile,
+    settings,
     chat,
     queries,
     dashboards,
@@ -26,6 +28,12 @@ api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 
 # User management endpoints
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+
+# User profile and preferences endpoints
+api_router.include_router(profile.router, prefix="/profile", tags=["profile"])
+
+# User settings and configuration endpoints
+api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
 
 # Chat and conversation endpoints
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
