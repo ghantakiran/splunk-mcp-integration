@@ -16,7 +16,6 @@ from ..core.exceptions import (
     map_exception_to_http
 )
 from ..db.session import get_async_session
-from ..models.user import User
 
 
 async def get_redis() -> redis.Redis:
@@ -53,7 +52,7 @@ async def get_current_user_token(
 async def get_current_user(
     db: AsyncSession = Depends(get_async_session),
     token_data: Dict[str, Any] = Depends(get_current_user_token)
-) -> User:
+):
     """Get current authenticated user"""
     try:
         user_id = token_data.get("sub")
@@ -62,6 +61,7 @@ async def get_current_user(
         
         # Query user from database
         from sqlalchemy import select
+        from ..models.user import User
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         
@@ -78,15 +78,15 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: User = Depends(get_current_user)
-) -> User:
+    current_user = Depends(get_current_user)
+):
     """Get current active user (alias for get_current_user)"""
     return current_user
 
 
 async def get_current_admin_user(
-    current_user: User = Depends(get_current_user)
-) -> User:
+    current_user = Depends(get_current_user)
+):
     """Get current user with admin privileges"""
     if "admin" not in current_user.roles:
         raise HTTPException(
@@ -99,7 +99,7 @@ async def get_current_admin_user(
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_async_session)
-) -> Optional[User]:
+):
     """Get current user if authenticated, None otherwise"""
     if credentials is None:
         return None
@@ -116,6 +116,7 @@ async def get_current_user_optional(
             return None
         
         from sqlalchemy import select
+        from ..models.user import User
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         
@@ -127,9 +128,9 @@ async def get_current_user_optional(
 
 async def validate_session(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
     redis_client: redis.Redis = Depends(get_redis)
-) -> User:
+):
     """Validate user session"""
     try:
         # Get session token from Redis
@@ -159,7 +160,7 @@ async def validate_session(
 async def check_rate_limit(
     request: Request,
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user = Depends(get_current_user_optional)
 ) -> None:
     """Check rate limiting for API requests"""
     # Get client identifier
