@@ -11,7 +11,8 @@ from .endpoints import (
     queries,
     dashboards,
     alerts,
-    system
+    system,
+    demo_exceptions
 )
 
 api_router = APIRouter()
@@ -37,3 +38,7 @@ api_router.include_router(dashboards.router, prefix="/dashboards", tags=["dashbo
 
 # Alert management endpoints
 api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+
+# Demo endpoints (only in development)
+if True:  # Would check settings.debug in production
+    api_router.include_router(demo_exceptions.router, prefix="/demo", tags=["demo"])

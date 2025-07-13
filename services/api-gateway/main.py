@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from contextlib import asynccontextmanager
 import uvicorn
 from datetime import datetime
@@ -14,7 +15,15 @@ import time
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger, RequestLoggingMiddleware
-from app.core.exceptions import BaseCustomException, map_exception_to_http
+from app.core.exceptions import BaseCustomException
+from app.core.exception_handlers import (
+    ExceptionHandlingMiddleware,
+    custom_exception_handler,
+    validation_exception_handler,
+    http_exception_handler,
+    starlette_exception_handler,
+    general_exception_handler
+)
 from app.core.docs import (
     custom_openapi, 
     get_custom_swagger_ui_html, 
@@ -77,6 +86,9 @@ app = FastAPI(
 
 # Set custom OpenAPI schema
 app.openapi = lambda: custom_openapi(app)
+
+# Add exception handling middleware (first, to catch all exceptions)
+app.add_middleware(ExceptionHandlingMiddleware)
 
 # Add versioning middleware
 app.add_middleware(APIVersionMiddleware, supported_versions=["1.0.0"])
@@ -193,111 +205,12 @@ async def detailed_health_check():
     )
 
 
-# Exception handlers
-@app.exception_handler(BaseCustomException)
-async def custom_exception_handler(request: Request, exc: BaseCustomException):
-    """Handle custom exceptions"""
-    http_exc = map_exception_to_http(exc)
-    logger.error(
-        "Custom exception occurred",
-        path=request.url.path,
-        method=request.method,
-        exception=exc.__class__.__name__,
-        message=exc.message,
-        details=exc.details
-    )
-    
-    response = JSONResponse(
-        status_code=http_exc.status_code,
-        content={
-            "error": {
-                "message": exc.message,
-                "code": exc.__class__.__name__.lower().replace('exception', '_error'),
-                "details": exc.details
-            }
-        }
-    )
-    
-    # Add version headers
-    return add_version_headers(response, request)
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle request validation errors"""
-    logger.warning(
-        "Request validation failed",
-        path=request.url.path,
-        method=request.method,
-        errors=exc.errors()
-    )
-    
-    response = JSONResponse(
-        status_code=422,
-        content={
-            "error": {
-                "message": "Request validation failed",
-                "code": "validation_error",
-                "details": {
-                    "errors": exc.errors()
-                }
-            }
-        }
-    )
-    
-    # Add version headers
-    return add_version_headers(response, request)
-
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions"""
-    logger.warning(
-        "HTTP exception occurred",
-        path=request.url.path,
-        method=request.method,
-        status_code=exc.status_code,
-        detail=exc.detail
-    )
-    
-    response = JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {
-                "message": exc.detail,
-                "code": "http_error"
-            }
-        }
-    )
-    
-    # Add version headers
-    return add_version_headers(response, request)
-
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Handle unexpected exceptions"""
-    logger.error(
-        "Unexpected exception occurred",
-        path=request.url.path,
-        method=request.method,
-        exception=exc.__class__.__name__,
-        error=str(exc),
-        exc_info=True
-    )
-    
-    response = JSONResponse(
-        status_code=500,
-        content={
-            "error": {
-                "message": "Internal server error",
-                "code": "internal_error"
-            }
-        }
-    )
-    
-    # Add version headers
-    return add_version_headers(response, request)
+# Enhanced Exception handlers with comprehensive error handling
+app.add_exception_handler(BaseCustomException, custom_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(StarletteHTTPException, starlette_exception_handler)
+app.add_exception_handler(Exception, general_exception_handler)
 
 
 if __name__ == "__main__":
