@@ -94,6 +94,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 ## API Endpoints
 
+<<<<<<< HEAD
 ### Context Management Endpoints
 
 #### Create Conversation
@@ -151,6 +152,8 @@ GET /api/v1/conversations/{conversation_id}/history
 GET /api/v1/conversations/user/{user_id}
 ```
 
+=======
+>>>>>>> origin/main
 ### Core NLP Endpoints
 
 #### Translate to SPL

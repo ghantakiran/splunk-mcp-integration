@@ -607,6 +607,7 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Comprehensive rate limiting system complete with enterprise-grade features, ready for advanced NLP and chat interface implementation
 
+<<<<<<< HEAD
 ### Session 11 - Advanced NLP Engine with OpenAI/Anthropic Integration (2025-07-14)
 
 **Completed Tasks:**
@@ -709,6 +710,8 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Advanced NLP engine complete with multi-provider AI integration, ready for enhanced query processing and visualization features
 
+=======
+>>>>>>> origin/main
 ## Project Overview
 
 This project implements a Model Context Protocol (MCP) integration for Splunk Enterprise that enables natural language interactions with Splunk data. Users can chat in natural language to query data, create dashboards, generate reports, and manage alerts while respecting existing security and access controls.

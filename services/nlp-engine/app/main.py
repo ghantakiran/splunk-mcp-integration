@@ -182,7 +182,6 @@ app.include_router(
     tags=["context"]
 )
 
-
 @app.get("/", tags=["Root"])
 async def root() -> Dict[str, Any]:
     """Root endpoint with service information"""
