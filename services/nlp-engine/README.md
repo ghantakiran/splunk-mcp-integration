@@ -7,8 +7,12 @@ Advanced Natural Language Processing service for Splunk MCP integration, providi
 - **SPL Translation**: Convert natural language queries to Splunk SPL commands
 - **Intent Classification**: Classify user intents for optimized query processing
 - **Entity Extraction**: Extract Splunk-specific entities from natural language
+- **Context Management**: Conversation flow and context-aware query processing
+- **Reference Resolution**: Automatic resolution of pronouns and references
 - **Multi-Provider AI**: Support for OpenAI GPT-4 and Anthropic Claude-3
 - **Fallback Support**: Automatic failover between AI providers
+- **Memory Store**: Redis-based conversation and query history
+- **Follow-up Suggestions**: Intelligent query suggestions based on context
 - **Structured Logging**: Comprehensive logging with metrics
 - **API Documentation**: Interactive OpenAPI/Swagger documentation
 
@@ -24,13 +28,22 @@ nlp-engine/
 │   ├── api/
 │   │   └── v1/
 │   │       ├── endpoints.py    # FastAPI endpoints
+│   │       ├── context_endpoints.py # Context management endpoints
 │   │       └── __init__.py
+│   ├── context/                # Context management system
+│   │   ├── conversation_manager.py # Conversation flow management
+│   │   ├── context_service.py  # Context-aware query processing
+│   │   ├── memory_store.py     # Redis memory store
+│   │   └── __init__.py
 │   ├── core/
 │   │   ├── config.py           # Configuration management
 │   │   ├── logging.py          # Structured logging
 │   │   └── __init__.py
 │   ├── main.py                 # FastAPI application
 │   └── __init__.py
+├── tests/
+│   ├── test_context_management.py # Context system tests
+│   └── ...
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
@@ -80,6 +93,63 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 ```
 
 ## API Endpoints
+
+### Context Management Endpoints
+
+#### Create Conversation
+```bash
+POST /api/v1/conversations
+```
+
+Create a new conversation for context tracking:
+```json
+{
+  "user_id": "user123",
+  "title": "Security Analysis",
+  "session_id": "session456",
+  "metadata": {
+    "source": "web_app"
+  }
+}
+```
+
+#### Contextual Query Processing
+```bash
+POST /api/v1/conversations/{conversation_id}/query
+```
+
+Process query with conversation context:
+```json
+{
+  "conversation_id": "conv-123",
+  "query": "Show me the same data for yesterday",
+  "preferences": {
+    "include_history": true,
+    "max_context_queries": 5,
+    "suggest_follow_ups": true
+  }
+}
+```
+
+#### Get Conversation
+```bash
+GET /api/v1/conversations/{conversation_id}
+```
+
+#### Add Message
+```bash
+POST /api/v1/conversations/{conversation_id}/messages
+```
+
+#### Get Conversation History
+```bash
+GET /api/v1/conversations/{conversation_id}/history
+```
+
+#### Get User Conversations
+```bash
+GET /api/v1/conversations/user/{user_id}
+```
 
 ### Core NLP Endpoints
 

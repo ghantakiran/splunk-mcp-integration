@@ -15,6 +15,7 @@ import uvicorn
 from .core.config import settings
 from .core.logging import configure_logging, get_logger
 from .api.v1.endpoints import router as v1_router
+from .api.v1.context_endpoints import router as context_router
 
 
 # Configure logging before importing other modules
@@ -173,6 +174,12 @@ app.include_router(
     v1_router,
     prefix=settings.api_v1_prefix,
     tags=["v1"]
+)
+
+app.include_router(
+    context_router,
+    prefix=settings.api_v1_prefix,
+    tags=["context"]
 )
 
 
