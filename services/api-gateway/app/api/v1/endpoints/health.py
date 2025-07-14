@@ -1,33 +1,48 @@
 """
-Health check endpoints
+Health check endpoints for system monitoring and diagnostics
 """
 
 from typing import Dict, Any
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from datetime import datetime
 import asyncio
 import aiohttp
+import time
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 
 from ....core.config import settings
 from ....core.logging import get_logger
 from ....api.deps import get_async_session, get_redis
+from ....models.responses import HealthCheckResponse, StatusResponse, COMMON_RESPONSES
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-@router.get("/", status_code=status.HTTP_200_OK)
-async def health_check() -> Dict[str, Any]:
-    """Basic health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "api-gateway",
-        "timestamp": datetime.utcnow().isoformat(),
-        "version": settings.app_version,
-        "environment": settings.environment
+@router.get(
+    "/status", 
+    response_model=StatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Basic health check",
+    description="Returns basic system status and availability",
+    responses={
+        200: {"description": "System is healthy"},
+        503: {"description": "System is unavailable", "model": StatusResponse}
     }
+)
+async def health_check() -> StatusResponse:
+    """
+    Basic health check endpoint
+    
+    Returns simple status information for basic monitoring.
+    Use `/health/detailed` for comprehensive health information.
+    """
+    return StatusResponse(
+        status="healthy",
+        message=f"API Gateway v{settings.app_version} is running normally",
+        timestamp=datetime.utcnow()
+    )
 
 
 @router.get("/detailed", status_code=status.HTTP_200_OK)

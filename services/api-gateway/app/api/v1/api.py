@@ -7,11 +7,14 @@ from .endpoints import (
     health,
     auth,
     users,
+    profile,
+    settings,
     chat,
     queries,
     dashboards,
     alerts,
-    system
+    system,
+    demo_exceptions
 )
 
 api_router = APIRouter()
@@ -26,6 +29,12 @@ api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 # User management endpoints
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 
+# User profile and preferences endpoints
+api_router.include_router(profile.router, prefix="/profile", tags=["profile"])
+
+# User settings and configuration endpoints
+api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
+
 # Chat and conversation endpoints
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 
@@ -37,3 +46,7 @@ api_router.include_router(dashboards.router, prefix="/dashboards", tags=["dashbo
 
 # Alert management endpoints
 api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+
+# Demo endpoints (only in development)
+if True:  # Would check settings.debug in production
+    api_router.include_router(demo_exceptions.router, prefix="/demo", tags=["demo"])

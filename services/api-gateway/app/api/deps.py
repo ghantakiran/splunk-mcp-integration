@@ -2,7 +2,7 @@
 Dependency injection for API endpoints
 """
 
-from typing import Generator, Optional, Dict, Any
+from typing import Generator, Optional, Dict, Any, List, Callable
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from ..core.config import settings
 from ..core.security import security, security_manager
 from ..core.exceptions import (
     AuthenticationError,
+    AuthorizationError,
     SessionExpiredError,
     map_exception_to_http
 )
@@ -238,3 +239,46 @@ def get_query_filters(
         filters["tags"] = [tag.strip() for tag in tags.split(",") if tag.strip()]
     
     return filters
+
+
+def require_permissions(required_permissions: List[str]) -> Callable:
+    """Dependency factory to require specific permissions"""
+    
+    def permission_checker(current_user = Depends(get_current_user)):
+        """Check if user has required permissions"""
+        
+        # Check if user has any of the required permissions
+        for permission in required_permissions:
+            if current_user.has_permission(permission):
+                return current_user
+        
+        # If no permissions match, raise authorization error
+        raise map_exception_to_http(
+            AuthorizationError(
+                message=f"Insufficient permissions. Required: {', '.join(required_permissions)}",
+                required_permission=required_permissions[0] if required_permissions else None
+            )
+        )
+    
+    return permission_checker
+
+
+def require_roles(required_roles: List[str]) -> Callable:
+    """Dependency factory to require specific roles"""
+    
+    def role_checker(current_user = Depends(get_current_user)):
+        """Check if user has required roles"""
+        
+        # Check if user has any of the required roles
+        for role in required_roles:
+            if current_user.has_role(role):
+                return current_user
+        
+        # If no roles match, raise authorization error
+        raise map_exception_to_http(
+            AuthorizationError(
+                message=f"Insufficient role. Required: {', '.join(required_roles)}"
+            )
+        )
+    
+    return role_checker
