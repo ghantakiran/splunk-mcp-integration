@@ -22,7 +22,13 @@ help:
 	@echo ""
 	@echo "Development Commands:"
 	@echo "  test           - Run all tests"
-	@echo "  test-backend   - Run backend tests"
+	@echo "  test-backend   - Run all backend tests"
+	@echo "  test-backend-unit         - Run unit tests only"
+	@echo "  test-backend-integration  - Run integration tests (requires Redis)"
+	@echo "  test-backend-performance  - Run performance tests (requires Redis)"
+	@echo "  test-rate-limiting        - Run rate limiting tests specifically"
+	@echo "  test-rate-limiting-coverage - Run rate limiting tests with coverage"
+	@echo "  test-rate-limiting-fast   - Run fast rate limiting tests"
 	@echo "  test-frontend  - Run frontend tests"
 	@echo "  lint           - Run linting for all code"
 	@echo "  format         - Format all code"
@@ -103,7 +109,31 @@ test: test-backend test-frontend
 
 test-backend:
 	@echo "🧪 Running backend tests..."
-	@find services -name "pytest.ini" -o -name "test_*.py" | head -1 | xargs -I {} dirname {} | xargs -I {} sh -c 'cd {} && python -m pytest'
+	@cd services/api-gateway && python scripts/run_tests.py --suite all
+
+test-backend-unit:
+	@echo "🧪 Running unit tests..."
+	@cd services/api-gateway && python scripts/run_tests.py --suite unit
+
+test-backend-integration:
+	@echo "🧪 Running integration tests..."
+	@cd services/api-gateway && python scripts/run_tests.py --suite integration --redis-required
+
+test-backend-performance:
+	@echo "🧪 Running performance tests..."
+	@cd services/api-gateway && python scripts/run_tests.py --suite performance --redis-required
+
+test-rate-limiting:
+	@echo "🧪 Running rate limiting tests..."
+	@cd services/api-gateway && python -m pytest tests/test_rate_limiting*.py -v
+
+test-rate-limiting-coverage:
+	@echo "🧪 Running rate limiting tests with coverage..."
+	@cd services/api-gateway && python scripts/run_tests.py --suite all --coverage
+
+test-rate-limiting-fast:
+	@echo "🧪 Running fast rate limiting tests..."
+	@cd services/api-gateway && python scripts/run_tests.py --suite unit --fast
 
 test-frontend:
 	@echo "🧪 Running frontend tests..."
