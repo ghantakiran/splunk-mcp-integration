@@ -109,6 +109,7 @@ test: test-backend test-frontend
 
 test-backend:
 	@echo "🧪 Running backend tests..."
+<<<<<<< HEAD
 	@cd services/api-gateway && python scripts/run_tests.py --suite all
 
 test-backend-unit:
