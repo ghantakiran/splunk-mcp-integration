@@ -15,6 +15,7 @@ from ...ai.advanced_aggregation import advanced_aggregation_handler, Aggregation
 from ...ai.statistical_functions import statistical_function_mapper, StatisticalFunction, StatisticalCategory
 from ...ai.regex_pattern_matching import regex_pattern_mapper, PatternType, RegexCommand, RegexComplexity
 from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, LookupMatchType
+from ...ai.eval_calculated_fields import eval_calculated_fields_mapper, EvalFunctionType, ExpressionComplexity
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -2421,4 +2422,505 @@ async def get_lookup_catalog() -> LookupCatalogResponse:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to get lookup table catalog: {str(e)}"
+            )
+
+
+# Eval and Calculated Fields Request/Response Models
+class EvalExpressionRequest(BaseModel):
+    """Request for eval expression analysis"""
+    natural_query: str = Field(..., description="Natural language query describing calculation or expression", min_length=1)
+    available_fields: Optional[List[str]] = Field(None, description="Available fields in the data")
+    include_optimization: bool = Field(True, description="Include optimization suggestions")
+    validate_syntax: bool = Field(True, description="Validate expression syntax")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Calculate the percentage of successful requests and round to 2 decimal places",
+                "available_fields": ["status", "total_requests", "response_time"],
+                "include_optimization": True,
+                "validate_syntax": True
+            }
+        }
+
+
+class EvalExpressionInfo(BaseModel):
+    """Information about a detected eval expression"""
+    field_name: str = Field(..., description="Name of the calculated field")
+    expression: str = Field(..., description="Eval expression")
+    expression_type: str = Field(..., description="Type of expression (mathematical, string, etc.)")
+    complexity: str = Field(..., description="Expression complexity level")
+    description: str = Field(..., description="Description of the expression")
+    dependencies: List[str] = Field(..., description="Field dependencies")
+    spl_command: str = Field(..., description="Generated SPL eval command")
+    validation_result: Optional[Dict[str, Any]] = Field(None, description="Expression validation results")
+    optimization_suggestions: List[str] = Field(default_factory=list, description="Optimization suggestions")
+
+
+class EvalExpressionResponse(BaseModel):
+    """Response for eval expression analysis"""
+    detected_expressions: List[EvalExpressionInfo] = Field(..., description="Detected eval expressions")
+    total_expressions: int = Field(..., description="Total number of detected expressions")
+    expression_summary: Dict[str, int] = Field(..., description="Summary by expression type")
+    combined_spl: str = Field(..., description="Combined SPL with all eval expressions")
+    validation_errors: List[str] = Field(default_factory=list, description="Overall validation errors")
+    performance_analysis: Dict[str, Any] = Field(..., description="Performance analysis")
+
+
+class EvalFunctionRequest(BaseModel):
+    """Request for eval function suggestions"""
+    query_context: str = Field(..., description="Context for function suggestions", min_length=1)
+    available_fields: Optional[List[str]] = Field(None, description="Available fields")
+    function_types: Optional[List[str]] = Field(None, description="Filter by function types")
+    limit: int = Field(10, description="Maximum number of suggestions", ge=1, le=20)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "query_context": "I need to manipulate string data and convert case",
+                "available_fields": ["message", "user_name", "status"],
+                "function_types": ["string"],
+                "limit": 5
+            }
+        }
+
+
+class EvalFunctionInfo(BaseModel):
+    """Information about an eval function"""
+    function_name: str = Field(..., description="Function name")
+    function_type: str = Field(..., description="Function type category")
+    syntax: str = Field(..., description="Function syntax")
+    description: str = Field(..., description="Function description")
+    parameters: List[str] = Field(..., description="Function parameters")
+    examples: List[str] = Field(..., description="Usage examples")
+    return_type: str = Field(..., description="Return data type")
+    complexity: str = Field(..., description="Function complexity")
+
+
+class EvalFunctionResponse(BaseModel):
+    """Response for eval function suggestions"""
+    suggested_functions: List[EvalFunctionInfo] = Field(..., description="Suggested eval functions")
+    total_suggestions: int = Field(..., description="Total number of suggestions")
+    function_types: List[str] = Field(..., description="Function types represented")
+    usage_examples: Dict[str, str] = Field(..., description="Context-specific usage examples")
+
+
+class EvalValidationRequest(BaseModel):
+    """Request for eval expression validation"""
+    field_name: str = Field(..., description="Name of the calculated field")
+    expression: str = Field(..., description="Eval expression to validate", min_length=1)
+    expected_type: Optional[str] = Field(None, description="Expected return type")
+    optimize: bool = Field(True, description="Include optimization suggestions")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "field_name": "success_rate",
+                "expression": "round((successful_requests / total_requests) * 100, 2)",
+                "expected_type": "number",
+                "optimize": True
+            }
+        }
+
+
+class EvalValidationResponse(BaseModel):
+    """Response for eval expression validation"""
+    valid: bool = Field(..., description="Whether the expression is valid")
+    field_name: str = Field(..., description="Calculated field name")
+    expression: str = Field(..., description="Original expression")
+    optimized_expression: Optional[str] = Field(None, description="Optimized expression")
+    spl_command: str = Field(..., description="Generated SPL eval command")
+    complexity: str = Field(..., description="Expression complexity level")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    suggestions: List[str] = Field(default_factory=list, description="Optimization suggestions")
+    performance_score: Optional[int] = Field(None, description="Performance score (1-10)")
+
+
+class EvalCatalogResponse(BaseModel):
+    """Response for eval function catalog"""
+    mathematical_functions: Dict[str, EvalFunctionInfo] = Field(..., description="Mathematical functions")
+    string_functions: Dict[str, EvalFunctionInfo] = Field(..., description="String manipulation functions")
+    datetime_functions: Dict[str, EvalFunctionInfo] = Field(..., description="Date/time functions")
+    conditional_functions: Dict[str, EvalFunctionInfo] = Field(..., description="Conditional logic functions")
+    conversion_functions: Dict[str, EvalFunctionInfo] = Field(..., description="Type conversion functions")
+    validation_functions: Dict[str, EvalFunctionInfo] = Field(..., description="Data validation functions")
+    common_expressions: Dict[str, Dict[str, str]] = Field(..., description="Common expression templates")
+    function_types: List[str] = Field(..., description="Available function types")
+    complexity_levels: List[str] = Field(..., description="Available complexity levels")
+
+
+# Eval and Calculated Fields Endpoints
+@router.post("/eval/analyze", response_model=EvalExpressionResponse, tags=["Eval and Calculated Fields"])
+async def analyze_eval_expressions(request: EvalExpressionRequest) -> EvalExpressionResponse:
+    """
+    Analyze natural language query for eval expressions and calculated fields
+    
+    Detect calculation and expression requirements from natural language and generate
+    appropriate SPL eval commands for mathematical operations, string manipulation,
+    conditional logic, and data transformations.
+    """
+    with LogContext(endpoint="analyze_eval_expressions", query_length=len(request.natural_query)):
+        try:
+            logger.info("Analyzing eval expressions", query=request.natural_query[:100])
+            
+            # Detect eval expressions from natural language
+            detected_expressions = eval_calculated_fields_mapper.detect_eval_expressions(request.natural_query)
+            
+            # Generate expression info
+            expression_info_list = []
+            expression_summary = {}
+            validation_errors = []
+            combined_spl_parts = []
+            
+            for eval_expr in detected_expressions:
+                # Generate SPL
+                spl_command = eval_calculated_fields_mapper.generate_spl_for_eval(eval_expr)
+                combined_spl_parts.append(spl_command)
+                
+                # Validate expression if requested
+                validation_result = None
+                if request.validate_syntax:
+                    validation = eval_calculated_fields_mapper.validate_eval_expression(eval_expr)
+                    validation_result = validation
+                    if not validation["valid"]:
+                        validation_errors.extend(validation["errors"])
+                
+                # Optimize expression if requested
+                optimization_suggestions = []
+                if request.include_optimization:
+                    optimized_expr = eval_calculated_fields_mapper.optimize_eval_expression(eval_expr)
+                    if optimized_expr.expression != eval_expr.expression:
+                        optimization_suggestions.append("Expression can be optimized for better performance")
+                    optimization_suggestions.extend(validation_result.get("suggestions", []) if validation_result else [])
+                
+                # Create expression info
+                expression_info = EvalExpressionInfo(
+                    field_name=eval_expr.field_name,
+                    expression=eval_expr.expression,
+                    expression_type=eval_expr.expression_type.value,
+                    complexity=eval_expr.complexity.value,
+                    description=eval_expr.description,
+                    dependencies=eval_expr.dependencies,
+                    spl_command=spl_command,
+                    validation_result=validation_result,
+                    optimization_suggestions=optimization_suggestions
+                )
+                expression_info_list.append(expression_info)
+                
+                # Update summary
+                expr_type = eval_expr.expression_type.value
+                expression_summary[expr_type] = expression_summary.get(expr_type, 0) + 1
+            
+            # Generate combined SPL
+            if combined_spl_parts:
+                combined_spl = " | ".join(combined_spl_parts)
+            else:
+                combined_spl = "# No eval expressions detected"
+            
+            # Performance analysis
+            performance_analysis = {
+                "total_expressions": len(detected_expressions),
+                "complexity_distribution": {
+                    complexity.value: sum(1 for expr in detected_expressions if expr.complexity == complexity)
+                    for complexity in ExpressionComplexity
+                },
+                "estimated_performance": "good",
+                "resource_usage": "low"
+            }
+            
+            # Adjust performance estimates
+            complex_expressions = sum(1 for expr in detected_expressions 
+                                    if expr.complexity in [ExpressionComplexity.COMPLEX, ExpressionComplexity.ADVANCED])
+            if complex_expressions > 3:
+                performance_analysis["estimated_performance"] = "moderate"
+                performance_analysis["resource_usage"] = "medium"
+            
+            if len(detected_expressions) > 10:
+                performance_analysis["estimated_performance"] = "slow"
+                performance_analysis["resource_usage"] = "high"
+            
+            logger.info(
+                "Eval expression analysis completed",
+                expression_count=len(expression_info_list),
+                expression_types=list(expression_summary.keys()),
+                validation_errors=len(validation_errors)
+            )
+            
+            return EvalExpressionResponse(
+                detected_expressions=expression_info_list,
+                total_expressions=len(expression_info_list),
+                expression_summary=expression_summary,
+                combined_spl=combined_spl,
+                validation_errors=validation_errors,
+                performance_analysis=performance_analysis
+            )
+            
+        except Exception as e:
+            logger.error(f"Eval expression analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Eval expression analysis failed: {str(e)}"
+            )
+
+
+@router.post("/eval/functions", response_model=EvalFunctionResponse, tags=["Eval and Calculated Fields"])
+async def get_eval_function_suggestions(request: EvalFunctionRequest) -> EvalFunctionResponse:
+    """
+    Get eval function suggestions based on query context
+    
+    Analyze the query context and available fields to suggest appropriate
+    eval functions for calculations, transformations, and data processing.
+    """
+    with LogContext(endpoint="get_eval_function_suggestions", context_length=len(request.query_context)):
+        try:
+            logger.info("Getting eval function suggestions", context=request.query_context[:100])
+            
+            # Get function suggestions
+            suggestions = eval_calculated_fields_mapper.suggest_eval_functions(
+                request.query_context, 
+                request.available_fields
+            )
+            
+            # Filter by function types if specified
+            if request.function_types:
+                suggestions = [
+                    s for s in suggestions 
+                    if s.get("function_type") in request.function_types
+                ]
+            
+            # Limit suggestions
+            limited_suggestions = suggestions[:request.limit]
+            
+            # Convert to response format
+            suggested_functions = []
+            function_types = set()
+            usage_examples = {}
+            
+            for suggestion in limited_suggestions:
+                function_name = suggestion["function_name"]
+                function_info_dict = eval_calculated_fields_mapper.get_function_info(function_name)
+                
+                if function_info_dict:
+                    function_info = EvalFunctionInfo(
+                        function_name=function_info_dict["name"],
+                        function_type=function_info_dict["type"],
+                        syntax=function_info_dict["syntax"],
+                        description=function_info_dict["description"],
+                        parameters=function_info_dict["parameters"],
+                        examples=function_info_dict["examples"],
+                        return_type=function_info_dict["return_type"],
+                        complexity=function_info_dict["complexity"]
+                    )
+                    suggested_functions.append(function_info)
+                    function_types.add(function_info_dict["type"])
+                    
+                    # Create context-specific usage example
+                    if request.available_fields and function_info_dict["examples"]:
+                        field = request.available_fields[0]  # Use first available field
+                        example_template = function_info_dict["examples"][0]
+                        usage_examples[function_name] = f"eval calculated_{field}={example_template}"
+            
+            logger.info(
+                "Eval function suggestions completed",
+                suggestion_count=len(suggested_functions),
+                function_types=list(function_types)
+            )
+            
+            return EvalFunctionResponse(
+                suggested_functions=suggested_functions,
+                total_suggestions=len(suggested_functions),
+                function_types=list(function_types),
+                usage_examples=usage_examples
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get eval function suggestions: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get eval function suggestions: {str(e)}"
+            )
+
+
+@router.post("/eval/validate", response_model=EvalValidationResponse, tags=["Eval and Calculated Fields"])
+async def validate_eval_expression(request: EvalValidationRequest) -> EvalValidationResponse:
+    """
+    Validate eval expression and provide optimization suggestions
+    
+    Validate an eval expression for syntax correctness, analyze complexity,
+    and provide optimization suggestions for better performance.
+    """
+    with LogContext(endpoint="validate_eval_expression", field_name=request.field_name):
+        try:
+            logger.info("Validating eval expression", field=request.field_name, expr_length=len(request.expression))
+            
+            # Create eval expression object for validation
+            from ...ai.eval_calculated_fields import EvalExpression, EvalFunctionType, ExpressionComplexity
+            
+            # Determine expression type based on content
+            expr_type = EvalFunctionType.MATHEMATICAL  # Default
+            if any(func in request.expression.lower() for func in ["upper", "lower", "substr", "replace", "trim"]):
+                expr_type = EvalFunctionType.STRING
+            elif any(func in request.expression.lower() for func in ["if", "case", "coalesce"]):
+                expr_type = EvalFunctionType.CONDITIONAL
+            elif any(func in request.expression.lower() for func in ["strftime", "strptime", "now"]):
+                expr_type = EvalFunctionType.DATETIME
+            
+            # Determine complexity based on expression characteristics
+            complexity = ExpressionComplexity.SIMPLE
+            if "case(" in request.expression or "if(" in request.expression:
+                complexity = ExpressionComplexity.MODERATE
+            if request.expression.count("(") > 3 or len(request.expression) > 100:
+                complexity = ExpressionComplexity.COMPLEX
+            if "case(" in request.expression and request.expression.count(",") > 6:
+                complexity = ExpressionComplexity.ADVANCED
+            
+            eval_expr = EvalExpression(
+                field_name=request.field_name,
+                expression=request.expression,
+                expression_type=expr_type,
+                complexity=complexity,
+                description=f"User-defined expression for {request.field_name}",
+                dependencies=[]  # Would need to parse to extract
+            )
+            
+            # Validate expression
+            validation = eval_calculated_fields_mapper.validate_eval_expression(eval_expr)
+            
+            # Generate SPL command
+            spl_command = eval_calculated_fields_mapper.generate_spl_for_eval(eval_expr)
+            
+            # Optimize expression if requested
+            optimized_expression = None
+            if request.optimize:
+                optimized_expr = eval_calculated_fields_mapper.optimize_eval_expression(eval_expr)
+                if optimized_expr.expression != eval_expr.expression:
+                    optimized_expression = optimized_expr.expression
+                    validation["suggestions"].append("Expression can be optimized for better performance")
+            
+            # Calculate performance score
+            performance_score = 10  # Start with perfect score
+            if complexity == ExpressionComplexity.MODERATE:
+                performance_score -= 2
+            elif complexity == ExpressionComplexity.COMPLEX:
+                performance_score -= 4
+            elif complexity == ExpressionComplexity.ADVANCED:
+                performance_score -= 6
+            
+            if len(request.expression) > 200:
+                performance_score -= 2
+            
+            if request.expression.count("case(") > 2:
+                performance_score -= 2
+            
+            performance_score = max(1, performance_score)
+            
+            logger.info(
+                "Eval expression validation completed",
+                valid=validation["valid"],
+                complexity=complexity.value,
+                performance_score=performance_score
+            )
+            
+            return EvalValidationResponse(
+                valid=validation["valid"],
+                field_name=request.field_name,
+                expression=request.expression,
+                optimized_expression=optimized_expression,
+                spl_command=spl_command,
+                complexity=complexity.value,
+                errors=validation["errors"],
+                warnings=validation["warnings"],
+                suggestions=validation["suggestions"],
+                performance_score=performance_score
+            )
+            
+        except Exception as e:
+            logger.error(f"Eval expression validation failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Eval expression validation failed: {str(e)}"
+            )
+
+
+@router.get("/eval/catalog", response_model=EvalCatalogResponse, tags=["Eval and Calculated Fields"])
+async def get_eval_function_catalog() -> EvalCatalogResponse:
+    """
+    Get comprehensive catalog of available eval functions
+    
+    Retrieve the complete catalog of eval functions organized by type,
+    including syntax, descriptions, examples, and common expression templates.
+    """
+    with LogContext(endpoint="get_eval_function_catalog"):
+        try:
+            logger.info("Retrieving eval function catalog")
+            
+            # Get all functions info
+            all_functions_info = eval_calculated_fields_mapper.get_all_functions()
+            
+            # Helper function to convert function info
+            def convert_function_info(func_name: str) -> EvalFunctionInfo:
+                func_info = eval_calculated_fields_mapper.get_function_info(func_name)
+                return EvalFunctionInfo(
+                    function_name=func_info["name"],
+                    function_type=func_info["type"],
+                    syntax=func_info["syntax"],
+                    description=func_info["description"],
+                    parameters=func_info["parameters"],
+                    examples=func_info["examples"],
+                    return_type=func_info["return_type"],
+                    complexity=func_info["complexity"]
+                ) if func_info else None
+            
+            # Organize functions by type
+            mathematical_functions = {}
+            string_functions = {}
+            datetime_functions = {}
+            conditional_functions = {}
+            conversion_functions = {}
+            validation_functions = {}
+            
+            for func_type, func_list in all_functions_info["by_type"].items():
+                for func_name in func_list:
+                    func_info = convert_function_info(func_name)
+                    if func_info:
+                        if func_type == "mathematical":
+                            mathematical_functions[func_name] = func_info
+                        elif func_type == "string":
+                            string_functions[func_name] = func_info
+                        elif func_type == "datetime":
+                            datetime_functions[func_name] = func_info
+                        elif func_type == "conditional":
+                            conditional_functions[func_name] = func_info
+                        elif func_type == "conversion":
+                            conversion_functions[func_name] = func_info
+                        elif func_type == "validation":
+                            validation_functions[func_name] = func_info
+            
+            # Get common expressions
+            common_expressions = {}
+            for expr_name, expr_info in eval_calculated_fields_mapper.common_expressions.items():
+                common_expressions[expr_name] = {
+                    "expression": expr_info["expression"],
+                    "description": expr_info["description"],
+                    "example": expr_info["example"]
+                }
+            
+            return EvalCatalogResponse(
+                mathematical_functions=mathematical_functions,
+                string_functions=string_functions,
+                datetime_functions=datetime_functions,
+                conditional_functions=conditional_functions,
+                conversion_functions=conversion_functions,
+                validation_functions=validation_functions,
+                common_expressions=common_expressions,
+                function_types=list(all_functions_info["by_type"].keys()),
+                complexity_levels=list(all_functions_info["by_complexity"].keys())
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get eval function catalog: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get eval function catalog: {str(e)}"
             )
