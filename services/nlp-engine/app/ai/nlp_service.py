@@ -9,6 +9,7 @@ import re
 import json
 
 from .providers import AIRequest, AIResponse, ai_manager
+from .spl_mapping import spl_mapper, SPLCommand, FieldMapping, IntentPattern
 from ..core.config import settings
 from ..core.logging import get_logger, NLPMetrics
 
@@ -35,6 +36,10 @@ class SPLTranslationResponse:
     alternative_queries: Optional[List[str]] = None
     processing_time: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = None
+    optimization_suggestions: Optional[List[str]] = None
+    syntax_valid: bool = True
+    syntax_errors: Optional[List[str]] = None
+    command_suggestions: Optional[List[Tuple[str, float]]] = None
 
 
 @dataclass
@@ -203,11 +208,26 @@ Extract entities from this query:
         }
     
     async def translate_to_spl(self, request: SPLTranslationRequest) -> SPLTranslationResponse:
-        """Translate natural language query to SPL"""
+        """Translate natural language query to SPL using comprehensive mapping"""
         start_time = time.time()
         
         try:
-            # Prepare context for AI
+            # Pre-process with SPL mapping system
+            command_suggestions = spl_mapper.get_command_suggestions(request.natural_query)
+            
+            # Extract entities and intents using mapping
+            entities = self._extract_entities_with_mapping(request.natural_query)
+            intent_result = await self.classify_intent(request.natural_query)
+            
+            # Generate SPL template if intent matches
+            spl_template = ""
+            if intent_result.primary_intent:
+                spl_template = spl_mapper.generate_spl_template(
+                    intent_result.primary_intent, 
+                    entities
+                )
+            
+            # Prepare enhanced context for AI with mapping information
             context_info = ""
             if request.context:
                 context_info = f"\nContext: {json.dumps(request.context, indent=2)}"
@@ -218,15 +238,38 @@ Extract entities from this query:
                 for msg in request.conversation_history[-5:]:  # Last 5 messages
                     conversation_context += f"- {msg.get('role', 'user')}: {msg.get('content', '')}\n"
             
+            # Add SPL mapping context
+            mapping_context = f"""
+SPL Mapping Analysis:
+- Detected Intent: {intent_result.primary_intent} (confidence: {intent_result.confidence_score:.2f})
+- Extracted Entities: {json.dumps(entities, indent=2)}
+- Suggested Commands: {[cmd for cmd, score in command_suggestions[:3]]}
+- Template Suggestion: {spl_template}
+"""
+            
+            # Enhanced prompt with mapping knowledge
+            enhanced_prompt = self.spl_translation_prompt + f"""
+
+## SPL Command Mapping Knowledge:
+{self._get_command_reference_text()}
+
+## Field Mapping Knowledge:
+{self._get_field_mapping_text()}
+
+## Current Analysis:
+{mapping_context}
+
+Please use this mapping knowledge to generate accurate, optimized SPL queries."""
+            
             # Build AI request
             ai_request = AIRequest(
-                system_prompt=self.spl_translation_prompt,
+                system_prompt=enhanced_prompt,
                 messages=[{
                     "role": "user",
                     "content": f"{request.natural_query}{context_info}{conversation_context}"
                 }],
                 temperature=0.1,  # Low temperature for consistent results
-                metadata={"task": "spl_translation"}
+                metadata={"task": "spl_translation_enhanced"}
             )
             
             # Get AI response
@@ -243,8 +286,16 @@ Extract entities from this query:
                 # Fallback: treat entire response as SPL query
                 spl_query = ai_response.content.strip()
                 confidence = 0.8
-                explanation = "Generated SPL query"
+                explanation = "Generated SPL query using comprehensive mapping"
                 suggestions = []
+            
+            # Validate and optimize SPL using mapping system
+            syntax_valid, syntax_errors = spl_mapper.validate_spl_syntax(spl_query)
+            optimized_query, optimization_suggestions = spl_mapper.optimize_spl_query(spl_query)
+            
+            # Update confidence based on validation
+            if not syntax_valid:
+                confidence *= 0.7  # Reduce confidence for invalid syntax
             
             processing_time = time.time() - start_time
             
@@ -263,11 +314,18 @@ Extract entities from this query:
                 explanation=explanation,
                 suggested_improvements=suggestions,
                 processing_time=processing_time,
+                optimization_suggestions=optimization_suggestions,
+                syntax_valid=syntax_valid,
+                syntax_errors=syntax_errors if not syntax_valid else None,
+                command_suggestions=command_suggestions,
                 metadata={
                     "ai_provider": ai_response.provider,
                     "ai_model": ai_response.model,
                     "input_tokens": ai_response.input_tokens,
-                    "output_tokens": ai_response.output_tokens
+                    "output_tokens": ai_response.output_tokens,
+                    "detected_intent": intent_result.primary_intent,
+                    "extracted_entities": entities,
+                    "template_used": spl_template if spl_template else None
                 }
             )
             
@@ -279,27 +337,133 @@ Extract entities from this query:
                 success=False,
                 error=str(e)
             )
-            self.logger.error(f"SPL translation failed: {e}")
+            self.logger.error(f"Enhanced SPL translation failed: {e}")
             raise
     
+    def _extract_entities_with_mapping(self, query: str) -> Dict[str, Any]:
+        """Extract entities using SPL mapping system"""
+        entities = {}
+        query_lower = query.lower()
+        
+        # Extract time references
+        time_entities = []
+        for time_expr, spl_time in spl_mapper.time_mappings.items():
+            if time_expr in query_lower:
+                time_entities.append({
+                    "natural": time_expr,
+                    "spl": spl_time
+                })
+        if time_entities:
+            entities["time_range"] = time_entities
+        
+        # Extract field references
+        field_entities = {}
+        for field_key, field_mapping in spl_mapper.field_mappings.items():
+            for natural_name in field_mapping.natural_names:
+                if natural_name in query_lower:
+                    field_entities[natural_name] = {
+                        "splunk_field": field_mapping.splunk_field,
+                        "field_type": field_mapping.field_type.value
+                    }
+        if field_entities:
+            entities["fields"] = field_entities
+        
+        # Extract aggregation functions
+        aggregations = []
+        for natural_func, spl_func in spl_mapper.aggregation_mappings.items():
+            if natural_func in query_lower:
+                aggregations.append({
+                    "natural": natural_func,
+                    "spl": spl_func
+                })
+        if aggregations:
+            entities["aggregations"] = aggregations
+        
+        # Extract operators
+        operators = []
+        for natural_op, spl_op in spl_mapper.operator_mappings.items():
+            if natural_op in query_lower:
+                operators.append({
+                    "natural": natural_op,
+                    "spl": spl_op
+                })
+        if operators:
+            entities["operators"] = operators
+        
+        return entities
+    
+    def _get_command_reference_text(self) -> str:
+        """Generate command reference text for AI prompt"""
+        reference_text = "## Available SPL Commands:\n"
+        
+        for cmd_name, cmd in spl_mapper.commands.items():
+            reference_text += f"- **{cmd_name}**: {cmd.description}\n"
+            reference_text += f"  Syntax: {cmd.syntax}\n"
+            if cmd.common_patterns:
+                reference_text += f"  Common patterns: {', '.join(cmd.common_patterns[:3])}\n"
+            reference_text += "\n"
+        
+        return reference_text
+    
+    def _get_field_mapping_text(self) -> str:
+        """Generate field mapping text for AI prompt"""
+        mapping_text = "## Common Field Mappings:\n"
+        
+        for field_key, mapping in spl_mapper.field_mappings.items():
+            mapping_text += f"- **{mapping.splunk_field}**: {', '.join(mapping.natural_names)}\n"
+            mapping_text += f"  Type: {mapping.field_type.value}\n"
+            if mapping.common_values:
+                mapping_text += f"  Common values: {', '.join(mapping.common_values[:5])}\n"
+            mapping_text += "\n"
+        
+        return mapping_text
+    
     async def classify_intent(self, query: str) -> IntentClassificationResult:
-        """Classify the intent of a natural language query"""
+        """Classify the intent of a natural language query using enhanced mapping"""
         try:
-            # Quick keyword-based classification
-            keyword_scores = {}
+            # Use SPL mapping intent patterns for enhanced classification
+            pattern_scores = {}
             query_lower = query.lower()
             
+            # Check SPL mapping patterns first
+            for pattern in spl_mapper.intent_patterns:
+                for regex_pattern in pattern.patterns:
+                    if re.search(regex_pattern, query_lower):
+                        if pattern.intent not in pattern_scores:
+                            pattern_scores[pattern.intent] = 0
+                        pattern_scores[pattern.intent] += 1 + pattern.confidence_boost
+            
+            # Quick keyword-based classification as fallback
+            keyword_scores = {}
             for intent, keywords in self.intent_keywords.items():
                 score = sum(1 for keyword in keywords if keyword in query_lower)
                 if score > 0:
                     keyword_scores[intent] = score / len(keywords)
             
+            # Combine pattern and keyword scores
+            combined_scores = {}
+            for intent, score in pattern_scores.items():
+                combined_scores[intent] = score * 1.5  # Boost pattern matches
+            
+            for intent, score in keyword_scores.items():
+                if intent in combined_scores:
+                    combined_scores[intent] += score
+                else:
+                    combined_scores[intent] = score
+            
             # AI-based classification for better accuracy
             ai_request = AIRequest(
-                system_prompt=self.intent_classification_prompt,
+                system_prompt=self.intent_classification_prompt + f"""
+                
+## Enhanced Intent Analysis:
+Pattern matches found: {list(pattern_scores.keys())}
+Keyword matches found: {list(keyword_scores.keys())}
+Combined scores: {combined_scores}
+
+Use this information to improve intent classification accuracy.""",
                 messages=[{"role": "user", "content": query}],
                 temperature=0.1,
-                metadata={"task": "intent_classification"}
+                metadata={"task": "intent_classification_enhanced"}
             )
             
             ai_response = await ai_manager.generate_response(ai_request)
@@ -309,9 +473,18 @@ Extract entities from this query:
                 primary_intent = response_data.get("primary_intent", "SEARCH_EVENTS")
                 confidence = response_data.get("confidence", 0.5)
                 secondary_intents = response_data.get("secondary_intents", [])
+                
+                # Boost confidence if patterns matched
+                if primary_intent in pattern_scores:
+                    confidence = min(1.0, confidence + 0.2)
+                
             except json.JSONDecodeError:
-                # Fallback to keyword-based classification
-                if keyword_scores:
+                # Fallback to pattern/keyword-based classification
+                if combined_scores:
+                    primary_intent = max(combined_scores, key=combined_scores.get)
+                    confidence = min(1.0, combined_scores[primary_intent] / 3.0)  # Normalize
+                    secondary_intents = [(k, v/3.0) for k, v in combined_scores.items() if k != primary_intent]
+                elif keyword_scores:
                     primary_intent = max(keyword_scores, key=keyword_scores.get)
                     confidence = keyword_scores[primary_intent]
                     secondary_intents = [(k, v) for k, v in keyword_scores.items() if k != primary_intent]
@@ -320,14 +493,30 @@ Extract entities from this query:
                     confidence = 0.3
                     secondary_intents = []
             
+            # Extract entities for the detected intent
+            entities = {}
+            if primary_intent in pattern_scores:
+                # Find the matching pattern and extract entities
+                for pattern in spl_mapper.intent_patterns:
+                    if pattern.intent == primary_intent:
+                        for regex_pattern in pattern.patterns:
+                            match = re.search(regex_pattern, query_lower)
+                            if match:
+                                if pattern.required_entities:
+                                    for i, entity in enumerate(pattern.required_entities):
+                                        if i < len(match.groups()):
+                                            entities[entity] = match.group(i + 1)
+                                break
+            
             return IntentClassificationResult(
                 primary_intent=primary_intent,
                 confidence_score=confidence,
-                secondary_intents=secondary_intents
+                secondary_intents=secondary_intents[:5],  # Limit to top 5
+                entities=entities if entities else None
             )
             
         except Exception as e:
-            self.logger.error(f"Intent classification failed: {e}")
+            self.logger.error(f"Enhanced intent classification failed: {e}")
             return IntentClassificationResult(
                 primary_intent="SEARCH_EVENTS",
                 confidence_score=0.1

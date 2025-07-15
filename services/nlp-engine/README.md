@@ -7,6 +7,10 @@ Advanced Natural Language Processing service for Splunk MCP integration, providi
 - **SPL Translation**: Convert natural language queries to Splunk SPL commands
 - **Intent Classification**: Classify user intents for optimized query processing
 - **Entity Extraction**: Extract Splunk-specific entities from natural language
+- **Comprehensive SPL Mapping**: Advanced command mapping with 15+ SPL commands
+- **Field Mapping**: Natural language to Splunk field name translation
+- **Syntax Validation**: Real-time SPL syntax checking and error reporting
+- **Query Optimization**: Performance suggestions and query improvement recommendations
 - **Multi-Provider AI**: Support for OpenAI GPT-4 and Anthropic Claude-3
 - **Fallback Support**: Automatic failover between AI providers
 - **Structured Logging**: Comprehensive logging with metrics
@@ -83,7 +87,76 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 ### Core NLP Endpoints
 
-#### Translate to SPL
+#### Enhanced SPL Translation
+```bash
+POST /api/v1/spl/translate/enhanced
+```
+
+Advanced natural language to SPL translation with comprehensive mapping:
+```json
+{
+  "natural_query": "Show me all failed login attempts in the last 24 hours",
+  "context": {
+    "user_role": "admin",
+    "available_indexes": ["security", "auth"],
+    "environment": "production"
+  },
+  "include_suggestions": true,
+  "validate_syntax": true
+}
+```
+
+#### Command Suggestions
+```bash
+POST /api/v1/spl/commands/suggest
+```
+
+Get SPL command suggestions based on partial query:
+```json
+{
+  "partial_query": "count events by user",
+  "limit": 5
+}
+```
+
+#### SPL Validation
+```bash
+POST /api/v1/spl/validate
+```
+
+Validate SPL syntax and get optimization suggestions:
+```json
+{
+  "spl_query": "search error | stats count by host",
+  "include_optimization": true
+}
+```
+
+#### Get SPL Commands
+```bash
+GET /api/v1/spl/commands
+```
+
+Retrieve available SPL commands with documentation:
+```bash
+GET /api/v1/spl/commands?command_type=aggregation&limit=10
+```
+
+#### Field Mappings
+```bash
+GET /api/v1/spl/fields
+```
+
+Get natural language to Splunk field mappings.
+
+#### System Statistics
+```bash
+GET /api/v1/spl/stats
+```
+
+Get comprehensive mapping system statistics.
+
+#### Basic SPL Translation
 ```bash
 POST /api/v1/translate
 ```
