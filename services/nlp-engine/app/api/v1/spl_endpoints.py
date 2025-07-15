@@ -17,6 +17,7 @@ from ...ai.regex_pattern_matching import regex_pattern_mapper, PatternType, Rege
 from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, LookupMatchType
 from ...ai.eval_calculated_fields import eval_calculated_fields_mapper, EvalFunctionType, ExpressionComplexity
 from ...ai.query_performance_analysis import query_performance_analyzer, PerformanceLevel, OptimizationType, BottleneckType
+from ...ai.index_selection_optimization import index_selection_optimizer, IndexSelectionStrategy, IndexCategory, IndexOptimizationLevel
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -3273,4 +3274,329 @@ async def get_performance_documentation() -> PerformanceDocumentationResponse:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to get performance documentation: {str(e)}"
+            )
+
+
+# Index Selection Optimization Request/Response Models
+class IndexSelectionAnalysisRequest(BaseModel):
+    """Request for comprehensive index selection analysis"""
+    spl_query: str = Field(..., description="SPL query to analyze for index optimization", min_length=1)
+    natural_query: Optional[str] = Field(None, description="Natural language query for additional context")
+    available_indexes: Optional[List[str]] = Field(None, description="Available indexes in the environment")
+    optimization_level: str = Field("intermediate", description="Level of optimization: basic, intermediate, advanced, expert")
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional context for optimization")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "spl_query": "search error | stats count by host | sort -count | head 10",
+                "natural_query": "Show me the top hosts with the most errors",
+                "available_indexes": ["security", "web", "application", "main"],
+                "optimization_level": "intermediate",
+                "context": {
+                    "user_role": "analyst",
+                    "environment": "production"
+                }
+            }
+        }
+
+
+class IndexRecommendationInfo(BaseModel):
+    """Index recommendation information"""
+    index_name: str = Field(..., description="Recommended index name")
+    strategy: str = Field(..., description="Index selection strategy")
+    confidence: float = Field(..., description="Recommendation confidence (0-1)")
+    performance_impact: str = Field(..., description="Expected performance impact")
+    cost_impact: str = Field(..., description="Expected cost impact")
+    field_coverage: float = Field(..., description="Field coverage percentage")
+    time_coverage: float = Field(..., description="Time range coverage percentage")
+    reasoning: str = Field(..., description="Human-readable reasoning")
+    optimization_suggestions: List[str] = Field(..., description="Specific optimization suggestions")
+    estimated_improvement: str = Field(..., description="Estimated performance improvement")
+    implementation_complexity: str = Field(..., description="Implementation complexity level")
+
+
+class MultiIndexStrategyInfo(BaseModel):
+    """Multi-index strategy information"""
+    primary_indexes: List[str] = Field(..., description="Primary indexes for the strategy")
+    secondary_indexes: List[str] = Field(default_factory=list, description="Secondary indexes")
+    union_strategy: str = Field(..., description="Strategy for combining indexes")
+    optimization_order: List[str] = Field(..., description="Order of index optimization")
+    parallel_execution: bool = Field(..., description="Whether parallel execution is recommended")
+    cost_benefit_ratio: float = Field(..., description="Cost-benefit ratio of the strategy")
+    expected_performance_gain: float = Field(..., description="Expected performance gain")
+    complexity_score: float = Field(..., description="Strategy complexity score")
+    recommended_spl_pattern: str = Field(..., description="Recommended SPL pattern")
+
+
+class IndexSelectionAnalysisResponse(BaseModel):
+    """Response for index selection analysis"""
+    query_id: str = Field(..., description="Unique query identifier")
+    original_spl: str = Field(..., description="Original SPL query")
+    detected_patterns: List[str] = Field(..., description="Detected query patterns")
+    required_fields: List[str] = Field(..., description="Fields required by the query")
+    time_range_detected: Optional[str] = Field(None, description="Detected time range")
+    optimization_level: str = Field(..., description="Applied optimization level")
+    recommended_strategy: str = Field(..., description="Recommended index selection strategy")
+    primary_recommendation: IndexRecommendationInfo = Field(..., description="Primary index recommendation")
+    alternative_recommendations: List[IndexRecommendationInfo] = Field(default_factory=list, description="Alternative recommendations")
+    multi_index_strategy: Optional[MultiIndexStrategyInfo] = Field(None, description="Multi-index optimization strategy")
+    optimized_spl: str = Field(..., description="Optimized SPL query")
+    confidence_score: float = Field(..., description="Overall confidence in recommendations")
+    performance_prediction: Dict[str, Any] = Field(..., description="Performance impact prediction")
+    cost_analysis: Dict[str, Any] = Field(..., description="Cost impact analysis")
+    validation_results: Dict[str, Any] = Field(..., description="Recommendation validation results")
+    analysis_timestamp: str = Field(..., description="Analysis timestamp")
+
+
+class IndexAvailabilityRequest(BaseModel):
+    """Request for index availability validation"""
+    index_names: List[str] = Field(..., description="Index names to validate")
+    environment: Optional[str] = Field(None, description="Target environment")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "index_names": ["security", "web", "application"],
+                "environment": "production"
+            }
+        }
+
+
+class IndexAvailabilityResponse(BaseModel):
+    """Response for index availability validation"""
+    available_indexes: List[str] = Field(..., description="Available indexes")
+    unavailable_indexes: List[str] = Field(..., description="Unavailable indexes")
+    alternative_suggestions: Dict[str, List[str]] = Field(..., description="Alternative index suggestions")
+    recommendations: List[str] = Field(..., description="General recommendations")
+
+
+class IndexOptimizationDocumentationResponse(BaseModel):
+    """Response for index optimization documentation"""
+    index_categories: Dict[str, str] = Field(..., description="Available index categories")
+    optimization_strategies: Dict[str, str] = Field(..., description="Index selection strategies")
+    optimization_levels: Dict[str, str] = Field(..., description="Optimization level definitions")
+    available_indexes: List[str] = Field(..., description="Available indexes with metadata")
+    field_patterns: Dict[str, List[str]] = Field(..., description="Field-to-index mapping patterns")
+    optimization_rules: Dict[str, Dict[str, Any]] = Field(..., description="Index optimization rules")
+    best_practices: List[str] = Field(..., description="Index selection best practices")
+
+
+@router.post("/index-selection/analyze", response_model=IndexSelectionAnalysisResponse, tags=["Index Selection Optimization"])
+async def analyze_index_selection(request: IndexSelectionAnalysisRequest) -> IndexSelectionAnalysisResponse:
+    """
+    Perform comprehensive index selection analysis and optimization
+    
+    Analyzes SPL queries to provide intelligent index recommendations including:
+    - Primary and alternative index recommendations
+    - Multi-index optimization strategies
+    - Performance and cost impact analysis
+    - Field coverage and time range compatibility assessment
+    """
+    with LogContext(endpoint="analyze_index_selection"):
+        try:
+            logger.info("Starting index selection analysis", spl_length=len(request.spl_query))
+            
+            # Convert optimization level
+            opt_level_map = {
+                "basic": IndexOptimizationLevel.BASIC,
+                "intermediate": IndexOptimizationLevel.INTERMEDIATE,
+                "advanced": IndexOptimizationLevel.ADVANCED,
+                "expert": IndexOptimizationLevel.EXPERT
+            }
+            optimization_level = opt_level_map.get(request.optimization_level.lower(), IndexOptimizationLevel.INTERMEDIATE)
+            
+            # Perform index selection analysis
+            analysis = index_selection_optimizer.analyze_index_selection(
+                spl_query=request.spl_query,
+                natural_query=request.natural_query,
+                available_indexes=request.available_indexes,
+                optimization_level=optimization_level,
+                context=request.context or {}
+            )
+            
+            # Convert primary recommendation
+            primary_rec = IndexRecommendationInfo(
+                index_name=analysis.primary_recommendation.index_name,
+                strategy=analysis.primary_recommendation.strategy.value,
+                confidence=analysis.primary_recommendation.confidence,
+                performance_impact=analysis.primary_recommendation.performance_impact,
+                cost_impact=analysis.primary_recommendation.cost_impact,
+                field_coverage=analysis.primary_recommendation.field_coverage,
+                time_coverage=analysis.primary_recommendation.time_coverage,
+                reasoning=analysis.primary_recommendation.reasoning,
+                optimization_suggestions=analysis.primary_recommendation.optimization_suggestions,
+                estimated_improvement=analysis.primary_recommendation.estimated_improvement,
+                implementation_complexity=analysis.primary_recommendation.implementation_complexity
+            )
+            
+            # Convert alternative recommendations
+            alternatives = [
+                IndexRecommendationInfo(
+                    index_name=alt.index_name,
+                    strategy=alt.strategy.value,
+                    confidence=alt.confidence,
+                    performance_impact=alt.performance_impact,
+                    cost_impact=alt.cost_impact,
+                    field_coverage=alt.field_coverage,
+                    time_coverage=alt.time_coverage,
+                    reasoning=alt.reasoning,
+                    optimization_suggestions=alt.optimization_suggestions,
+                    estimated_improvement=alt.estimated_improvement,
+                    implementation_complexity=alt.implementation_complexity
+                )
+                for alt in analysis.alternative_recommendations
+            ]
+            
+            # Convert multi-index strategy
+            multi_index_info = None
+            if analysis.multi_index_strategy:
+                multi_index_info = MultiIndexStrategyInfo(
+                    primary_indexes=analysis.multi_index_strategy.primary_indexes,
+                    secondary_indexes=analysis.multi_index_strategy.secondary_indexes,
+                    union_strategy=analysis.multi_index_strategy.union_strategy,
+                    optimization_order=analysis.multi_index_strategy.optimization_order,
+                    parallel_execution=analysis.multi_index_strategy.parallel_execution,
+                    cost_benefit_ratio=analysis.multi_index_strategy.cost_benefit_ratio,
+                    expected_performance_gain=analysis.multi_index_strategy.expected_performance_gain,
+                    complexity_score=analysis.multi_index_strategy.complexity_score,
+                    recommended_spl_pattern=analysis.multi_index_strategy.recommended_spl_pattern
+                )
+            
+            logger.info(
+                "Index selection analysis completed",
+                query_id=analysis.query_id,
+                primary_index=analysis.primary_recommendation.index_name,
+                confidence=analysis.confidence_score,
+                strategy=analysis.recommended_strategy.value
+            )
+            
+            return IndexSelectionAnalysisResponse(
+                query_id=analysis.query_id,
+                original_spl=analysis.original_spl,
+                detected_patterns=analysis.detected_patterns,
+                required_fields=analysis.required_fields,
+                time_range_detected=analysis.time_range_detected,
+                optimization_level=analysis.optimization_level.value,
+                recommended_strategy=analysis.recommended_strategy.value,
+                primary_recommendation=primary_rec,
+                alternative_recommendations=alternatives,
+                multi_index_strategy=multi_index_info,
+                optimized_spl=analysis.optimized_spl,
+                confidence_score=analysis.confidence_score,
+                performance_prediction=analysis.performance_prediction,
+                cost_analysis=analysis.cost_analysis,
+                validation_results=analysis.validation_results,
+                analysis_timestamp=analysis.analysis_timestamp.isoformat()
+            )
+            
+        except Exception as e:
+            logger.error(f"Index selection analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Index selection analysis failed: {str(e)}"
+            )
+
+
+@router.post("/index-selection/validate", response_model=IndexAvailabilityResponse, tags=["Index Selection Optimization"])
+async def validate_index_availability(request: IndexAvailabilityRequest) -> IndexAvailabilityResponse:
+    """
+    Validate index availability and suggest alternatives
+    
+    Checks the availability of specified indexes in the target environment
+    and provides alternative suggestions for unavailable indexes.
+    """
+    with LogContext(endpoint="validate_index_availability"):
+        try:
+            logger.info("Validating index availability", index_count=len(request.index_names))
+            
+            # Get available indexes from optimizer metadata
+            optimizer_indexes = set(index_selection_optimizer.index_metadata.keys())
+            
+            # Validate availability
+            available = [idx for idx in request.index_names if idx in optimizer_indexes]
+            unavailable = [idx for idx in request.index_names if idx not in optimizer_indexes]
+            
+            # Generate alternative suggestions for unavailable indexes
+            alternatives = {}
+            for unavailable_idx in unavailable:
+                suggestions = []
+                
+                # Simple heuristic-based suggestions
+                if "security" in unavailable_idx.lower() or "auth" in unavailable_idx.lower():
+                    suggestions.extend(["security", "auth"])
+                elif "web" in unavailable_idx.lower() or "http" in unavailable_idx.lower():
+                    suggestions.extend(["web", "apache"])
+                elif "app" in unavailable_idx.lower() or "application" in unavailable_idx.lower():
+                    suggestions.extend(["application"])
+                elif "network" in unavailable_idx.lower() or "firewall" in unavailable_idx.lower():
+                    suggestions.extend(["network"])
+                elif "system" in unavailable_idx.lower() or "os" in unavailable_idx.lower():
+                    suggestions.extend(["system"])
+                else:
+                    suggestions.extend(["main"])
+                
+                # Filter to only include available indexes
+                alternatives[unavailable_idx] = [s for s in suggestions if s in optimizer_indexes]
+            
+            # Generate general recommendations
+            recommendations = []
+            if unavailable:
+                recommendations.append(f"Consider using alternative indexes for unavailable indexes: {', '.join(unavailable)}")
+            if not available:
+                recommendations.append("No specified indexes are available. Consider using 'main' index as fallback.")
+            if available:
+                recommendations.append(f"Use available indexes for optimal performance: {', '.join(available)}")
+            
+            logger.info(
+                "Index availability validation completed",
+                available_count=len(available),
+                unavailable_count=len(unavailable)
+            )
+            
+            return IndexAvailabilityResponse(
+                available_indexes=available,
+                unavailable_indexes=unavailable,
+                alternative_suggestions=alternatives,
+                recommendations=recommendations
+            )
+            
+        except Exception as e:
+            logger.error(f"Index availability validation failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Index availability validation failed: {str(e)}"
+            )
+
+
+@router.get("/index-selection/documentation", response_model=IndexOptimizationDocumentationResponse, tags=["Index Selection Optimization"])
+async def get_index_optimization_documentation() -> IndexOptimizationDocumentationResponse:
+    """
+    Get comprehensive documentation for index selection optimization
+    
+    Retrieve complete documentation including index categories, optimization strategies,
+    field patterns, optimization rules, and best practices for index selection.
+    """
+    with LogContext(endpoint="get_index_optimization_documentation"):
+        try:
+            logger.info("Retrieving index optimization documentation")
+            
+            # Get comprehensive documentation
+            documentation = index_selection_optimizer.get_optimization_documentation()
+            
+            return IndexOptimizationDocumentationResponse(
+                index_categories=documentation["index_categories"],
+                optimization_strategies=documentation["optimization_strategies"],
+                optimization_levels=documentation["optimization_levels"],
+                available_indexes=documentation["available_indexes"],
+                field_patterns=documentation["field_patterns"],
+                optimization_rules=documentation["optimization_rules"],
+                best_practices=documentation["best_practices"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get index optimization documentation: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get index optimization documentation: {str(e)}"
             )
