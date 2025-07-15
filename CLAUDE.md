@@ -722,6 +722,119 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Advanced NLP engine with comprehensive context management complete, ready for enhanced SPL translation and intelligent query optimization features
 
+### Session 12 - Comprehensive SPL Command Mapping System (2025-07-14)
+
+**Completed Tasks:**
+- ✅ Create comprehensive SPL command mapping for advanced SPL translation (TASKS.md - Phase 2 Milestone 2.2)
+  - Built comprehensive SPL mapping system with 15+ commands across 9 categories (Search, Filtering, Transformation, Aggregation, Statistical, Temporal, Formatting, Visualization, Utility)
+  - Implemented natural language to Splunk field translation with intelligent type-aware mapping
+  - Created intent pattern recognition system with regex-based matching and confidence scoring
+  - Built complete aggregation function, time expression, and operator mapping systems
+  - Implemented real-time SPL syntax validation with error detection and detailed reporting
+  - Created query optimization engine with performance suggestions and improvement recommendations
+  - Enhanced existing NLP service with deep mapping integration for improved translation accuracy
+  - Built comprehensive API endpoints for SPL mapping functionality with 8 new endpoints
+  - Created extensive test coverage with standalone validation and integration testing
+
+**SPL Mapping System Architecture:**
+- **Command Mapping**: Comprehensive mapping of 15+ SPL commands with syntax, parameters, examples, and performance notes
+- **Field Translation**: Natural language field names mapped to Splunk field names with data type validation
+- **Intent Recognition**: Pattern-based intent classification using regex matching for accurate query understanding
+- **Entity Extraction**: Advanced entity extraction system using mapping for fields, aggregations, time expressions, and operators
+- **Syntax Validation**: Real-time SPL syntax checking with error detection, reporting, and validation feedback
+- **Query Optimization**: Performance optimization suggestions including index specification, time range optimization, and wildcard usage recommendations
+
+**Technical Implementation:**
+- Comprehensive SPL command mapping covering all major command categories with detailed documentation
+- Field mapping system supporting 8 field types with natural language translation and validation
+- Intent pattern recognition with regex-based matching and confidence scoring for accurate classification
+- Time expression parsing supporting relative and absolute time references with automatic SPL conversion
+- Aggregation function resolution mapping natural language functions to SPL equivalents
+- Operator translation system converting natural language operators to SPL syntax
+- Enhanced NLP service integration with mapping-aware translation for improved accuracy
+- Real-time syntax validation with detailed error reporting and optimization suggestions
+
+**Files Created/Enhanced:**
+- **services/nlp-engine/app/ai/spl_mapping.py** (1,200+ lines): Complete SPL mapping system with all core functionality
+- **services/nlp-engine/app/ai/nlp_service.py** (ENHANCED): Enhanced NLP service with deep mapping integration
+- **services/nlp-engine/app/api/v1/spl_endpoints.py** (650+ lines): Comprehensive API endpoints for SPL mapping functionality
+- **services/nlp-engine/app/main.py** (ENHANCED): Integration of SPL mapping endpoints into main application
+- **services/nlp-engine/tests/test_spl_mapping.py** (480+ lines): Comprehensive test suite for mapping functionality
+- **services/nlp-engine/README.md** (ENHANCED): Updated documentation with new SPL mapping features and API endpoints
+
+**SPL Command Mapping Features:**
+- **15+ SPL Commands**: Complete mapping of search, stats, eval, where, sort, dedup, rex, timechart, chart, eventstats, streamstats, table, head, tail, and regex commands
+- **Command Categories**: Organized by 9 command types with specific functionality and use cases
+- **Syntax Documentation**: Complete syntax definitions with parameters, examples, and common usage patterns
+- **Performance Notes**: Performance considerations and optimization recommendations for each command
+- **Alias Support**: Alternative command names and common variations for improved recognition
+
+**Field Mapping System:**
+- **Natural Language Translation**: Mapping of common field references (time, user, host, IP addresses, status) to Splunk field names
+- **Data Type Validation**: Support for 8 field types (string, number, timestamp, IP, URL, email, boolean, JSON)
+- **Common Values**: Predefined common values for fields to improve entity extraction accuracy
+- **Validation Patterns**: Regex patterns for field value validation and extraction
+- **Context-Aware Mapping**: Intelligent field resolution based on query context and user intent
+
+**Intent Recognition System:**
+- **Pattern-Based Classification**: Regex-based intent pattern matching for accurate query understanding
+- **Confidence Scoring**: Advanced confidence scoring with pattern matching and keyword analysis
+- **Entity Extraction**: Automatic entity extraction for detected intents with required and optional entities
+- **Template Generation**: SPL template generation based on detected intent and extracted entities
+- **Multi-Intent Support**: Support for primary and secondary intent classification with ranking
+
+**Advanced Features:**
+- **Aggregation Mapping**: Comprehensive mapping of natural language aggregation functions to SPL functions
+- **Time Expression Parsing**: Advanced time expression parsing supporting relative and absolute time references
+- **Operator Translation**: Complete operator mapping from natural language comparisons to SPL operators
+- **Syntax Validation**: Real-time SPL syntax checking with error detection and detailed reporting
+- **Query Optimization**: Performance optimization suggestions with specific recommendations
+- **Command Suggestions**: Intelligent command suggestions based on partial query analysis
+
+**API Endpoints Implemented:**
+- **POST /api/v1/spl/translate/enhanced**: Advanced SPL translation with comprehensive mapping integration
+- **POST /api/v1/spl/commands/suggest**: Command suggestions based on partial queries with confidence scoring
+- **POST /api/v1/spl/validate**: SPL syntax validation and optimization suggestions with error reporting
+- **GET /api/v1/spl/commands**: Retrieve available SPL commands with documentation and filtering
+- **GET /api/v1/spl/fields**: Field mappings between natural language and Splunk fields
+- **GET /api/v1/spl/aggregations**: Aggregation function mappings with categorization
+- **GET /api/v1/spl/time-expressions**: Time expression mappings and parsing patterns
+- **GET /api/v1/spl/stats**: Comprehensive mapping system statistics and metadata
+
+**Enhanced NLP Integration:**
+- **Mapping-Aware Translation**: Enhanced SPL translation using comprehensive mapping knowledge
+- **Context Enhancement**: Improved context understanding through field and intent mapping
+- **Entity Resolution**: Advanced entity extraction using mapping system for better accuracy
+- **Confidence Adjustment**: Dynamic confidence scoring based on mapping validation results
+- **Optimization Integration**: Real-time optimization suggestions during translation process
+
+**Testing and Validation:**
+- **Comprehensive Test Suite**: Complete test coverage for all mapping functionality with 480+ lines of tests
+- **Standalone Validation**: Independent validation of mapping concepts without external dependencies
+- **Integration Testing**: End-to-end testing of mapping integration with NLP service
+- **API Endpoint Testing**: Complete validation of all API endpoints with request/response testing
+- **Performance Testing**: Validation of mapping system performance and optimization suggestions
+
+**Performance Improvements:**
+- **Enhanced Translation Accuracy**: Improved SPL translation accuracy through comprehensive command and field mapping
+- **Intelligent Entity Extraction**: Advanced entity extraction using mapping system for better context understanding
+- **Optimized Query Generation**: Performance-optimized SPL query generation with specific improvement suggestions
+- **Real-time Validation**: Fast syntax validation and error reporting with detailed feedback
+- **Context-Aware Processing**: Enhanced context understanding through comprehensive field and intent mapping
+
+**GitHub Integration:**
+- **PR #6**: Created comprehensive pull request with detailed description and complete test plan
+- **Successful Merge**: Successfully merged SPL mapping system into main branch with squash commit
+- **Feature Branch**: Proper GitFlow workflow with feature branch and clean integration
+
+**Next Steps:**
+- Begin Phase 2 Milestone 2.2 continuation: Complex query construction and subquery support
+- Implement advanced aggregation handling and statistical functions mapping
+- Create lookup table integration and eval/calculated field support
+- Add performance analysis and index selection optimization features
+
+**Project Status:** Comprehensive SPL command mapping system complete with advanced translation capabilities, ready for complex query construction and advanced aggregation features
+
 ## Project Overview
 
 This project implements a Model Context Protocol (MCP) integration for Splunk Enterprise that enables natural language interactions with Splunk data. Users can chat in natural language to query data, create dashboards, generate reports, and manage alerts while respecting existing security and access controls.
