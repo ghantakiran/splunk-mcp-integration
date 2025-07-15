@@ -835,6 +835,97 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Comprehensive SPL command mapping system complete with advanced translation capabilities, ready for complex query construction and advanced aggregation features
 
+### Session 13 - Complex Query Construction for Advanced SPL Translation (2025-07-15)
+
+**Completed Tasks:**
+- ✅ Implement complex query construction for advanced SPL translation (TASKS.md - Phase 2 Milestone 2.2 continuation)
+  - Built comprehensive ComplexQueryConstructor class with sophisticated SPL query building capabilities
+  - Implemented query complexity analysis system with 4 levels (Simple, Moderate, Complex, Advanced)
+  - Created multi-step query pipelines supporting transformations, aggregations, joins, and unions
+  - Built complex logical structures with AND/OR/NOT operators and conditional logic
+  - Added performance analysis engine with cost estimation and optimization suggestions
+  - Integrated seamlessly with existing NLP service and SPL mapping system
+  - Created new API endpoints for complex query construction and analysis
+  - Enhanced NLP service with complex query fallback and confidence boosting
+  - Added comprehensive query structure analysis and entity extraction capabilities
+
+**Complex Query Construction Architecture:**
+- **Query Complexity Classification**: Automatic detection and classification of query complexity levels
+- **Multi-step Pipeline Building**: Support for search blocks, transformations, aggregations, sorting, and limiting
+- **Performance Analysis**: Comprehensive cost estimation, optimization suggestions, and performance warnings
+- **Logical Structure Support**: Complex AND/OR/NOT conditions with proper grouping and nesting
+- **Advanced Features**: Join support, subquery handling, union operations, and complex aggregations
+- **Pattern Recognition**: Advanced pattern matching for temporal analysis, statistical functions, and comparisons
+
+**Technical Implementation:**
+- Created 1,200+ lines of comprehensive query construction logic with full SPL generation capabilities
+- Implemented query complexity analysis with scoring system based on features and command indicators
+- Built multi-step query pipelines with transformations (eval, rex, where, dedup) and aggregations (stats, timechart)
+- Added complex logical structures with QueryCondition, QueryBlock, and QueryPipeline dataclasses
+- Created performance analysis engine with complexity scoring, cost estimation, and optimization rules
+- Integrated with existing SPL mapping system for enhanced field resolution and command suggestions
+- Enhanced NLP service with complex query fallback mechanism and confidence adjustment
+- Built comprehensive pattern extraction for natural language understanding and entity resolution
+
+**Files Created/Enhanced:**
+- **services/nlp-engine/app/ai/query_constructor.py** (1,200+ lines): Complete complex query construction system
+- **services/nlp-engine/app/ai/nlp_service.py** (ENHANCED): Enhanced with complex query integration and fallback
+- **services/nlp-engine/app/api/v1/spl_endpoints.py** (ENHANCED): Added 3 new endpoints for complex query functionality
+- **services/nlp-engine/test_mapping_simple.py** (NEW): Standalone validation script for SPL mapping concepts
+
+**Complex Query Features:**
+- **Query Complexity Levels**: Simple (1 command), Moderate (2-3 commands), Complex (4-6 commands), Advanced (7+ commands with joins)
+- **Pipeline Construction**: Multi-step pipelines with search blocks, transformations, aggregations, sorting, and result limiting
+- **Logical Operators**: Support for AND, OR, NOT, XOR operators with proper precedence and grouping
+- **Join Support**: Inner, left, right, outer joins with proper field matching and pipeline integration
+- **Performance Optimization**: Query optimization rules including index specification, time range optimization, and result limiting
+- **Advanced Patterns**: Support for temporal analysis, statistical functions, comparison operations, and data transformations
+
+**API Endpoints Added:**
+- **POST /api/v1/spl/translate/complex**: Advanced complex query construction with performance analysis
+- **POST /api/v1/spl/analyze**: Query structure analysis and complexity assessment with optimization suggestions
+- **GET /api/v1/spl/complexity/levels**: Documentation of supported complexity levels with examples and guidelines
+
+**Enhanced NLP Integration:**
+- **Complex Query Fallback**: Automatic fallback to complex query constructor when AI translation confidence is low
+- **Confidence Boosting**: Improved confidence scoring for queries processed through complex constructor
+- **Performance Analysis Integration**: Real-time performance analysis and optimization suggestions during translation
+- **Enhanced Context Awareness**: Better understanding of query intent through complex pattern analysis
+- **Metadata Enhancement**: Rich metadata including complexity scores, performance analysis, and optimization recommendations
+
+**Pattern Recognition System:**
+- **Temporal Analysis**: Detection of time-based queries with automatic timechart generation and span configuration
+- **Aggregation Patterns**: Recognition of grouping operations with proper stats command construction
+- **Comparison Queries**: Support for comparison operations with union and multisearch generation
+- **Statistical Analysis**: Advanced statistical function mapping with proper aggregation construction
+- **Condition Extraction**: Intelligent extraction of field conditions with operator translation and type validation
+
+**Performance Analysis Features:**
+- **Complexity Scoring**: Comprehensive scoring system based on commands, conditions, joins, and subqueries
+- **Cost Estimation**: Three-level cost estimation (low, medium, high) based on query complexity
+- **Optimization Rules**: Four optimization rules including index specification, time range optimization, field filtering, and result limiting
+- **Performance Warnings**: Automatic warnings for resource-intensive operations like multiple joins and advanced complexity queries
+- **Optimization Suggestions**: Specific suggestions for improving query performance and reducing resource usage
+
+**Testing and Validation:**
+- **Standalone Validation**: Successfully tested SPL mapping concepts with comprehensive validation script
+- **Core Functionality Testing**: Validated command type classification, field mapping, intent recognition, and syntax validation
+- **Integration Testing**: Confirmed seamless integration with existing NLP service and SPL mapping system
+- **API Endpoint Testing**: Verified all new endpoints with proper request/response handling and error management
+
+**GitHub Integration:**
+- **Direct Main Branch Commit**: Successfully committed complex query construction implementation to main branch
+- **Comprehensive Commit Message**: Detailed commit with feature description, co-authorship, and Claude Code attribution
+- **Clean Integration**: No merge conflicts or integration issues with existing codebase
+
+**Next Steps:**
+- Begin implementation of visualization engine for complex query results
+- Add machine learning capabilities for improved query classification and optimization
+- Create advanced user interface components for complex query interaction
+- Implement query caching and result optimization for complex queries
+
+**Project Status:** Complex query construction system complete with advanced SPL translation capabilities, ready for visualization engine and enhanced user interface implementation
+
 ## Project Overview
 
 This project implements a Model Context Protocol (MCP) integration for Splunk Enterprise that enables natural language interactions with Splunk data. Users can chat in natural language to query data, create dashboards, generate reports, and manage alerts while respecting existing security and access controls.
