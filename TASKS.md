@@ -176,7 +176,7 @@ This document outlines all tasks required to build the Splunk MCP (Model Context
 - 🔴 Implement complex query construction ⏱️ 16h
 - 🔴 Build subquery and join support ⏱️ 12h
 - 🔴 Create advanced aggregation handling ⏱️ 10h
-- 🟡 Implement statistical functions mapping ⏱️ 8h
+- ✅ Implement statistical functions mapping ⏱️ 8h
 - 🟡 Add regex and pattern matching support ⏱️ 10h
 - 🟡 Create lookup table integration ⏱️ 8h
 - 🟢 Implement eval and calculated field support ⏱️ 12h
