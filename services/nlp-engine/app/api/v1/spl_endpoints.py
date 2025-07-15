@@ -16,6 +16,7 @@ from ...ai.statistical_functions import statistical_function_mapper, Statistical
 from ...ai.regex_pattern_matching import regex_pattern_mapper, PatternType, RegexCommand, RegexComplexity
 from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, LookupMatchType
 from ...ai.eval_calculated_fields import eval_calculated_fields_mapper, EvalFunctionType, ExpressionComplexity
+from ...ai.query_performance_analysis import query_performance_analyzer, PerformanceLevel, OptimizationType, BottleneckType
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -2923,4 +2924,353 @@ async def get_eval_function_catalog() -> EvalCatalogResponse:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to get eval function catalog: {str(e)}"
+            )
+
+
+# Query Performance Analysis Request/Response Models
+class PerformanceAnalysisRequest(BaseModel):
+    """Request for query performance analysis"""
+    spl_query: str = Field(..., description="SPL query to analyze for performance", min_length=1)
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional context for analysis")
+    include_optimizations: bool = Field(True, description="Include optimization suggestions")
+    include_resource_estimates: bool = Field(True, description="Include resource usage estimates")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "spl_query": "search index=main error | stats count by host | sort -count | head 10",
+                "context": {
+                    "user_id": "analyst1",
+                    "environment": "production"
+                },
+                "include_optimizations": True,
+                "include_resource_estimates": True
+            }
+        }
+
+
+class PerformanceMetricInfo(BaseModel):
+    """Performance metric information"""
+    name: str = Field(..., description="Metric name")
+    value: float = Field(..., description="Metric value")
+    unit: str = Field(..., description="Metric unit")
+    description: str = Field(..., description="Metric description")
+    current_level: str = Field(..., description="Current performance level")
+    suggestions: List[str] = Field(default_factory=list, description="Improvement suggestions")
+
+
+class BottleneckInfo(BaseModel):
+    """Performance bottleneck information"""
+    bottleneck_type: str = Field(..., description="Type of bottleneck")
+    severity: str = Field(..., description="Severity level")
+    description: str = Field(..., description="Bottleneck description")
+    affected_commands: List[str] = Field(..., description="Commands affected by bottleneck")
+    impact_score: float = Field(..., description="Impact score (0-100)")
+
+
+class OptimizationSuggestionInfo(BaseModel):
+    """Optimization suggestion information"""
+    optimization_type: str = Field(..., description="Type of optimization")
+    priority: int = Field(..., description="Priority (1-10)")
+    impact: str = Field(..., description="Expected impact level")
+    description: str = Field(..., description="Optimization description")
+    before_spl: str = Field(..., description="SPL before optimization")
+    after_spl: str = Field(..., description="SPL after optimization")
+    expected_improvement: str = Field(..., description="Expected improvement")
+    implementation_complexity: str = Field(..., description="Implementation complexity")
+
+
+class ResourceEstimateInfo(BaseModel):
+    """Resource usage estimate information"""
+    cpu_usage: str = Field(..., description="CPU usage level")
+    memory_usage: str = Field(..., description="Memory usage level")
+    disk_io: str = Field(..., description="Disk I/O level")
+    network_io: str = Field(..., description="Network I/O level")
+    estimated_execution_time: str = Field(..., description="Estimated execution time")
+    estimated_data_volume: str = Field(..., description="Estimated data volume")
+    concurrent_capacity: int = Field(..., description="Concurrent query capacity")
+    scaling_recommendations: List[str] = Field(default_factory=list, description="Scaling recommendations")
+
+
+class ComplexityAnalysisInfo(BaseModel):
+    """Query complexity analysis information"""
+    complexity_score: float = Field(..., description="Complexity score (0-100)")
+    complexity_level: str = Field(..., description="Complexity level")
+    command_count: int = Field(..., description="Number of commands")
+    join_count: int = Field(..., description="Number of joins")
+    subsearch_count: int = Field(..., description="Number of subsearches")
+    regex_count: int = Field(..., description="Number of regex operations")
+    aggregation_count: int = Field(..., description="Number of aggregations")
+    field_extraction_count: int = Field(..., description="Number of field extractions")
+    complexity_factors: List[str] = Field(..., description="Factors contributing to complexity")
+    simplification_suggestions: List[str] = Field(default_factory=list, description="Simplification suggestions")
+
+
+class PerformanceAnalysisResponse(BaseModel):
+    """Response for query performance analysis"""
+    query_id: str = Field(..., description="Query identifier")
+    overall_performance: str = Field(..., description="Overall performance level")
+    performance_score: float = Field(..., description="Performance score (0-100)")
+    complexity_analysis: ComplexityAnalysisInfo = Field(..., description="Query complexity analysis")
+    performance_metrics: List[PerformanceMetricInfo] = Field(..., description="Individual performance metrics")
+    bottlenecks: List[BottleneckInfo] = Field(default_factory=list, description="Identified bottlenecks")
+    optimization_suggestions: List[OptimizationSuggestionInfo] = Field(default_factory=list, description="Optimization suggestions")
+    resource_estimates: Optional[ResourceEstimateInfo] = Field(None, description="Resource usage estimates")
+    confidence: float = Field(..., description="Analysis confidence (0-1)")
+    estimated_improvement_potential: str = Field(..., description="Estimated improvement potential")
+    analysis_timestamp: str = Field(..., description="Analysis timestamp")
+
+
+class IndexOptimizationRequest(BaseModel):
+    """Request for index optimization suggestions"""
+    natural_query: str = Field(..., description="Natural language description of what user wants to search", min_length=1)
+    current_spl: Optional[str] = Field(None, description="Current SPL query if available")
+    available_indexes: Optional[List[str]] = Field(None, description="Available indexes in the environment")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Find failed login attempts and authentication errors",
+                "current_spl": "search * failed login",
+                "available_indexes": ["security", "windows", "linux", "main"]
+            }
+        }
+
+
+class IndexOptimizationResponse(BaseModel):
+    """Response for index optimization suggestions"""
+    category: str = Field(..., description="Query category detected")
+    recommended_indexes: List[str] = Field(..., description="Recommended indexes")
+    time_range_suggestion: str = Field(..., description="Recommended time range")
+    optimized_spl: Optional[str] = Field(None, description="Optimized SPL query")
+    confidence: float = Field(..., description="Confidence in recommendation")
+    reasoning: str = Field(..., description="Reasoning for recommendation")
+    performance_impact: str = Field(..., description="Expected performance impact")
+
+
+class PerformanceDocumentationResponse(BaseModel):
+    """Response for performance optimization documentation"""
+    optimization_types: Dict[str, str] = Field(..., description="Available optimization types")
+    performance_levels: Dict[str, str] = Field(..., description="Performance level definitions")
+    bottleneck_types: Dict[str, str] = Field(..., description="Bottleneck type definitions")
+    best_practices: List[str] = Field(..., description="Performance best practices")
+    command_weights: Dict[str, float] = Field(..., description="Command complexity weights")
+    performance_thresholds: Dict[str, Dict[str, float]] = Field(..., description="Performance thresholds")
+
+
+@router.post("/performance/analyze", response_model=PerformanceAnalysisResponse, tags=["Query Performance Analysis"])
+async def analyze_query_performance(request: PerformanceAnalysisRequest) -> PerformanceAnalysisResponse:
+    """
+    Analyze SPL query performance and provide optimization recommendations
+    
+    Performs comprehensive performance analysis including complexity assessment,
+    bottleneck detection, resource estimation, and optimization suggestions.
+    """
+    with LogContext(endpoint="analyze_query_performance"):
+        try:
+            logger.info("Starting query performance analysis", spl_length=len(request.spl_query))
+            
+            # Perform performance analysis
+            analysis_result = query_performance_analyzer.analyze_query_performance(
+                spl_query=request.spl_query,
+                context=request.context or {}
+            )
+            
+            # Convert complexity analysis
+            complexity_info = ComplexityAnalysisInfo(
+                complexity_score=analysis_result.complexity_analysis.complexity_score,
+                complexity_level=analysis_result.complexity_analysis.complexity_level.value,
+                command_count=analysis_result.complexity_analysis.command_count,
+                join_count=analysis_result.complexity_analysis.join_count,
+                subsearch_count=analysis_result.complexity_analysis.subsearch_count,
+                regex_count=analysis_result.complexity_analysis.regex_count,
+                aggregation_count=analysis_result.complexity_analysis.aggregation_count,
+                field_extraction_count=analysis_result.complexity_analysis.field_extraction_count,
+                complexity_factors=analysis_result.complexity_analysis.complexity_factors,
+                simplification_suggestions=analysis_result.complexity_analysis.simplification_suggestions
+            )
+            
+            # Convert performance metrics
+            metrics_info = [
+                PerformanceMetricInfo(
+                    name=metric.name,
+                    value=metric.value,
+                    unit=metric.unit,
+                    description=metric.description,
+                    current_level=metric.current_level.value,
+                    suggestions=metric.suggestions
+                )
+                for metric in analysis_result.performance_metrics
+            ]
+            
+            # Convert bottlenecks
+            bottlenecks_info = [
+                BottleneckInfo(
+                    bottleneck_type=bottleneck.bottleneck_type.value,
+                    severity=bottleneck.severity.value,
+                    description=bottleneck.description,
+                    affected_commands=bottleneck.affected_commands,
+                    impact_score=bottleneck.impact_score
+                )
+                for bottleneck in analysis_result.bottlenecks
+            ]
+            
+            # Convert optimization suggestions
+            optimizations_info = []
+            if request.include_optimizations:
+                optimizations_info = [
+                    OptimizationSuggestionInfo(
+                        optimization_type=opt.optimization_type.value,
+                        priority=opt.priority,
+                        impact=opt.impact,
+                        description=opt.description,
+                        before_spl=opt.before_spl,
+                        after_spl=opt.after_spl,
+                        expected_improvement=opt.expected_improvement,
+                        implementation_complexity=opt.implementation_complexity
+                    )
+                    for opt in analysis_result.optimization_suggestions
+                ]
+            
+            # Convert resource estimates
+            resource_info = None
+            if request.include_resource_estimates:
+                resource_info = ResourceEstimateInfo(
+                    cpu_usage=analysis_result.resource_estimates.cpu_usage,
+                    memory_usage=analysis_result.resource_estimates.memory_usage,
+                    disk_io=analysis_result.resource_estimates.disk_io,
+                    network_io=analysis_result.resource_estimates.network_io,
+                    estimated_execution_time=analysis_result.resource_estimates.estimated_execution_time,
+                    estimated_data_volume=analysis_result.resource_estimates.estimated_data_volume,
+                    concurrent_capacity=analysis_result.resource_estimates.concurrent_capacity,
+                    scaling_recommendations=analysis_result.resource_estimates.scaling_recommendations
+                )
+            
+            logger.info(
+                "Query performance analysis completed",
+                performance_score=analysis_result.performance_score,
+                overall_performance=analysis_result.overall_performance.value,
+                bottleneck_count=len(bottlenecks_info),
+                optimization_count=len(optimizations_info)
+            )
+            
+            return PerformanceAnalysisResponse(
+                query_id=analysis_result.query_id,
+                overall_performance=analysis_result.overall_performance.value,
+                performance_score=analysis_result.performance_score,
+                complexity_analysis=complexity_info,
+                performance_metrics=metrics_info,
+                bottlenecks=bottlenecks_info,
+                optimization_suggestions=optimizations_info,
+                resource_estimates=resource_info,
+                confidence=analysis_result.confidence,
+                estimated_improvement_potential=analysis_result.estimated_improvement_potential,
+                analysis_timestamp=analysis_result.analysis_timestamp.isoformat()
+            )
+            
+        except Exception as e:
+            logger.error(f"Query performance analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Query performance analysis failed: {str(e)}"
+            )
+
+
+@router.post("/performance/index-optimization", response_model=IndexOptimizationResponse, tags=["Query Performance Analysis"])
+async def suggest_index_optimization(request: IndexOptimizationRequest) -> IndexOptimizationResponse:
+    """
+    Suggest optimal index selection based on natural language query
+    
+    Analyzes the natural language description to recommend appropriate indexes,
+    time ranges, and optimized SPL queries for better performance.
+    """
+    with LogContext(endpoint="suggest_index_optimization"):
+        try:
+            logger.info("Generating index optimization suggestions", query_length=len(request.natural_query))
+            
+            # Get index optimization suggestions
+            optimization = query_performance_analyzer.suggest_index_optimization(request.natural_query)
+            
+            # Generate optimized SPL if current SPL provided
+            optimized_spl = None
+            performance_impact = "Moderate improvement expected"
+            
+            if request.current_spl:
+                # Basic optimization: add index and time range if missing
+                optimized_spl = request.current_spl
+                
+                # Add index specification if missing
+                if not re.search(r'index=\w+', optimized_spl) and optimization["recommended_indexes"]:
+                    index_spec = f"index={optimization['recommended_indexes'][0]}"
+                    if optimized_spl.strip().startswith("search "):
+                        optimized_spl = optimized_spl.replace("search ", f"search {index_spec} ", 1)
+                    else:
+                        optimized_spl = f"search {index_spec} {optimized_spl}"
+                    performance_impact = "Significant improvement expected (50-80% faster)"
+                
+                # Add time range if missing
+                if not re.search(r'earliest=|latest=', optimized_spl):
+                    time_spec = "earliest=-24h@h"
+                    if "index=" in optimized_spl:
+                        optimized_spl = optimized_spl.replace(optimization['recommended_indexes'][0], f"{optimization['recommended_indexes'][0]} {time_spec}")
+                    else:
+                        optimized_spl = f"{optimized_spl} {time_spec}"
+                    
+                    if performance_impact == "Moderate improvement expected":
+                        performance_impact = "Good improvement expected (30-60% faster)"
+            
+            logger.info(
+                "Index optimization suggestions generated",
+                category=optimization["category"],
+                recommended_indexes=optimization["recommended_indexes"],
+                confidence=optimization["confidence"]
+            )
+            
+            return IndexOptimizationResponse(
+                category=optimization["category"],
+                recommended_indexes=optimization["recommended_indexes"],
+                time_range_suggestion=optimization["time_range_suggestion"],
+                optimized_spl=optimized_spl,
+                confidence=optimization["confidence"],
+                reasoning=optimization["reasoning"],
+                performance_impact=performance_impact
+            )
+            
+        except Exception as e:
+            logger.error(f"Index optimization suggestion failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Index optimization suggestion failed: {str(e)}"
+            )
+
+
+@router.get("/performance/documentation", response_model=PerformanceDocumentationResponse, tags=["Query Performance Analysis"])
+async def get_performance_documentation() -> PerformanceDocumentationResponse:
+    """
+    Get comprehensive documentation for query performance optimization
+    
+    Retrieve complete documentation including optimization types, performance levels,
+    bottleneck types, best practices, and performance thresholds.
+    """
+    with LogContext(endpoint="get_performance_documentation"):
+        try:
+            logger.info("Retrieving performance optimization documentation")
+            
+            # Get comprehensive documentation
+            documentation = query_performance_analyzer.get_optimization_documentation()
+            
+            return PerformanceDocumentationResponse(
+                optimization_types=documentation["optimization_types"],
+                performance_levels=documentation["performance_levels"],
+                bottleneck_types=documentation["bottleneck_types"],
+                best_practices=documentation["best_practices"],
+                command_weights=documentation["command_weights"],
+                performance_thresholds=documentation["performance_thresholds"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get performance documentation: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get performance documentation: {str(e)}"
             )
