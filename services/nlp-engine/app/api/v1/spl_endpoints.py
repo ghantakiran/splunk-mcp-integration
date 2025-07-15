@@ -12,6 +12,7 @@ from ...ai.spl_mapping import spl_mapper, SPLCommandType, FieldType
 from ...ai.nlp_service import NLPService, SPLTranslationRequest, SPLTranslationResponse
 from ...ai.query_constructor import QueryComplexity
 from ...ai.advanced_aggregation import advanced_aggregation_handler, AggregationFunction, AggregationType
+from ...ai.statistical_functions import statistical_function_mapper, StatisticalFunction, StatisticalCategory
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -1040,3 +1041,470 @@ async def get_aggregation_types() -> AggregationTypesResponse:
             status_code=500,
             detail=f"Failed to retrieve aggregation types: {str(e)}"
         )
+
+
+# Statistical Functions API Models
+class StatisticalFunctionRequest(BaseModel):
+    """Statistical function analysis request"""
+    natural_query: str = Field(..., description="Natural language query to analyze for statistical functions", min_length=1)
+    confidence_level: Optional[float] = Field(0.95, description="Confidence level for statistical inference", ge=0.0, le=1.0)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Calculate the 95th percentile of response time and correlation between cpu usage and memory usage",
+                "confidence_level": 0.95
+            }
+        }
+
+
+class StatisticalFunctionInfo(BaseModel):
+    """Information about a detected statistical function"""
+    function: str = Field(..., description="Statistical function name")
+    category: str = Field(..., description="Statistical function category")
+    fields: List[str] = Field(..., description="Fields involved in the statistical function")
+    parameters: List[Dict[str, Any]] = Field(default_factory=list, description="Function parameters")
+    confidence_level: Optional[float] = Field(None, description="Confidence level if applicable")
+    generated_spl: str = Field(..., description="Generated SPL for this statistical function")
+    description: str = Field(..., description="Description of the statistical function")
+    complexity: str = Field(..., description="Complexity level of the function")
+
+
+class StatisticalFunctionResponse(BaseModel):
+    """Statistical function analysis response"""
+    detected_functions: List[StatisticalFunctionInfo] = Field(..., description="List of detected statistical functions")
+    function_count: int = Field(..., description="Total number of statistical functions found")
+    categories: List[str] = Field(..., description="Categories of statistical functions detected")
+    combined_spl: str = Field(..., description="Combined SPL query for all statistical functions")
+    validation_errors: List[str] = Field(default_factory=list, description="Validation errors if any")
+    processing_time: float = Field(..., description="Processing time in seconds")
+
+
+class StatisticalFunctionCatalogResponse(BaseModel):
+    """Response with available statistical functions catalog"""
+    descriptive_statistics: Dict[str, Dict[str, Any]] = Field(..., description="Descriptive statistics functions")
+    inferential_statistics: Dict[str, Dict[str, Any]] = Field(..., description="Inferential statistics functions")
+    time_series_analysis: Dict[str, Dict[str, Any]] = Field(..., description="Time series analysis functions")
+    regression_analysis: Dict[str, Dict[str, Any]] = Field(..., description="Regression analysis functions")
+    distribution_analysis: Dict[str, Dict[str, Any]] = Field(..., description="Distribution analysis functions")
+    outlier_detection: Dict[str, Dict[str, Any]] = Field(..., description="Outlier detection functions")
+    correlation_analysis: Dict[str, Dict[str, Any]] = Field(..., description="Correlation analysis functions")
+    hypothesis_testing: Dict[str, Dict[str, Any]] = Field(..., description="Hypothesis testing functions")
+
+
+class StatisticalFunctionSuggestionsRequest(BaseModel):
+    """Request for statistical function suggestions"""
+    partial_query: str = Field(..., description="Partial query to get suggestions for", min_length=1)
+    limit: int = Field(5, description="Maximum number of suggestions", ge=1, le=20)
+    category_filter: Optional[str] = Field(None, description="Filter by statistical category")
+
+
+class StatisticalFunctionSuggestionsResponse(BaseModel):
+    """Response with statistical function suggestions"""
+    suggestions: List[Dict[str, Any]] = Field(..., description="Statistical function suggestions with scores")
+    total_suggestions: int = Field(..., description="Total number of suggestions")
+    category_breakdown: Dict[str, int] = Field(..., description="Breakdown by statistical category")
+
+
+# Statistical Functions API Endpoints
+@router.post("/statistical/analyze", response_model=StatisticalFunctionResponse, tags=["Statistical Functions"])
+async def analyze_statistical_functions(request: StatisticalFunctionRequest) -> StatisticalFunctionResponse:
+    """
+    Analyze natural language query for statistical functions
+    
+    Detect and analyze statistical functions in natural language queries including
+    descriptive statistics, inferential statistics, time series analysis, regression,
+    and advanced statistical operations.
+    """
+    with LogContext(endpoint="analyze_statistical_functions", query_length=len(request.natural_query)):
+        try:
+            start_time = datetime.now()
+            logger.info("Analyzing statistical functions", query=request.natural_query[:100])
+            
+            # Detect statistical functions
+            detected_functions = statistical_function_mapper.detect_statistical_functions(request.natural_query)
+            
+            # Convert to response format
+            function_infos = []
+            combined_spl_parts = []
+            categories = set()
+            validation_errors = []
+            
+            for stat_func in detected_functions:
+                # Generate SPL for individual statistical function
+                individual_spl = statistical_function_mapper.generate_spl_for_statistical_function(stat_func)
+                combined_spl_parts.append(individual_spl)
+                
+                # Validate function
+                is_valid, errors = statistical_function_mapper.validate_statistical_function(stat_func)
+                if not is_valid:
+                    validation_errors.extend(errors)
+                
+                # Get function info
+                func_info = statistical_function_mapper.get_statistical_function_info(stat_func)
+                categories.add(func_info["category"])
+                
+                function_infos.append(StatisticalFunctionInfo(
+                    function=stat_func.function.value,
+                    category=func_info["category"],
+                    fields=stat_func.fields,
+                    parameters=[{"name": p.name, "value": p.value, "type": p.parameter_type} for p in stat_func.parameters],
+                    confidence_level=stat_func.confidence_level,
+                    generated_spl=individual_spl,
+                    description=func_info["description"],
+                    complexity=func_info["complexity"]
+                ))
+            
+            # Generate combined SPL
+            if combined_spl_parts:
+                combined_spl = " | ".join(combined_spl_parts)
+            else:
+                combined_spl = "# No statistical functions detected"
+            
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            return StatisticalFunctionResponse(
+                detected_functions=function_infos,
+                function_count=len(function_infos),
+                categories=list(categories),
+                combined_spl=combined_spl,
+                validation_errors=validation_errors,
+                processing_time=processing_time
+            )
+            
+        except Exception as e:
+            logger.error(f"Statistical function analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Statistical function analysis failed: {str(e)}"
+            )
+
+
+@router.get("/statistical/catalog", response_model=StatisticalFunctionCatalogResponse, tags=["Statistical Functions"])
+async def get_statistical_function_catalog() -> StatisticalFunctionCatalogResponse:
+    """
+    Get comprehensive catalog of available statistical functions
+    
+    Retrieve detailed information about all supported statistical functions
+    organized by category including descriptions, parameters, and examples.
+    """
+    try:
+        logger.info("Getting statistical function catalog")
+        
+        # Descriptive statistics
+        descriptive_statistics = {
+            "mean": {
+                "description": "Calculate the arithmetic mean (average) of values",
+                "parameters": [],
+                "examples": ["mean of response_time", "average cpu usage"],
+                "spl_function": "avg",
+                "complexity": "simple"
+            },
+            "median": {
+                "description": "Calculate the median (middle value) of values",
+                "parameters": [],
+                "examples": ["median of scores", "median response time"],
+                "spl_function": "median",
+                "complexity": "simple"
+            },
+            "mode": {
+                "description": "Find the most frequently occurring value",
+                "parameters": [],
+                "examples": ["mode of status codes", "most common error type"],
+                "spl_function": "mode",
+                "complexity": "intermediate"
+            },
+            "standard_deviation": {
+                "description": "Calculate the standard deviation of values",
+                "parameters": [],
+                "examples": ["standard deviation of latency", "stdev of temperatures"],
+                "spl_function": "stdev",
+                "complexity": "simple"
+            },
+            "variance": {
+                "description": "Calculate the variance of values",
+                "parameters": [],
+                "examples": ["variance of measurements", "var of response times"],
+                "spl_function": "var",
+                "complexity": "simple"
+            },
+            "range": {
+                "description": "Calculate the range (max - min) of values",
+                "parameters": [],
+                "examples": ["range of temperatures", "range of scores"],
+                "spl_function": "range",
+                "complexity": "simple"
+            },
+            "percentile": {
+                "description": "Calculate the nth percentile of values",
+                "parameters": ["percentile_value"],
+                "examples": ["95th percentile", "perc90(response_time)"],
+                "spl_function": "perc",
+                "complexity": "intermediate"
+            },
+            "quartile": {
+                "description": "Calculate quartiles of values",
+                "parameters": ["quartile_number"],
+                "examples": ["first quartile", "third quartile"],
+                "spl_function": "perc25/perc75",
+                "complexity": "intermediate"
+            },
+            "iqr": {
+                "description": "Calculate the interquartile range (Q3 - Q1)",
+                "parameters": [],
+                "examples": ["interquartile range of scores", "iqr of response times"],
+                "spl_function": "perc75 - perc25",
+                "complexity": "intermediate"
+            },
+            "skewness": {
+                "description": "Calculate the skewness (asymmetry) of distribution",
+                "parameters": [],
+                "examples": ["skewness of response times", "distribution asymmetry"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "kurtosis": {
+                "description": "Calculate the kurtosis (tail heaviness) of distribution",
+                "parameters": [],
+                "examples": ["kurtosis of error rates", "distribution tail analysis"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            }
+        }
+        
+        # Inferential statistics
+        inferential_statistics = {
+            "confidence_interval": {
+                "description": "Calculate confidence interval for mean",
+                "parameters": ["confidence_level"],
+                "examples": ["95% confidence interval", "confidence interval for mean"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "sample_size": {
+                "description": "Calculate required sample size for analysis",
+                "parameters": ["confidence_level", "margin_of_error"],
+                "examples": ["sample size for 95% confidence", "required sample size"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "bootstrap": {
+                "description": "Bootstrap sampling for statistical inference",
+                "parameters": ["sample_size", "iterations"],
+                "examples": ["bootstrap confidence interval", "bootstrap sampling"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            }
+        }
+        
+        # Time series analysis
+        time_series_analysis = {
+            "moving_average": {
+                "description": "Calculate moving average over a window",
+                "parameters": ["window_size"],
+                "examples": ["5-day moving average", "rolling average"],
+                "spl_function": "streamstats avg",
+                "complexity": "intermediate"
+            },
+            "trend": {
+                "description": "Analyze trend direction and magnitude",
+                "parameters": ["method"],
+                "examples": ["linear trend", "trend analysis"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "seasonality": {
+                "description": "Detect seasonal patterns in time series",
+                "parameters": ["period"],
+                "examples": ["seasonal patterns", "cyclical behavior"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "exponential_smoothing": {
+                "description": "Apply exponential smoothing to time series",
+                "parameters": ["smoothing_factor"],
+                "examples": ["exponential smoothing", "smoothed values"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            }
+        }
+        
+        # Regression analysis
+        regression_analysis = {
+            "linear_regression": {
+                "description": "Perform linear regression analysis",
+                "parameters": ["dependent_var", "independent_var"],
+                "examples": ["linear regression", "predict y from x"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "polynomial_regression": {
+                "description": "Perform polynomial regression analysis",
+                "parameters": ["dependent_var", "independent_var", "degree"],
+                "examples": ["polynomial regression", "quadratic fit"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            }
+        }
+        
+        # Distribution analysis
+        distribution_analysis = {
+            "normal_distribution": {
+                "description": "Test for normal distribution",
+                "parameters": ["significance_level"],
+                "examples": ["test for normality", "normal distribution test"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "poisson_distribution": {
+                "description": "Test for Poisson distribution",
+                "parameters": ["lambda"],
+                "examples": ["Poisson distribution test", "event rate analysis"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            }
+        }
+        
+        # Outlier detection
+        outlier_detection = {
+            "outliers": {
+                "description": "Detect outliers using statistical methods",
+                "parameters": ["method", "threshold"],
+                "examples": ["detect outliers", "outlier analysis"],
+                "spl_function": "custom calculation",
+                "complexity": "intermediate"
+            },
+            "anomalies": {
+                "description": "Detect anomalies in data patterns",
+                "parameters": ["method", "sensitivity"],
+                "examples": ["anomaly detection", "unusual patterns"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "z_score": {
+                "description": "Calculate z-score (standard score) of values",
+                "parameters": [],
+                "examples": ["z-score analysis", "standardized values"],
+                "spl_function": "custom calculation",
+                "complexity": "intermediate"
+            }
+        }
+        
+        # Correlation analysis
+        correlation_analysis = {
+            "correlation": {
+                "description": "Calculate correlation coefficient between variables",
+                "parameters": ["variable1", "variable2"],
+                "examples": ["correlation between x and y", "Pearson correlation"],
+                "spl_function": "custom calculation",
+                "complexity": "intermediate"
+            },
+            "covariance": {
+                "description": "Calculate covariance between variables",
+                "parameters": ["variable1", "variable2"],
+                "examples": ["covariance between x and y", "variable relationship"],
+                "spl_function": "custom calculation",
+                "complexity": "intermediate"
+            }
+        }
+        
+        # Hypothesis testing
+        hypothesis_testing = {
+            "t_test": {
+                "description": "Perform t-test for means",
+                "parameters": ["sample1", "sample2", "alpha"],
+                "examples": ["t-test for means", "compare two groups"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "chi_square": {
+                "description": "Perform chi-square test",
+                "parameters": ["observed", "expected"],
+                "examples": ["chi-square test", "goodness of fit"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            },
+            "anova": {
+                "description": "Perform analysis of variance",
+                "parameters": ["groups", "alpha"],
+                "examples": ["ANOVA test", "compare multiple groups"],
+                "spl_function": "custom calculation",
+                "complexity": "advanced"
+            }
+        }
+        
+        return StatisticalFunctionCatalogResponse(
+            descriptive_statistics=descriptive_statistics,
+            inferential_statistics=inferential_statistics,
+            time_series_analysis=time_series_analysis,
+            regression_analysis=regression_analysis,
+            distribution_analysis=distribution_analysis,
+            outlier_detection=outlier_detection,
+            correlation_analysis=correlation_analysis,
+            hypothesis_testing=hypothesis_testing
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get statistical function catalog: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve statistical function catalog: {str(e)}"
+        )
+
+
+@router.post("/statistical/suggestions", response_model=StatisticalFunctionSuggestionsResponse, tags=["Statistical Functions"])
+async def get_statistical_function_suggestions(request: StatisticalFunctionSuggestionsRequest) -> StatisticalFunctionSuggestionsResponse:
+    """
+    Get statistical function suggestions based on partial query
+    
+    Analyze a partial query to suggest relevant statistical functions
+    with confidence scores and category breakdown.
+    """
+    with LogContext(endpoint="get_statistical_suggestions", query_length=len(request.partial_query)):
+        try:
+            logger.info("Getting statistical function suggestions", query=request.partial_query[:100])
+            
+            # Get suggestions from mapper
+            suggestions = statistical_function_mapper.get_statistical_function_suggestions(request.partial_query)
+            
+            # Apply limit
+            limited_suggestions = suggestions[:request.limit]
+            
+            # Convert to response format
+            suggestion_list = []
+            category_breakdown = {}
+            
+            for natural_func, score in limited_suggestions:
+                # Get function info
+                if natural_func in statistical_function_mapper.function_mappings:
+                    stat_func = statistical_function_mapper.function_mappings[natural_func]
+                    category = statistical_function_mapper.category_mappings.get(stat_func, StatisticalCategory.DESCRIPTIVE)
+                    
+                    # Apply category filter if specified
+                    if request.category_filter and category.value != request.category_filter:
+                        continue
+                    
+                    # Count category
+                    category_breakdown[category.value] = category_breakdown.get(category.value, 0) + 1
+                    
+                    suggestion_list.append({
+                        "function": natural_func,
+                        "statistical_function": stat_func.value,
+                        "category": category.value,
+                        "score": score,
+                        "description": statistical_function_mapper._get_function_description(stat_func),
+                        "complexity": statistical_function_mapper._get_function_complexity(stat_func)
+                    })
+            
+            return StatisticalFunctionSuggestionsResponse(
+                suggestions=suggestion_list,
+                total_suggestions=len(suggestion_list),
+                category_breakdown=category_breakdown
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get statistical function suggestions: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get statistical function suggestions: {str(e)}"
+            )
