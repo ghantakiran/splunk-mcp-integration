@@ -1497,6 +1497,124 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Comprehensive eval and calculated fields system complete with advanced natural language processing, ready for query optimization and advanced aggregation features
 
+### Session 20 - Comprehensive Query Performance Analysis System (2025-07-15)
+
+**Completed Tasks:**
+- ✅ Create query performance analysis system for SPL optimization (TASKS.md - Phase 2 Milestone 2.2)
+  - Built comprehensive QueryPerformanceAnalyzer class with sophisticated SPL query performance analysis capabilities
+  - Implemented query complexity analysis system with 5 performance levels (Excellent, Good, Moderate, Poor, Critical)
+  - Created performance bottleneck detection with 10 bottleneck types and severity analysis
+  - Built resource usage estimation engine with CPU, memory, disk I/O, and network usage predictions
+  - Added index optimization suggestions with intelligent category detection and recommendations
+  - Implemented optimization suggestions system with 10 optimization types and priority scoring
+  - Created comprehensive API endpoints for performance analysis, index optimization, and documentation
+  - Enhanced existing SPL endpoints with performance analysis integration
+  - Added comprehensive test suite with 6 test modules validating all performance analysis functionality
+  - Successfully committed and pushed all changes to GitHub main branch
+
+**Query Performance Analysis Architecture:**
+- **Performance Levels**: 5-level scoring system (Excellent/Good/Moderate/Poor/Critical) with automatic classification
+- **Bottleneck Detection**: 10 bottleneck types covering Disk I/O, CPU Intensive, Memory Usage, Network I/O, Index Scanning, Field Extraction, Regex Processing, Aggregation, Sorting, Join Operations
+- **Optimization Types**: 10 optimization categories including Index Selection, Time Range, Field Extraction, Aggregation, Subsearch, Join Optimization, Regex Optimization, Command Order, Filtering, Memory Usage
+- **Resource Estimation**: Comprehensive resource usage analysis with execution time, data volume, and concurrent capacity predictions
+- **Index Intelligence**: Smart index category detection for Security, Web, Application, Network, and System logs with confidence scoring
+- **Performance Scoring**: Sophisticated scoring algorithm considering command complexity, optimization factors, and anti-patterns
+
+**Technical Implementation:**
+- Created 1,400+ lines of comprehensive query performance analysis logic with full SPL optimization capabilities
+- Implemented query complexity analysis with scoring system based on command count, joins, subsearches, regex usage, and aggregations
+- Built performance bottleneck detection using pattern analysis for identifying resource-intensive operations
+- Added resource usage estimation with CPU, memory, disk I/O predictions and concurrent capacity calculations
+- Created index optimization suggestions with category detection supporting 5 log types and confidence scoring
+- Integrated with existing SPL mapping system for enhanced command analysis and optimization recommendations
+- Enhanced API endpoints with 3 new performance analysis endpoints supporting comprehensive analysis workflows
+- Built performance metrics system with threshold-based analysis and improvement suggestions
+
+**Files Created/Enhanced:**
+- **services/nlp-engine/app/ai/query_performance_analysis.py** (NEW - 1,400+ lines): Complete query performance analysis system with comprehensive functionality
+- **services/nlp-engine/app/api/v1/spl_endpoints.py** (ENHANCED): Integration of performance analysis with 350+ lines of new endpoint functionality
+- **services/nlp-engine/test_query_performance_analysis.py** (NEW - 770+ lines): Comprehensive test suite with 6 test modules validating all functionality
+
+**Performance Analysis Features:**
+- **Query Complexity Analysis**: Automatic complexity scoring based on command count (1-7+), join operations (0-2+), subsearches (0-2+), regex patterns (0-3+), aggregations (0-3+)
+- **Bottleneck Detection**: Pattern-based detection of performance bottlenecks including missing indexes, broad wildcards, complex regex, multiple joins, heavy sorting
+- **Resource Estimation**: CPU usage (low/medium/high), Memory usage (low/medium/high), Disk I/O analysis, Network I/O predictions, execution time estimates
+- **Index Optimization**: Category detection for Security Logs, Web Logs, Application Logs, Network Logs, System Logs with specific index recommendations
+- **Optimization Suggestions**: Priority-scored recommendations (1-10) with impact assessment (low/medium/high) and implementation complexity analysis
+- **Performance Scoring**: 0-100 scoring system with optimization rewards, complexity penalties, and anti-pattern detection
+
+**API Endpoints Implemented:**
+- **POST /api/v1/spl/performance/analyze**: Comprehensive query performance analysis with complexity assessment, bottleneck detection, and optimization suggestions
+- **POST /api/v1/spl/performance/index-optimization**: Intelligent index selection recommendations based on natural language query analysis
+- **GET /api/v1/spl/performance/documentation**: Complete documentation for optimization types, performance levels, bottleneck types, and best practices
+
+**Query Complexity Levels:**
+- **Excellent (80-100 points)**: Simple queries with index specification, time ranges, minimal commands (1-2), optimized patterns
+- **Good (65-79 points)**: Moderate complexity with some optimizations, basic aggregations, minimal regex usage
+- **Moderate (45-64 points)**: Medium complexity with multiple commands (3-5), some joins or subsearches, moderate resource usage
+- **Poor (25-44 points)**: High complexity with missing optimizations, multiple joins, inefficient patterns, high resource usage
+- **Critical (0-24 points)**: Very high complexity with multiple anti-patterns, extensive joins, missing indexes, unoptimized queries
+
+**Bottleneck Detection System:**
+- **Index Scanning**: Detection of missing index specifications leading to full index scanning
+- **Disk I/O**: Identification of broad wildcards and inefficient data access patterns
+- **CPU Intensive**: Recognition of complex regex patterns and computationally expensive operations
+- **Memory Usage**: Detection of multiple joins, large aggregations, and memory-intensive operations
+- **Network I/O**: Analysis of external lookups and network-dependent operations
+- **Performance Patterns**: Recognition of inefficient command ordering, sorting operations, and resource usage patterns
+
+**Resource Usage Estimation:**
+- **CPU Usage Analysis**: Based on regex complexity, aggregation count, and computational operations
+- **Memory Usage Prediction**: Calculated from join operations, aggregation complexity, and data volume
+- **Disk I/O Assessment**: Determined by index usage, wildcard patterns, and data scanning requirements
+- **Network I/O Evaluation**: Based on external lookups, remote data access, and network operations
+- **Execution Time Estimation**: Complexity-based time predictions with ranges from seconds to hours
+- **Concurrent Capacity**: Estimation of simultaneous query capacity based on resource requirements
+
+**Index Optimization Intelligence:**
+- **Security Logs**: Automatic detection of authentication, failed login, security-related queries with recommendations for security, auth, windows, linux indexes
+- **Web Logs**: Recognition of HTTP, web server, status code queries with recommendations for web, apache, nginx, access indexes
+- **Application Logs**: Detection of application errors, exceptions, debug queries with recommendations for application, app, java, python indexes
+- **Network Logs**: Identification of network, firewall, bandwidth queries with recommendations for network, firewall, cisco, juniper indexes
+- **System Logs**: Recognition of system performance, CPU, memory queries with recommendations for system, os, perfmon, vmware indexes
+
+**Optimization Suggestion System:**
+- **Priority Scoring**: 1-10 priority scale with highest impact optimizations receiving priority 10
+- **Impact Assessment**: Low/Medium/High impact categorization with expected improvement percentages
+- **Implementation Complexity**: Easy/Medium/Hard complexity ratings for optimization implementation
+- **Before/After Examples**: Specific SPL examples showing optimization transformations
+- **Performance Improvements**: Quantified improvement estimates (e.g., "50-80% faster execution")
+- **Best Practice Integration**: Alignment with Splunk performance best practices and optimization guidelines
+
+**Testing and Validation:**
+- **Comprehensive Test Coverage**: 770 lines of test coverage with 6 test modules validating all performance analysis functionality
+- **Query Complexity Testing**: Validation of complexity scoring across all performance levels with representative test queries
+- **Bottleneck Detection Testing**: Verification of bottleneck identification for all bottleneck types with specific test patterns
+- **Optimization Suggestion Testing**: Validation of optimization recommendations with priority scoring and impact assessment
+- **Resource Estimation Testing**: Testing of resource usage predictions with expected vs. actual resource level matching
+- **Index Optimization Testing**: Verification of category detection and index recommendations across all log types
+- **Performance Scoring Testing**: Validation of overall performance scoring with expected score ranges and level classifications
+
+**Advanced Performance Features:**
+- **Query Optimization Rules**: 4 primary optimization rules including index specification, time range optimization, field filtering, result limiting
+- **Performance Warnings**: Automatic warnings for resource-intensive operations like multiple joins and advanced complexity queries
+- **Cost Estimation**: Three-level cost estimation (low/medium/high) based on query complexity and resource requirements
+- **Scalability Analysis**: Concurrent capacity estimation and scaling recommendations for high-volume environments
+- **Best Practice Alignment**: Integration with Splunk performance best practices and enterprise optimization guidelines
+
+**GitHub Integration:**
+- **Direct Main Branch Commit**: Successfully committed query performance analysis implementation to main branch
+- **Comprehensive Commit Message**: Detailed commit with complete feature description, technical implementation details, and Claude Code attribution
+- **Clean Integration**: Seamless integration with existing SPL mapping and NLP engine systems without conflicts
+
+**Next Steps:**
+- Begin implementation of advanced visualization engine for performance analysis results
+- Add machine learning capabilities for improved performance prediction and optimization recommendation
+- Create enhanced user interface components for performance analysis visualization and reporting
+- Implement performance monitoring dashboard for real-time query optimization tracking
+
+**Project Status:** Comprehensive query performance analysis system complete with enterprise-grade optimization capabilities, ready for advanced visualization engine and machine learning enhancements
+
 ## Project Overview
 
 This project implements a Model Context Protocol (MCP) integration for Splunk Enterprise that enables natural language interactions with Splunk data. Users can chat in natural language to query data, create dashboards, generate reports, and manage alerts while respecting existing security and access controls.
