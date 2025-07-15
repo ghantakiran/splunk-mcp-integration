@@ -926,6 +926,90 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Complex query construction system complete with advanced SPL translation capabilities, ready for visualization engine and enhanced user interface implementation
 
+### Session 14 - Comprehensive Subquery and Join Support (2025-07-15)
+
+**Completed Tasks:**
+- ✅ Implement subquery and join support for advanced SPL translation (TASKS.md - Phase 2 Milestone 2.2 continuation)
+  - Built comprehensive subquery detection system with three main purposes: filter, lookup, and comparison
+  - Implemented advanced join detection supporting inner, left, outer joins with intelligent field correlation
+  - Added union operation support with multisearch generation for combining multiple data sources
+  - Enhanced query complexity analysis to accurately detect subqueries and join patterns
+  - Updated API endpoints to return detailed metadata about subqueries, joins, and unions
+  - Created comprehensive test suite validating pattern detection and SPL generation
+  - Integrated seamlessly with existing SPL mapping system for enhanced translation accuracy
+
+**Subquery and Join Architecture:**
+- **SubqueryInfo Structure**: Comprehensive subquery metadata with name, pipeline, purpose, fields, and correlation information
+- **JoinInfo Structure**: Detailed join specifications including type, subsearch, fields, conditions, and optimization parameters
+- **Pattern Detection**: Advanced regex-based pattern matching for natural language join and subquery expressions
+- **SPL Generation**: Intelligent SPL query construction with proper join syntax, subsearch handling, and multisearch support
+- **Performance Optimization**: Automatic query optimization with result limiting, join ordering, and time constraint propagation
+
+**Technical Implementation:**
+- Enhanced ComplexQuery class with SubqueryInfo and JoinInfo data structures for comprehensive query representation
+- Implemented _detect_subqueries() method with pattern matching for "where X in Y", "compare X with Y", and "enriched with Y" constructs
+- Built _detect_joins() method supporting explicit joins ("join X on Y") and implicit correlations ("correlate X with Y")
+- Added _detect_unions() method for handling multiple data source combinations with multisearch generation
+- Created _create_subquery_pipeline() method for generating purpose-specific subquery pipelines
+- Implemented intelligent field correlation and join condition parsing with common field fallbacks
+- Added comprehensive query optimization with subquery limiting, join ordering, and time constraint inheritance
+
+**Files Created/Enhanced:**
+- **services/nlp-engine/app/ai/query_constructor.py** (ENHANCED): Added 300+ lines of subquery and join detection logic
+- **services/nlp-engine/app/ai/nlp_service.py** (ENHANCED): Updated metadata reporting to include subquery/join counts and types
+- **services/nlp-engine/app/api/v1/spl_endpoints.py** (ENHANCED): Added new response fields for advanced feature reporting
+- **services/nlp-engine/test_query_patterns.py** (NEW): Comprehensive pattern detection testing with 200+ lines
+- **services/nlp-engine/test_subquery_joins.py** (NEW): Full integration testing suite for subquery and join functionality
+
+**Advanced Features Implemented:**
+- **Subquery Types**: Filter subqueries for result filtering, lookup subqueries for data enrichment, comparison subqueries for baseline analysis
+- **Join Types**: Inner joins for exact matches, left joins for optional enrichment, outer joins for comprehensive correlation
+- **Union Operations**: Multisearch generation for combining results from multiple indexes or data sources
+- **Field Correlation**: Intelligent field mapping and correlation analysis for automatic join field detection
+- **Query Optimization**: Performance optimization with result limiting, join ordering, and time constraint propagation
+- **Pattern Recognition**: Advanced natural language pattern detection with confidence scoring and validation
+
+**Pattern Detection Capabilities:**
+- **Subquery Patterns**: "where X in Y", "exists in Y", "compare X with Y", "relative to Y", "enriched with Y", "lookup from Y"
+- **Join Patterns**: "join X on Y", "left join X using Y", "correlate X with Y", "match X against Y", "merge X with Y"
+- **Union Patterns**: "X or Y", "include X and also Y", "combine X with Y", "from X and also from Y"
+- **Complex Combinations**: Multi-feature queries with nested subqueries, multiple joins, and union operations
+
+**SPL Generation Examples:**
+- **Subquery Filter**: `search main_query | search [ search subquery | return field ]`
+- **Inner Join**: `search main_query | join field [ search subsearch ]`
+- **Left Join**: `search main_query | join type=left field [ search subsearch ]`
+- **Union**: `| multisearch [ search query1 ] [ search query2 ]`
+- **Complex**: `search main | join user [ search user_details ] | search [ search banned_users | return user ]`
+
+**Performance and Optimization:**
+- **Query Complexity Analysis**: Enhanced scoring system accounting for subqueries (3 points) and joins (4 points)
+- **Result Limiting**: Automatic subquery result limiting with configurable defaults (10,000 results)
+- **Join Ordering**: Intelligent join ordering based on estimated result set sizes and field correlation
+- **Time Constraint Inheritance**: Automatic time range propagation from main query to subqueries
+- **Field Correlation**: Smart field correlation analysis for automatic join field detection
+
+**Testing and Validation:**
+- **Pattern Detection Tests**: Comprehensive validation of all subquery, join, and union patterns
+- **SPL Generation Tests**: Validation of correct SPL syntax generation for all query types
+- **Complexity Analysis Tests**: Verification of complexity scoring and classification accuracy
+- **Integration Tests**: End-to-end testing of pattern detection through SPL generation
+- **Performance Tests**: Validation of optimization features and query performance characteristics
+
+**GitHub Integration:**
+- **Direct Commit**: Successfully committed comprehensive subquery and join support to main branch
+- **Comprehensive Documentation**: Detailed commit message with technical implementation details
+- **Feature Complete**: All planned subquery and join features implemented and tested
+- **Code Quality**: Clean, well-documented code with extensive comments and error handling
+
+**Next Steps:**
+- Begin Phase 2 Milestone 2.2 continuation: Advanced aggregation handling and statistical functions mapping
+- Implement eval and calculated field support for complex transformations
+- Create lookup table integration for external data correlation
+- Add regex and pattern matching support for advanced text processing
+
+**Project Status:** Comprehensive subquery and join support complete with advanced SPL translation capabilities, ready for advanced aggregation features and statistical functions implementation
+
 ## Project Overview
 
 This project implements a Model Context Protocol (MCP) integration for Splunk Enterprise that enables natural language interactions with Splunk data. Users can chat in natural language to query data, create dashboards, generate reports, and manage alerts while respecting existing security and access controls.
