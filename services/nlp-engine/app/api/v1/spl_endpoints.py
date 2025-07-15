@@ -13,6 +13,7 @@ from ...ai.nlp_service import NLPService, SPLTranslationRequest, SPLTranslationR
 from ...ai.query_constructor import QueryComplexity
 from ...ai.advanced_aggregation import advanced_aggregation_handler, AggregationFunction, AggregationType
 from ...ai.statistical_functions import statistical_function_mapper, StatisticalFunction, StatisticalCategory
+from ...ai.regex_pattern_matching import regex_pattern_mapper, PatternType, RegexCommand, RegexComplexity
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -1507,4 +1508,424 @@ async def get_statistical_function_suggestions(request: StatisticalFunctionSugge
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to get statistical function suggestions: {str(e)}"
+            )
+
+
+# Regex Pattern Matching Request/Response Models
+class RegexPatternRequest(BaseModel):
+    """Request for regex pattern analysis"""
+    natural_query: str = Field(..., description="Natural language query describing pattern matching requirement", min_length=1)
+    source_field: Optional[str] = Field("_raw", description="Source field to apply pattern matching")
+    pattern_types: Optional[List[str]] = Field(None, description="Filter by specific pattern types")
+    include_validation: bool = Field(True, description="Include pattern validation")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Extract email addresses from log messages",
+                "source_field": "_raw",
+                "pattern_types": ["extraction"],
+                "include_validation": True
+            }
+        }
+
+
+class RegexPatternInfo(BaseModel):
+    """Information about a detected regex pattern"""
+    pattern_type: str = Field(..., description="Type of pattern operation")
+    regex_pattern: str = Field(..., description="Generated regex pattern")
+    source_field: str = Field(..., description="Source field for pattern matching")
+    target_fields: List[str] = Field(..., description="Target fields for extracted data")
+    command: str = Field(..., description="SPL command for pattern matching")
+    spl_query: str = Field(..., description="Generated SPL query")
+    description: str = Field(..., description="Description of pattern matching operation")
+    complexity: str = Field(..., description="Pattern complexity level")
+    examples: List[str] = Field(default_factory=list, description="Example matches")
+    parameters: Dict[str, Any] = Field(default_factory=dict, description="Command parameters")
+
+
+class RegexPatternResponse(BaseModel):
+    """Response for regex pattern analysis"""
+    detected_patterns: List[RegexPatternInfo] = Field(..., description="Detected pattern matching requirements")
+    total_patterns: int = Field(..., description="Total number of detected patterns")
+    pattern_summary: Dict[str, int] = Field(..., description="Summary by pattern type")
+    validation_results: Optional[Dict[str, Any]] = Field(None, description="Pattern validation results")
+    suggestions: Optional[List[str]] = Field(None, description="Optimization suggestions")
+
+
+class RegexValidationRequest(BaseModel):
+    """Request for regex pattern validation"""
+    regex_pattern: str = Field(..., description="Regex pattern to validate", min_length=1)
+    test_strings: Optional[List[str]] = Field(None, description="Test strings to validate against")
+    optimize: bool = Field(True, description="Include optimization suggestions")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "regex_pattern": r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+                "test_strings": ["192.168.1.1", "invalid.ip"],
+                "optimize": True
+            }
+        }
+
+
+class RegexValidationResponse(BaseModel):
+    """Response for regex pattern validation"""
+    valid: bool = Field(..., description="Whether the regex pattern is valid")
+    complexity: str = Field(..., description="Pattern complexity level")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    suggestions: List[str] = Field(default_factory=list, description="Optimization suggestions")
+    optimized_pattern: Optional[str] = Field(None, description="Optimized regex pattern")
+    test_results: Optional[Dict[str, bool]] = Field(None, description="Test string match results")
+    performance_score: Optional[int] = Field(None, description="Performance score (1-10)")
+
+
+class RegexSuggestionRequest(BaseModel):
+    """Request for regex pattern suggestions"""
+    sample_data: List[str] = Field(..., description="Sample data to analyze for patterns", min_items=1)
+    max_suggestions: int = Field(10, description="Maximum number of suggestions", ge=1, le=20)
+    pattern_types: Optional[List[str]] = Field(None, description="Filter by specific pattern types")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "sample_data": [
+                    "2023-01-15 14:30:45 INFO User login successful for user@example.com",
+                    "2023-01-15 14:31:02 ERROR Failed login attempt from 192.168.1.100"
+                ],
+                "max_suggestions": 5,
+                "pattern_types": ["extraction"]
+            }
+        }
+
+
+class RegexSuggestionResponse(BaseModel):
+    """Response for regex pattern suggestions"""
+    suggestions: List[RegexPatternInfo] = Field(..., description="Suggested regex patterns")
+    total_suggestions: int = Field(..., description="Total number of suggestions")
+    pattern_confidence: Dict[str, float] = Field(..., description="Confidence scores by pattern type")
+    analysis_summary: Dict[str, Any] = Field(..., description="Analysis summary of sample data")
+
+
+class RegexCatalogResponse(BaseModel):
+    """Response for regex pattern catalog"""
+    common_patterns: Dict[str, Dict[str, Any]] = Field(..., description="Common regex patterns")
+    extraction_patterns: Dict[str, Dict[str, Any]] = Field(..., description="Field extraction patterns")
+    validation_patterns: Dict[str, Dict[str, Any]] = Field(..., description="Validation patterns")
+    pattern_types: List[str] = Field(..., description="Available pattern types")
+    regex_commands: List[str] = Field(..., description="Available regex commands")
+    complexity_levels: List[str] = Field(..., description="Available complexity levels")
+    total_patterns: int = Field(..., description="Total number of patterns in catalog")
+
+
+# Regex Pattern Matching Endpoints
+@router.post("/regex/analyze", response_model=RegexPatternResponse, tags=["Regex Pattern Matching"])
+async def analyze_regex_patterns(request: RegexPatternRequest) -> RegexPatternResponse:
+    """
+    Analyze natural language query for regex pattern matching requirements
+    
+    Detect pattern matching requirements from natural language and generate
+    appropriate SPL commands with regex patterns for data extraction,
+    validation, replacement, and filtering operations.
+    """
+    with LogContext(endpoint="analyze_regex_patterns", query_length=len(request.natural_query)):
+        try:
+            logger.info("Analyzing regex patterns", query=request.natural_query[:100])
+            
+            # Detect patterns from natural language
+            detected_patterns = regex_pattern_mapper.detect_regex_patterns(request.natural_query)
+            
+            # Filter by pattern types if specified
+            if request.pattern_types:
+                detected_patterns = [
+                    p for p in detected_patterns 
+                    if p.pattern_type.value in request.pattern_types
+                ]
+            
+            # Override source field if specified
+            if request.source_field != "_raw":
+                for pattern in detected_patterns:
+                    pattern.source_field = request.source_field
+            
+            # Generate pattern info
+            pattern_info_list = []
+            pattern_summary = {}
+            validation_results = {}
+            
+            for pattern_spec in detected_patterns:
+                # Generate SPL
+                spl_query = regex_pattern_mapper.generate_spl_for_pattern(pattern_spec)
+                
+                # Create pattern info
+                pattern_info = RegexPatternInfo(
+                    pattern_type=pattern_spec.pattern_type.value,
+                    regex_pattern=pattern_spec.regex_pattern,
+                    source_field=pattern_spec.source_field,
+                    target_fields=pattern_spec.target_fields,
+                    command=pattern_spec.command.value,
+                    spl_query=spl_query,
+                    description=pattern_spec.description,
+                    complexity=pattern_spec.complexity.value,
+                    examples=pattern_spec.examples,
+                    parameters={p.name: p.value for p in pattern_spec.parameters}
+                )
+                pattern_info_list.append(pattern_info)
+                
+                # Update summary
+                pattern_type = pattern_spec.pattern_type.value
+                pattern_summary[pattern_type] = pattern_summary.get(pattern_type, 0) + 1
+                
+                # Validate pattern if requested
+                if request.include_validation:
+                    validation = regex_pattern_mapper.validate_regex_pattern(pattern_spec.regex_pattern)
+                    validation_results[pattern_spec.regex_pattern] = validation
+            
+            # Generate optimization suggestions
+            suggestions = []
+            if len(detected_patterns) > 3:
+                suggestions.append("Consider combining multiple patterns into a single regex for better performance")
+            
+            for pattern in detected_patterns:
+                if pattern.complexity == RegexComplexity.EXPERT:
+                    suggestions.append(f"Pattern '{pattern.regex_pattern}' is very complex - consider simplification")
+            
+            logger.info(
+                "Regex pattern analysis completed", 
+                pattern_count=len(pattern_info_list),
+                pattern_types=list(pattern_summary.keys())
+            )
+            
+            return RegexPatternResponse(
+                detected_patterns=pattern_info_list,
+                total_patterns=len(pattern_info_list),
+                pattern_summary=pattern_summary,
+                validation_results=validation_results if request.include_validation else None,
+                suggestions=suggestions if suggestions else None
+            )
+            
+        except Exception as e:
+            logger.error(f"Regex pattern analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Regex pattern analysis failed: {str(e)}"
+            )
+
+
+@router.post("/regex/validate", response_model=RegexValidationResponse, tags=["Regex Pattern Matching"])
+async def validate_regex_pattern(request: RegexValidationRequest) -> RegexValidationResponse:
+    """
+    Validate regex pattern and provide optimization suggestions
+    
+    Validate a regex pattern for syntax correctness, analyze complexity,
+    and provide optimization suggestions for better performance.
+    """
+    with LogContext(endpoint="validate_regex_pattern", pattern_length=len(request.regex_pattern)):
+        try:
+            logger.info("Validating regex pattern", pattern=request.regex_pattern[:50])
+            
+            # Validate pattern
+            validation = regex_pattern_mapper.validate_regex_pattern(request.regex_pattern)
+            
+            # Optimize pattern if requested
+            optimized_pattern = None
+            if request.optimize:
+                optimized_pattern = regex_pattern_mapper.optimize_regex_pattern(request.regex_pattern)
+                if optimized_pattern != request.regex_pattern:
+                    validation["suggestions"].append("Pattern can be optimized for better performance")
+            
+            # Test against sample strings if provided
+            test_results = {}
+            if request.test_strings:
+                try:
+                    compiled_pattern = re.compile(request.regex_pattern)
+                    for test_string in request.test_strings:
+                        test_results[test_string] = bool(compiled_pattern.search(test_string))
+                except re.error:
+                    # Pattern is invalid, skip testing
+                    pass
+            
+            # Calculate performance score
+            performance_score = 10  # Start with perfect score
+            if validation["complexity"] == RegexComplexity.INTERMEDIATE:
+                performance_score -= 2
+            elif validation["complexity"] == RegexComplexity.ADVANCED:
+                performance_score -= 4
+            elif validation["complexity"] == RegexComplexity.EXPERT:
+                performance_score -= 6
+            
+            if len(request.regex_pattern) > 100:
+                performance_score -= 2
+            
+            if '.*.*' in request.regex_pattern:
+                performance_score -= 3
+            
+            performance_score = max(1, performance_score)
+            
+            logger.info(
+                "Regex validation completed",
+                valid=validation["valid"],
+                complexity=validation["complexity"].value,
+                performance_score=performance_score
+            )
+            
+            return RegexValidationResponse(
+                valid=validation["valid"],
+                complexity=validation["complexity"].value,
+                errors=validation["errors"],
+                warnings=validation["warnings"],
+                suggestions=validation["suggestions"],
+                optimized_pattern=optimized_pattern if optimized_pattern != request.regex_pattern else None,
+                test_results=test_results if test_results else None,
+                performance_score=performance_score
+            )
+            
+        except Exception as e:
+            logger.error(f"Regex pattern validation failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Regex pattern validation failed: {str(e)}"
+            )
+
+
+@router.post("/regex/suggestions", response_model=RegexSuggestionResponse, tags=["Regex Pattern Matching"])
+async def get_regex_pattern_suggestions(request: RegexSuggestionRequest) -> RegexSuggestionResponse:
+    """
+    Get regex pattern suggestions based on sample data
+    
+    Analyze sample data to identify common patterns and suggest
+    appropriate regex patterns for data extraction and processing.
+    """
+    with LogContext(endpoint="get_regex_suggestions", sample_count=len(request.sample_data)):
+        try:
+            logger.info("Getting regex pattern suggestions", sample_count=len(request.sample_data))
+            
+            # Get pattern suggestions from sample data
+            suggested_patterns = regex_pattern_mapper.suggest_patterns_for_data(request.sample_data)
+            
+            # Filter by pattern types if specified
+            if request.pattern_types:
+                suggested_patterns = [
+                    p for p in suggested_patterns 
+                    if p.pattern_type.value in request.pattern_types
+                ]
+            
+            # Limit suggestions
+            suggested_patterns = suggested_patterns[:request.max_suggestions]
+            
+            # Generate pattern info
+            pattern_info_list = []
+            pattern_confidence = {}
+            
+            for pattern_spec in suggested_patterns:
+                # Generate SPL
+                spl_query = regex_pattern_mapper.generate_spl_for_pattern(pattern_spec)
+                
+                # Calculate confidence based on pattern matches
+                matches = 0
+                for sample in request.sample_data:
+                    try:
+                        if re.search(pattern_spec.regex_pattern, sample):
+                            matches += 1
+                    except re.error:
+                        continue
+                
+                confidence = matches / len(request.sample_data) if request.sample_data else 0.0
+                pattern_confidence[pattern_spec.pattern_type.value] = max(
+                    pattern_confidence.get(pattern_spec.pattern_type.value, 0.0),
+                    confidence
+                )
+                
+                # Create pattern info
+                pattern_info = RegexPatternInfo(
+                    pattern_type=pattern_spec.pattern_type.value,
+                    regex_pattern=pattern_spec.regex_pattern,
+                    source_field=pattern_spec.source_field,
+                    target_fields=pattern_spec.target_fields,
+                    command=pattern_spec.command.value,
+                    spl_query=spl_query,
+                    description=pattern_spec.description,
+                    complexity=pattern_spec.complexity.value,
+                    examples=pattern_spec.examples,
+                    parameters={p.name: p.value for p in pattern_spec.parameters}
+                )
+                pattern_info_list.append(pattern_info)
+            
+            # Analyze sample data
+            analysis_summary = {
+                "total_samples": len(request.sample_data),
+                "avg_length": sum(len(s) for s in request.sample_data) / len(request.sample_data),
+                "unique_patterns_found": len(set(p.regex_pattern for p in suggested_patterns)),
+                "common_elements": []
+            }
+            
+            # Find common elements
+            all_text = " ".join(request.sample_data).lower()
+            if "ip" in all_text or re.search(r'\b\d+\.\d+\.\d+\.\d+\b', all_text):
+                analysis_summary["common_elements"].append("IP addresses")
+            if "@" in all_text:
+                analysis_summary["common_elements"].append("Email addresses")
+            if "http" in all_text:
+                analysis_summary["common_elements"].append("URLs")
+            if re.search(r'\b\d{4}-\d{2}-\d{2}\b', all_text):
+                analysis_summary["common_elements"].append("Dates")
+            
+            logger.info(
+                "Regex suggestions completed",
+                suggestion_count=len(pattern_info_list),
+                confidence_avg=sum(pattern_confidence.values()) / len(pattern_confidence) if pattern_confidence else 0
+            )
+            
+            return RegexSuggestionResponse(
+                suggestions=pattern_info_list,
+                total_suggestions=len(pattern_info_list),
+                pattern_confidence=pattern_confidence,
+                analysis_summary=analysis_summary
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get regex pattern suggestions: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get regex pattern suggestions: {str(e)}"
+            )
+
+
+@router.get("/regex/catalog", response_model=RegexCatalogResponse, tags=["Regex Pattern Matching"])
+async def get_regex_pattern_catalog() -> RegexCatalogResponse:
+    """
+    Get comprehensive catalog of available regex patterns
+    
+    Retrieve the complete catalog of common patterns, extraction patterns,
+    validation patterns, and their documentation.
+    """
+    with LogContext(endpoint="get_regex_catalog"):
+        try:
+            logger.info("Retrieving regex pattern catalog")
+            
+            # Get pattern documentation
+            doc = regex_pattern_mapper.get_pattern_documentation()
+            
+            # Calculate total patterns
+            total_patterns = (
+                len(regex_pattern_mapper.common_patterns) +
+                len(regex_pattern_mapper.extraction_patterns) +
+                len(regex_pattern_mapper.validation_patterns)
+            )
+            
+            return RegexCatalogResponse(
+                common_patterns=regex_pattern_mapper.common_patterns,
+                extraction_patterns=regex_pattern_mapper.extraction_patterns,
+                validation_patterns=regex_pattern_mapper.validation_patterns,
+                pattern_types=doc["pattern_types"],
+                regex_commands=doc["regex_commands"],
+                complexity_levels=doc["complexity_levels"],
+                total_patterns=total_patterns
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get regex pattern catalog: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get regex pattern catalog: {str(e)}"
             )
