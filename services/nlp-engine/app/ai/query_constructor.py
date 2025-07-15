@@ -222,48 +222,100 @@ class QueryPipeline:
 
 
 @dataclass
+class SubqueryInfo:
+    """Information about a subquery"""
+    name: str
+    pipeline: QueryPipeline
+    purpose: str  # 'lookup', 'filter', 'comparison'
+    fields: List[str] = field(default_factory=list)
+    correlation_fields: List[str] = field(default_factory=list)
+
+@dataclass
+class JoinInfo:
+    """Information about a join operation"""
+    join_type: str  # 'inner', 'left', 'right', 'outer'
+    subsearch: QueryPipeline
+    join_fields: List[str]
+    join_condition: Optional[str] = None
+    max_results: Optional[int] = None
+    use_time: bool = False
+
+@dataclass
 class ComplexQuery:
     """Represents a complex query with multiple pipelines and joins"""
     main_pipeline: QueryPipeline
-    subqueries: List[QueryPipeline] = field(default_factory=list)
-    joins: List[Dict[str, Any]] = field(default_factory=list)
+    subqueries: List[SubqueryInfo] = field(default_factory=list)
+    joins: List[JoinInfo] = field(default_factory=list)
     unions: List[QueryPipeline] = field(default_factory=list)
     complexity: QueryComplexity = QueryComplexity.COMPLEX
     
     def to_spl(self) -> str:
-        """Convert complex query to SPL syntax"""
+        """Convert complex query to SPL syntax with comprehensive join and subquery support"""
         if not self.subqueries and not self.joins and not self.unions:
             return self.main_pipeline.to_spl()
         
         query_parts = []
         main_spl = self.main_pipeline.to_spl()
         
-        # Handle joins
-        if self.joins:
-            for join_info in self.joins:
-                join_type = join_info.get("type", "inner")
-                join_pipeline = join_info.get("pipeline")
-                join_fields = join_info.get("fields", [])
-                
-                if join_pipeline:
-                    join_spl = join_pipeline.to_spl()
-                    # Create join command
-                    join_cmd = f"join type={join_type} {' '.join(join_fields)} [search {join_spl}]"
-                    main_spl += f" | {join_cmd}"
-        
-        # Handle unions
+        # Handle unions first (multisearch)
         if self.unions:
-            union_queries = [main_spl]
+            union_parts = [f"[ {main_spl} ]"]
             for union_pipeline in self.unions:
                 union_spl = union_pipeline.to_spl()
-                union_queries.append(union_spl)
+                union_parts.append(f"[ {union_spl} ]")
             
-            # Create multisearch command for union
-            multisearch_parts = []
-            for i, query in enumerate(union_queries):
-                multisearch_parts.append(f"[search {query}]")
+            multisearch_query = "| multisearch " + " ".join(union_parts)
+            return multisearch_query
+        
+        # Handle joins
+        if self.joins:
+            base_query = main_spl
             
-            return f"multisearch {' '.join(multisearch_parts)}"
+            for join_info in self.joins:
+                subsearch_spl = join_info.subsearch.to_spl()
+                join_fields_str = " ".join(join_info.join_fields) if join_info.join_fields else ""
+                
+                # Build join command based on type
+                if join_info.join_type == "inner":
+                    join_cmd = f"join {join_fields_str}"
+                elif join_info.join_type == "left":
+                    join_cmd = f"join type=left {join_fields_str}"
+                elif join_info.join_type == "outer":
+                    join_cmd = f"join type=outer {join_fields_str}"
+                else:
+                    join_cmd = f"join {join_fields_str}"
+                
+                # Add options
+                if join_info.max_results:
+                    join_cmd += f" max={join_info.max_results}"
+                if join_info.use_time:
+                    join_cmd += " usetime=true"
+                
+                # Build complete query with join
+                base_query = f"{base_query} | {join_cmd} [ {subsearch_spl} ]"
+            
+            return base_query
+        
+        # Handle subqueries in various contexts
+        if self.subqueries:
+            enhanced_main = main_spl
+            
+            for subquery_info in self.subqueries:
+                subsearch_spl = subquery_info.pipeline.to_spl()
+                
+                if subquery_info.purpose == "filter":
+                    # Use subsearch for filtering
+                    enhanced_main = f"{enhanced_main} | search [ {subsearch_spl} | return {' '.join(subquery_info.fields)} ]"
+                elif subquery_info.purpose == "lookup":
+                    # Use lookup for enrichment
+                    lookup_fields = " ".join(subquery_info.correlation_fields) if subquery_info.correlation_fields else ""
+                    enhanced_main = f"{enhanced_main} | lookup [ {subsearch_spl} | outputlookup {subquery_info.name} ] {lookup_fields}"
+                elif subquery_info.purpose == "comparison":
+                    # Use eval with subsearch for comparison
+                    return_field = subquery_info.fields[0] if subquery_info.fields else "result"
+                    enhanced_main = f"{enhanced_main} | eval subsearch_result=[ {subsearch_spl} | return {return_field} ]"
+            
+            return enhanced_main
         
         return main_spl
 
@@ -399,10 +451,10 @@ class ComplexQueryConstructor:
             # Build main pipeline
             main_pipeline = self._build_main_pipeline(components, complexity)
             
-            # Handle complex features
-            subqueries = self._identify_subqueries(components)
-            joins = self._identify_joins(components)
-            unions = self._identify_unions(components)
+            # Detect complex features from natural language
+            subqueries = self._detect_subqueries(natural_query, components)
+            joins = self._detect_joins(natural_query, components)
+            unions = self._detect_unions(natural_query, components)
             
             # Create complex query
             complex_query = ComplexQuery(
@@ -462,12 +514,22 @@ class ComplexQueryConstructor:
         analysis["has_comparison"] = any(keyword in query_lower for keyword in comp_keywords)
         
         # Check for subquery indicators
-        subquery_keywords = ["where", "that have", "which contain", "with"]
-        analysis["has_subquery_indicators"] = any(keyword in query_lower for keyword in subquery_keywords)
+        subquery_keywords = [
+            "where.*in", "exists in", "is in", "compare.*with", "relative to", 
+            "versus", "vs", "enriched with", "lookup from", "baseline"
+        ]
+        analysis["has_subquery_indicators"] = any(
+            re.search(keyword, query_lower) for keyword in subquery_keywords
+        )
         
         # Check for join indicators
-        join_keywords = ["and", "also", "combined with", "together with"]
-        analysis["has_join_indicators"] = any(keyword in query_lower for keyword in join_keywords)
+        join_keywords = [
+            "join.*on", "merge.*with", "combine.*with", "correlate.*with", 
+            "match.*against", "link.*to", "left join", "inner join", "outer join"
+        ]
+        analysis["has_join_indicators"] = any(
+            re.search(keyword, query_lower) for keyword in join_keywords
+        )
         
         # Count conditions (rough estimate)
         condition_indicators = ["=", ">", "<", "contains", "matches", "equals", "not", "and", "or"]
@@ -932,6 +994,270 @@ class ComplexQueryConstructor:
             )
         
         return performance_analysis
+    
+    def _detect_subqueries(self, query: str, components: Dict[str, Any]) -> List[SubqueryInfo]:
+        """Detect subqueries from natural language"""
+        subqueries = []
+        query_lower = query.lower()
+        
+        # Pattern 1: "where X in (subquery)" or "where X exists in Y"
+        exists_pattern = r"where\s+(\w+)\s+(?:in|exists in|is in)\s+(.+?)(?:\s+and|\s+or|$)"
+        exists_matches = re.finditer(exists_pattern, query_lower)
+        for match in exists_matches:
+            field = match.group(1)
+            subquery_desc = match.group(2)
+            
+            # Create subquery pipeline for filtering
+            subquery_pipeline = self._create_subquery_pipeline(subquery_desc, "filter")
+            
+            subqueries.append(SubqueryInfo(
+                name=f"filter_{field}",
+                pipeline=subquery_pipeline,
+                purpose="filter",
+                fields=[field],
+                correlation_fields=[field]
+            ))
+        
+        # Pattern 2: "compare X with Y" or "relative to Y"
+        compare_pattern = r"(?:compare|compared to|relative to|versus|vs)\s+(.+)"
+        compare_matches = re.finditer(compare_pattern, query_lower)
+        for match in compare_matches:
+            comparison_desc = match.group(1)
+            
+            # Create subquery pipeline for comparison
+            subquery_pipeline = self._create_subquery_pipeline(comparison_desc, "comparison")
+            
+            subqueries.append(SubqueryInfo(
+                name="comparison_baseline",
+                pipeline=subquery_pipeline,
+                purpose="comparison",
+                fields=["result"],
+                correlation_fields=[]
+            ))
+        
+        # Pattern 3: "enriched with" or "lookup from"
+        lookup_pattern = r"(?:enriched with|lookup from|join with|merge with)\s+(.+)"
+        lookup_matches = re.finditer(lookup_pattern, query_lower)
+        for match in lookup_matches:
+            lookup_desc = match.group(1)
+            
+            # Create subquery pipeline for lookup/enrichment
+            subquery_pipeline = self._create_subquery_pipeline(lookup_desc, "lookup")
+            
+            subqueries.append(SubqueryInfo(
+                name="lookup_enrichment",
+                pipeline=subquery_pipeline,
+                purpose="lookup",
+                fields=["*"],
+                correlation_fields=["user", "host", "src_ip"]  # Common correlation fields
+            ))
+        
+        return subqueries
+    
+    def _detect_joins(self, query: str, components: Dict[str, Any]) -> List[JoinInfo]:
+        """Detect join operations from natural language"""
+        joins = []
+        query_lower = query.lower()
+        
+        # Pattern 1: Explicit join language
+        join_patterns = [
+            r"(?:inner\s+)?join\s+(.+?)\s+on\s+(.+)",
+            r"(?:left\s+)?join\s+(.+?)\s+(?:using|on)\s+(.+)",
+            r"(?:outer\s+)?join\s+(.+?)\s+(?:where|on)\s+(.+)",
+            r"merge\s+with\s+(.+?)\s+(?:on|using)\s+(.+)",
+            r"combine\s+with\s+(.+?)\s+(?:on|using|by)\s+(.+)"
+        ]
+        
+        for pattern in join_patterns:
+            matches = re.finditer(pattern, query_lower)
+            for match in matches:
+                join_source = match.group(1).strip()
+                join_condition = match.group(2).strip()
+                
+                # Determine join type
+                join_type = "inner"  # default
+                if "left" in pattern:
+                    join_type = "left"
+                elif "outer" in pattern:
+                    join_type = "outer"
+                
+                # Parse join fields from condition
+                join_fields = self._parse_join_fields(join_condition)
+                
+                # Create subsearch pipeline
+                subsearch_pipeline = self._create_subquery_pipeline(join_source, "join")
+                
+                joins.append(JoinInfo(
+                    join_type=join_type,
+                    subsearch=subsearch_pipeline,
+                    join_fields=join_fields,
+                    join_condition=join_condition,
+                    max_results=1000,  # Default limit
+                    use_time=False
+                ))
+        
+        # Pattern 2: Implicit joins through correlation
+        correlation_patterns = [
+            r"correlate\s+(.+?)\s+with\s+(.+)",
+            r"match\s+(.+?)\s+against\s+(.+)",
+            r"link\s+(.+?)\s+to\s+(.+)"
+        ]
+        
+        for pattern in correlation_patterns:
+            matches = re.finditer(pattern, query_lower)
+            for match in matches:
+                source_desc = match.group(1).strip()
+                target_desc = match.group(2).strip()
+                
+                # Create correlation join
+                subsearch_pipeline = self._create_subquery_pipeline(target_desc, "correlation")
+                
+                # Infer correlation fields
+                correlation_fields = self._infer_correlation_fields(source_desc, target_desc)
+                
+                joins.append(JoinInfo(
+                    join_type="inner",
+                    subsearch=subsearch_pipeline,
+                    join_fields=correlation_fields,
+                    max_results=10000,
+                    use_time=True  # Use time correlation for event matching
+                ))
+        
+        return joins
+    
+    def _detect_unions(self, query: str, components: Dict[str, Any]) -> List[QueryPipeline]:
+        """Detect union operations from natural language"""
+        unions = []
+        query_lower = query.lower()
+        
+        # Pattern 1: "OR" between different data sources
+        union_patterns = [
+            r"(?:from\s+.+?\s+)?(?:or|and also)\s+(?:from\s+)?(.+)",
+            r"(?:include|also include)\s+(.+)",
+            r"(?:combine|merge)\s+(?:with\s+)?(.+)"
+        ]
+        
+        for pattern in union_patterns:
+            matches = re.finditer(pattern, query_lower)
+            for match in matches:
+                union_source = match.group(1).strip()
+                
+                # Skip if it's just a condition, not a separate source
+                if len(union_source.split()) <= 3:
+                    continue
+                
+                # Create union pipeline
+                union_pipeline = self._create_subquery_pipeline(union_source, "union")
+                unions.append(union_pipeline)
+        
+        return unions
+    
+    def _create_subquery_pipeline(self, description: str, purpose: str) -> QueryPipeline:
+        """Create a query pipeline for a subquery based on description"""
+        # Extract basic components from description
+        components = self._extract_query_components(description, {})
+        
+        # Create search block
+        search_block = QueryBlock(
+            conditions=components.get("conditions", []),
+            index=components.get("index"),
+            sourcetype=components.get("sourcetype"),
+            time_range=components.get("time_range")
+        )
+        
+        # Add purpose-specific modifications
+        transformations = []
+        aggregations = []
+        
+        if purpose == "filter":
+            # For filtering, we want to return specific field values
+            transformations.append({
+                "command": "dedup",
+                "parameters": {"fields": components.get("fields", ["*"])}
+            })
+        elif purpose == "comparison":
+            # For comparison, we want aggregated results
+            aggregations = components.get("aggregations", [{
+                "command": "stats",
+                "functions": [{"function": "count"}]
+            }])
+        elif purpose in ["lookup", "join", "correlation"]:
+            # For joins, we want to keep relevant fields
+            if components.get("fields"):
+                transformations.append({
+                    "command": "table",
+                    "parameters": {"fields": components.get("fields")}
+                })
+        
+        return QueryPipeline(
+            search_block=search_block,
+            transformations=transformations,
+            aggregations=aggregations,
+            complexity=QueryComplexity.MODERATE
+        )
+    
+    def _parse_join_fields(self, condition: str) -> List[str]:
+        """Parse join fields from a join condition"""
+        # Simple field extraction - can be enhanced
+        fields = []
+        
+        # Pattern: field1 = field2 or field1 == field2
+        equality_pattern = r"(\w+)\s*=+\s*(\w+)"
+        matches = re.findall(equality_pattern, condition)
+        for match in matches:
+            fields.extend([match[0], match[1]])
+        
+        # If no specific fields found, use common join fields
+        if not fields:
+            fields = ["user", "host", "src_ip", "_time"]
+        
+        return list(set(fields))  # Remove duplicates
+    
+    def _infer_correlation_fields(self, source_desc: str, target_desc: str) -> List[str]:
+        """Infer correlation fields from descriptions"""
+        common_fields = ["user", "host", "src_ip", "dest_ip", "_time"]
+        inferred_fields = []
+        
+        # Look for field mentions in descriptions
+        for field in common_fields:
+            if field in source_desc.lower() or field in target_desc.lower():
+                inferred_fields.append(field)
+        
+        # Default to user and time correlation if nothing specific found
+        if not inferred_fields:
+            inferred_fields = ["user", "_time"]
+        
+        return inferred_fields
+    
+    def _optimize_complex_query(self, query: ComplexQuery) -> ComplexQuery:
+        """Optimize a complex query for better performance"""
+        # Create a copy for optimization
+        optimized_query = ComplexQuery(
+            main_pipeline=query.main_pipeline,
+            subqueries=query.subqueries.copy(),
+            joins=query.joins.copy(),
+            unions=query.unions.copy(),
+            complexity=query.complexity
+        )
+        
+        # Optimization 1: Limit subquery results
+        for subquery_info in optimized_query.subqueries:
+            if not subquery_info.pipeline.limiting and subquery_info.purpose != "comparison":
+                subquery_info.pipeline.limiting = 10000  # Default limit
+        
+        # Optimization 2: Optimize join order (smaller result sets first)
+        if len(optimized_query.joins) > 1:
+            # Sort joins by estimated result size (heuristic)
+            optimized_query.joins.sort(key=lambda j: len(j.join_fields), reverse=True)
+        
+        # Optimization 3: Add time constraints to subqueries when main query has time range
+        main_time_range = query.main_pipeline.search_block.time_range
+        if main_time_range:
+            for subquery_info in optimized_query.subqueries:
+                if not subquery_info.pipeline.search_block.time_range:
+                    subquery_info.pipeline.search_block.time_range = main_time_range
+        
+        return optimized_query
 
 
 # Global instance

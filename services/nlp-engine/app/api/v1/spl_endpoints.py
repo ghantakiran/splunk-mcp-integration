@@ -135,6 +135,10 @@ class ComplexQueryResponse(BaseModel):
     syntax_errors: Optional[List[str]] = Field(None, description="Syntax errors if any")
     processing_time: float = Field(..., description="Processing time in seconds")
     metadata: Dict[str, Any] = Field(..., description="Additional metadata")
+    subqueries_count: int = Field(0, description="Number of subqueries detected")
+    joins_count: int = Field(0, description="Number of joins detected")
+    unions_count: int = Field(0, description="Number of unions detected")
+    has_advanced_features: bool = Field(False, description="Whether query uses advanced features")
 
 
 class QueryAnalysisRequest(BaseModel):
@@ -557,6 +561,13 @@ async def construct_complex_query(request: ComplexQueryRequest) -> ComplexQueryR
                 processing_time=result["processing_time"]
             )
             
+            # Extract additional metadata
+            metadata = result["metadata"]
+            subqueries_count = metadata.get("has_subqueries", 0) if isinstance(metadata.get("has_subqueries"), int) else (1 if metadata.get("has_subqueries") else 0)
+            joins_count = metadata.get("has_joins", 0) if isinstance(metadata.get("has_joins"), int) else (1 if metadata.get("has_joins") else 0)
+            unions_count = metadata.get("has_unions", 0) if isinstance(metadata.get("has_unions"), int) else (1 if metadata.get("has_unions") else 0)
+            has_advanced_features = subqueries_count > 0 or joins_count > 0 or unions_count > 0
+            
             return ComplexQueryResponse(
                 spl_query=result["spl_query"],
                 query_complexity=result["query_complexity"],
@@ -564,7 +575,11 @@ async def construct_complex_query(request: ComplexQueryRequest) -> ComplexQueryR
                 syntax_valid=result["syntax_valid"],
                 syntax_errors=result.get("syntax_errors"),
                 processing_time=result["processing_time"],
-                metadata=result["metadata"]
+                metadata=result["metadata"],
+                subqueries_count=subqueries_count,
+                joins_count=joins_count,
+                unions_count=unions_count,
+                has_advanced_features=has_advanced_features
             )
             
         except HTTPException:
