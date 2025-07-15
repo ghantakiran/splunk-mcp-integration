@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta
 
 from .spl_mapping import spl_mapper, SPLCommand, SPLCommandType, FieldMapping
+from .advanced_aggregation import advanced_aggregation_handler, AdvancedAggregation
 from ..core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -159,11 +160,63 @@ class QueryPipeline:
                     func_name = func.get("function")
                     field = func.get("field")
                     alias = func.get("alias")
+                    parameters = func.get("parameters", [])
+                    conditions = func.get("conditions", [])
                     
-                    if field:
-                        func_str = f"{func_name}({field})"
+                    # Handle advanced function construction
+                    if conditions:
+                        # Handle conditional aggregations
+                        condition_parts = []
+                        for condition in conditions:
+                            if condition.get("operator") == "=":
+                                condition_parts.append(f"{condition.get('field')}=\"{condition.get('value')}\"")
+                            elif condition.get("operator") == ">":
+                                condition_parts.append(f"{condition.get('field')}>{condition.get('value')}")
+                            elif condition.get("operator") == "<":
+                                condition_parts.append(f"{condition.get('field')}<{condition.get('value')}")
+                            elif condition.get("operator") == "contains":
+                                condition_parts.append(f"like({condition.get('field')}, \"%{condition.get('value')}%\")")
+                            else:
+                                condition_parts.append(f"{condition.get('field')}{condition.get('operator')}{condition.get('value')}")
+                        
+                        condition_expr = " AND ".join(condition_parts)
+                        
+                        if field:
+                            if func_name == "count":
+                                func_str = f"count(eval(if({condition_expr}, {field}, null())))"
+                            else:
+                                func_str = f"{func_name}(eval(if({condition_expr}, {field}, null())))"
+                        else:
+                            func_str = f"count(eval(if({condition_expr}, 1, null())))"
+                    
+                    elif parameters:
+                        # Handle parameterized functions
+                        param_map = {p.get("name"): p.get("value") for p in parameters}
+                        
+                        if func_name == "perc" and "percentile" in param_map:
+                            percentile_value = param_map["percentile"]
+                            if field:
+                                func_str = f"perc{percentile_value}({field})"
+                            else:
+                                func_str = f"perc{percentile_value}(_time)"
+                        elif func_name == "rate" and "time_unit" in param_map:
+                            time_unit = param_map["time_unit"]
+                            if field:
+                                func_str = f"rate({field})"
+                            else:
+                                func_str = "rate(count)"
+                        else:
+                            # Default parameter handling
+                            if field:
+                                func_str = f"{func_name}({field})"
+                            else:
+                                func_str = func_name
                     else:
-                        func_str = func_name
+                        # Standard function
+                        if field:
+                            func_str = f"{func_name}({field})"
+                        else:
+                            func_str = func_name
                     
                     if alias:
                         func_str += f" as {alias}"
@@ -680,7 +733,66 @@ class ComplexQueryConstructor:
         return conditions
     
     def _extract_aggregations(self, query: str) -> List[Dict[str, Any]]:
-        """Extract aggregation functions from query"""
+        """Extract aggregation functions from query using advanced aggregation handler"""
+        aggregations = []
+        
+        try:
+            # Use advanced aggregation handler for sophisticated detection
+            advanced_aggs = advanced_aggregation_handler.detect_aggregations(query)
+            
+            # Convert advanced aggregations to the format expected by the query constructor
+            for advanced_agg in advanced_aggs:
+                # Extract by_fields from query context
+                by_fields = self._extract_by_fields(query)
+                
+                # Build aggregation dictionary
+                agg_dict = {
+                    "command": "stats",
+                    "functions": [{
+                        "function": advanced_agg.function.value,
+                        "field": advanced_agg.fields[0] if advanced_agg.fields else None,
+                        "alias": advanced_agg.alias,
+                        "parameters": [{"name": p.name, "value": p.value} for p in advanced_agg.parameters],
+                        "conditions": [{"field": c.field, "operator": c.operator, "value": c.value} for c in advanced_agg.conditions]
+                    }],
+                    "by_fields": by_fields if by_fields else advanced_agg.by_fields,
+                    "aggregation_type": advanced_agg.aggregation_type.value,
+                    "time_window": advanced_agg.time_window
+                }
+                
+                # Handle different aggregation types
+                if advanced_agg.aggregation_type.value == "temporal":
+                    # Use timechart for temporal aggregations
+                    agg_dict["command"] = "timechart"
+                    if advanced_agg.time_window:
+                        agg_dict["span"] = advanced_agg.time_window
+                    else:
+                        agg_dict["span"] = "auto"
+                elif advanced_agg.aggregation_type.value == "statistical":
+                    # Keep as stats but add statistical metadata
+                    agg_dict["statistical"] = True
+                elif advanced_agg.aggregation_type.value == "conditional":
+                    # Keep as stats but add conditional metadata
+                    agg_dict["conditional"] = True
+                
+                aggregations.append(agg_dict)
+            
+            # If no advanced aggregations found, fall back to basic detection
+            if not aggregations:
+                aggregations = self._extract_basic_aggregations(query)
+            
+            # Optimize aggregations
+            aggregations = self._optimize_aggregations(aggregations)
+            
+            return aggregations
+            
+        except Exception as e:
+            logger.error(f"Advanced aggregation extraction failed: {e}")
+            # Fall back to basic detection
+            return self._extract_basic_aggregations(query)
+    
+    def _extract_basic_aggregations(self, query: str) -> List[Dict[str, Any]]:
+        """Extract basic aggregation functions from query (fallback method)"""
         aggregations = []
         
         # Check for temporal analysis
@@ -744,6 +856,111 @@ class ComplexQueryConstructor:
                     })
         
         return aggregations
+    
+    def _extract_by_fields(self, query: str) -> List[str]:
+        """Extract 'by' fields from query"""
+        by_fields = []
+        
+        # Pattern for "by field" or "group by field"
+        by_patterns = [
+            r"(?:by|group by)\s+(\w+(?:\s*,\s*\w+)*)",
+            r"(?:grouped by|split by)\s+(\w+(?:\s*,\s*\w+)*)"
+        ]
+        
+        for pattern in by_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                fields_str = match.group(1)
+                fields = [f.strip() for f in fields_str.split(',')]
+                
+                # Map fields if needed
+                mapped_fields = []
+                for field in fields:
+                    field_mapping = spl_mapper.find_field_mapping(field)
+                    if field_mapping:
+                        mapped_fields.append(field_mapping.splunk_field)
+                    else:
+                        mapped_fields.append(field)
+                
+                by_fields.extend(mapped_fields)
+        
+        return by_fields
+    
+    def _optimize_aggregations(self, aggregations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Optimize aggregations for better performance"""
+        optimized = []
+        
+        for agg in aggregations:
+            # Create optimized copy
+            optimized_agg = agg.copy()
+            
+            # Optimize based on aggregation type
+            if agg.get("aggregation_type") == "conditional":
+                # Optimize conditional aggregations
+                optimized_agg = self._optimize_conditional_aggregation_dict(optimized_agg)
+            elif agg.get("aggregation_type") == "statistical":
+                # Optimize statistical aggregations
+                optimized_agg = self._optimize_statistical_aggregation_dict(optimized_agg)
+            elif agg.get("aggregation_type") == "temporal":
+                # Optimize temporal aggregations
+                optimized_agg = self._optimize_temporal_aggregation_dict(optimized_agg)
+            
+            # General optimizations
+            if agg.get("command") == "stats" and not agg.get("by_fields"):
+                # Add default sorting for stats without grouping
+                optimized_agg["auto_sort"] = True
+            
+            optimized.append(optimized_agg)
+        
+        return optimized
+    
+    def _optimize_conditional_aggregation_dict(self, agg: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize conditional aggregation dictionary"""
+        if agg.get("functions"):
+            for func in agg["functions"]:
+                if func.get("conditions"):
+                    # Simplify single equality conditions
+                    conditions = func["conditions"]
+                    if len(conditions) == 1 and conditions[0].get("operator") == "=":
+                        condition = conditions[0]
+                        if condition.get("value") in ["true", "1", "yes"]:
+                            # Remove condition for boolean true values
+                            func["conditions"] = []
+        
+        return agg
+    
+    def _optimize_statistical_aggregation_dict(self, agg: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize statistical aggregation dictionary"""
+        if agg.get("functions"):
+            for func in agg["functions"]:
+                # Add appropriate precision for statistical functions
+                if func.get("function") in ["stdev", "var", "avg"]:
+                    func["precision"] = 2
+                elif func.get("function") == "perc":
+                    func["precision"] = 1
+        
+        return agg
+    
+    def _optimize_temporal_aggregation_dict(self, agg: Dict[str, Any]) -> Dict[str, Any]:
+        """Optimize temporal aggregation dictionary"""
+        if agg.get("command") == "timechart":
+            # Optimize span for temporal aggregations
+            if not agg.get("span") or agg.get("span") == "auto":
+                # Use intelligent span selection
+                if agg.get("time_window"):
+                    time_window = agg["time_window"]
+                    if time_window.endswith("m"):
+                        agg["span"] = "1m"
+                    elif time_window.endswith("h"):
+                        agg["span"] = "5m"
+                    elif time_window.endswith("d"):
+                        agg["span"] = "1h"
+                    else:
+                        agg["span"] = "auto"
+                else:
+                    agg["span"] = "auto"
+        
+        return agg
     
     def _extract_transformations(self, query: str) -> List[Dict[str, Any]]:
         """Extract transformation operations from query"""

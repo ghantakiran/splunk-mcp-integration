@@ -11,6 +11,7 @@ from datetime import datetime
 from ...ai.spl_mapping import spl_mapper, SPLCommandType, FieldType
 from ...ai.nlp_service import NLPService, SPLTranslationRequest, SPLTranslationResponse
 from ...ai.query_constructor import QueryComplexity
+from ...ai.advanced_aggregation import advanced_aggregation_handler, AggregationFunction, AggregationType
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -719,4 +720,323 @@ async def get_complexity_levels() -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve complexity levels: {str(e)}"
+        )
+
+
+# Advanced Aggregation API Models
+class AggregationDetectionRequest(BaseModel):
+    """Advanced aggregation detection request"""
+    natural_query: str = Field(..., description="Natural language query to analyze for aggregations", min_length=1)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Show me the 95th percentile of response time and average count of errors by host over the last 24 hours"
+            }
+        }
+
+
+class AggregationInfo(BaseModel):
+    """Information about a detected aggregation"""
+    function: str = Field(..., description="Aggregation function name")
+    fields: List[str] = Field(..., description="Fields involved in aggregation")
+    alias: Optional[str] = Field(None, description="Alias for the aggregation result")
+    aggregation_type: str = Field(..., description="Type of aggregation")
+    parameters: List[Dict[str, Any]] = Field(default_factory=list, description="Function parameters")
+    conditions: List[Dict[str, Any]] = Field(default_factory=list, description="Conditional filters")
+    time_window: Optional[str] = Field(None, description="Time window for temporal aggregations")
+    generated_spl: str = Field(..., description="Generated SPL for this aggregation")
+
+
+class AggregationDetectionResponse(BaseModel):
+    """Advanced aggregation detection response"""
+    detected_aggregations: List[AggregationInfo] = Field(..., description="List of detected aggregations")
+    aggregation_count: int = Field(..., description="Total number of aggregations found")
+    complexity_level: str = Field(..., description="Overall complexity level of aggregations")
+    combined_spl: str = Field(..., description="Combined SPL query for all aggregations")
+    optimization_suggestions: List[str] = Field(..., description="Optimization suggestions")
+    processing_time: float = Field(..., description="Processing time in seconds")
+
+
+class AggregationTypesResponse(BaseModel):
+    """Response with available aggregation types and functions"""
+    aggregation_functions: Dict[str, Dict[str, Any]] = Field(..., description="Available aggregation functions")
+    aggregation_types: Dict[str, Dict[str, Any]] = Field(..., description="Types of aggregations supported")
+    statistical_functions: Dict[str, Dict[str, Any]] = Field(..., description="Statistical aggregation functions")
+    temporal_functions: Dict[str, Dict[str, Any]] = Field(..., description="Temporal aggregation functions")
+    conditional_functions: Dict[str, Dict[str, Any]] = Field(..., description="Conditional aggregation functions")
+
+
+# Advanced Aggregation API Endpoints
+@router.post("/aggregations/detect", response_model=AggregationDetectionResponse, tags=["Advanced Aggregations"])
+async def detect_advanced_aggregations(request: AggregationDetectionRequest) -> AggregationDetectionResponse:
+    """
+    Detect advanced aggregations from natural language query
+    
+    Analyze a natural language query to identify sophisticated aggregation patterns
+    including statistical functions, conditional aggregations, temporal aggregations,
+    and multi-field aggregations.
+    """
+    with LogContext(endpoint="detect_aggregations", query_length=len(request.natural_query)):
+        try:
+            start_time = datetime.now()
+            logger.info("Detecting advanced aggregations", query=request.natural_query[:100])
+            
+            # Detect aggregations using advanced handler
+            detected_aggs = advanced_aggregation_handler.detect_aggregations(request.natural_query)
+            
+            # Convert to response format
+            aggregation_infos = []
+            for agg in detected_aggs:
+                # Generate SPL for individual aggregation
+                individual_spl = agg.to_spl()
+                
+                aggregation_infos.append(AggregationInfo(
+                    function=agg.function.value,
+                    fields=agg.fields,
+                    alias=agg.alias,
+                    aggregation_type=agg.aggregation_type.value,
+                    parameters=[{"name": p.name, "value": p.value, "type": p.parameter_type} for p in agg.parameters],
+                    conditions=[{"field": c.field, "operator": c.operator, "value": c.value} for c in agg.conditions],
+                    time_window=agg.time_window,
+                    generated_spl=individual_spl
+                ))
+            
+            # Generate combined SPL
+            combined_spl = ""
+            if detected_aggs:
+                # Extract by_fields from query
+                by_fields = []
+                by_pattern = r"(?:by|group by)\s+(\w+(?:\s*,\s*\w+)*)"
+                by_match = re.search(by_pattern, request.natural_query, re.IGNORECASE)
+                if by_match:
+                    by_fields = [f.strip() for f in by_match.group(1).split(',')]
+                
+                combined_spl = advanced_aggregation_handler.generate_aggregation_spl(detected_aggs, by_fields)
+            
+            # Determine complexity level
+            complexity_level = "simple"
+            if len(detected_aggs) > 1:
+                complexity_level = "complex"
+            elif any(agg.aggregation_type in [AggregationType.STATISTICAL, AggregationType.CONDITIONAL, AggregationType.TEMPORAL] for agg in detected_aggs):
+                complexity_level = "advanced"
+            elif any(agg.aggregation_type in [AggregationType.MULTI_FIELD, AggregationType.MULTI_FUNCTION] for agg in detected_aggs):
+                complexity_level = "moderate"
+            
+            # Generate optimization suggestions
+            optimization_suggestions = []
+            optimized_aggs = advanced_aggregation_handler.optimize_aggregations(detected_aggs)
+            
+            if len(optimized_aggs) > 3:
+                optimization_suggestions.append("Consider breaking down complex aggregations into multiple queries")
+            
+            if any(agg.aggregation_type == AggregationType.CONDITIONAL for agg in detected_aggs):
+                optimization_suggestions.append("Use field filters before aggregation to improve performance")
+            
+            if any(agg.aggregation_type == AggregationType.STATISTICAL for agg in detected_aggs):
+                optimization_suggestions.append("Statistical functions may be resource-intensive on large datasets")
+            
+            if not by_fields and len(detected_aggs) > 1:
+                optimization_suggestions.append("Consider adding grouping fields to organize results")
+            
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            logger.info(
+                "Advanced aggregation detection completed",
+                aggregation_count=len(detected_aggs),
+                complexity_level=complexity_level,
+                processing_time=processing_time
+            )
+            
+            return AggregationDetectionResponse(
+                detected_aggregations=aggregation_infos,
+                aggregation_count=len(detected_aggs),
+                complexity_level=complexity_level,
+                combined_spl=combined_spl,
+                optimization_suggestions=optimization_suggestions,
+                processing_time=processing_time
+            )
+            
+        except Exception as e:
+            logger.error(f"Advanced aggregation detection failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Aggregation detection failed: {str(e)}"
+            )
+
+
+@router.get("/aggregations/types", response_model=AggregationTypesResponse, tags=["Advanced Aggregations"])
+async def get_aggregation_types() -> AggregationTypesResponse:
+    """
+    Get available aggregation types and functions
+    
+    Retrieve comprehensive information about all supported aggregation functions,
+    types, and their capabilities for advanced query construction.
+    """
+    try:
+        logger.info("Retrieving aggregation types and functions")
+        
+        # Basic aggregation functions
+        aggregation_functions = {
+            "count": {
+                "description": "Count of records or field values",
+                "supports_fields": True,
+                "supports_conditions": True,
+                "examples": ["count", "count(user)", "count if status=error"]
+            },
+            "sum": {
+                "description": "Sum of numeric field values",
+                "supports_fields": True,
+                "supports_conditions": True,
+                "examples": ["sum(bytes)", "sum(price) where category=electronics"]
+            },
+            "avg": {
+                "description": "Average of numeric field values",
+                "supports_fields": True,
+                "supports_conditions": True,
+                "examples": ["avg(response_time)", "average(score) by department"]
+            },
+            "max": {
+                "description": "Maximum value in field",
+                "supports_fields": True,
+                "supports_conditions": False,
+                "examples": ["max(temperature)", "highest(score) by team"]
+            },
+            "min": {
+                "description": "Minimum value in field",
+                "supports_fields": True,
+                "supports_conditions": False,
+                "examples": ["min(latency)", "lowest(price) by category"]
+            }
+        }
+        
+        # Aggregation types
+        aggregation_types = {
+            "simple": {
+                "description": "Single field, single function aggregations",
+                "complexity": "low",
+                "examples": ["count of users", "sum of bytes", "average response time"]
+            },
+            "multi_field": {
+                "description": "Multiple fields with single function",
+                "complexity": "medium",
+                "examples": ["sum of price and tax", "count of users and sessions"]
+            },
+            "multi_function": {
+                "description": "Multiple functions on single field",
+                "complexity": "medium",
+                "examples": ["sum and average of bytes", "min and max of temperature"]
+            },
+            "complex": {
+                "description": "Multiple fields with multiple functions",
+                "complexity": "high",
+                "examples": ["sum of price and count of items by category"]
+            },
+            "conditional": {
+                "description": "Aggregations with conditions",
+                "complexity": "high",
+                "examples": ["count of users where status=active", "sum of bytes if error=true"]
+            },
+            "temporal": {
+                "description": "Time-based aggregations",
+                "complexity": "medium",
+                "examples": ["rate of events per hour", "latest value of temperature"]
+            },
+            "statistical": {
+                "description": "Advanced statistical functions",
+                "complexity": "high",
+                "examples": ["95th percentile of response time", "standard deviation of scores"]
+            }
+        }
+        
+        # Statistical functions
+        statistical_functions = {
+            "percentile": {
+                "description": "Nth percentile of field values",
+                "parameters": ["percentile_value"],
+                "examples": ["95th percentile", "perc90(response_time)"]
+            },
+            "stdev": {
+                "description": "Standard deviation of field values",
+                "parameters": [],
+                "examples": ["standard deviation of scores", "stdev(temperature)"]
+            },
+            "variance": {
+                "description": "Variance of field values",
+                "parameters": [],
+                "examples": ["variance of measurements", "var(latency)"]
+            },
+            "median": {
+                "description": "Median value of field",
+                "parameters": [],
+                "examples": ["median response time", "median(price)"]
+            },
+            "range": {
+                "description": "Range (max - min) of field values",
+                "parameters": [],
+                "examples": ["range of temperatures", "range(scores)"]
+            }
+        }
+        
+        # Temporal functions
+        temporal_functions = {
+            "rate": {
+                "description": "Rate of events per time unit",
+                "parameters": ["time_unit"],
+                "examples": ["rate per second", "events per hour"]
+            },
+            "earliest": {
+                "description": "Earliest value in time range",
+                "parameters": [],
+                "examples": ["earliest(temperature)", "first value of status"]
+            },
+            "latest": {
+                "description": "Latest value in time range",
+                "parameters": [],
+                "examples": ["latest(cpu_usage)", "last value of connection"]
+            },
+            "first": {
+                "description": "First occurrence of value",
+                "parameters": [],
+                "examples": ["first(user_login)", "first occurrence of error"]
+            },
+            "last": {
+                "description": "Last occurrence of value",
+                "parameters": [],
+                "examples": ["last(logout_time)", "last occurrence of success"]
+            }
+        }
+        
+        # Conditional functions
+        conditional_functions = {
+            "count_if": {
+                "description": "Count records matching condition",
+                "parameters": ["condition"],
+                "examples": ["count if status=error", "count of users where active=true"]
+            },
+            "sum_if": {
+                "description": "Sum values matching condition",
+                "parameters": ["field", "condition"],
+                "examples": ["sum of bytes if method=POST", "sum of price where category=electronics"]
+            },
+            "avg_if": {
+                "description": "Average values matching condition",
+                "parameters": ["field", "condition"],
+                "examples": ["average of score if grade>B", "avg of response_time where status=200"]
+            }
+        }
+        
+        return AggregationTypesResponse(
+            aggregation_functions=aggregation_functions,
+            aggregation_types=aggregation_types,
+            statistical_functions=statistical_functions,
+            temporal_functions=temporal_functions,
+            conditional_functions=conditional_functions
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get aggregation types: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve aggregation types: {str(e)}"
         )
