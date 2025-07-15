@@ -14,6 +14,7 @@ from ...ai.query_constructor import QueryComplexity
 from ...ai.advanced_aggregation import advanced_aggregation_handler, AggregationFunction, AggregationType
 from ...ai.statistical_functions import statistical_function_mapper, StatisticalFunction, StatisticalCategory
 from ...ai.regex_pattern_matching import regex_pattern_mapper, PatternType, RegexCommand, RegexComplexity
+from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, LookupMatchType
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -1928,4 +1929,496 @@ async def get_regex_pattern_catalog() -> RegexCatalogResponse:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to get regex pattern catalog: {str(e)}"
+            )
+
+
+# Lookup Table Integration Request/Response Models
+class LookupOperationRequest(BaseModel):
+    """Request for lookup operation analysis"""
+    natural_query: str = Field(..., description="Natural language query describing lookup requirement", min_length=1)
+    available_fields: Optional[List[str]] = Field(None, description="Available fields in the data")
+    include_suggestions: bool = Field(True, description="Include lookup table suggestions")
+    optimize_performance: bool = Field(True, description="Optimize for performance")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Enrich user data with department information from users lookup",
+                "available_fields": ["username", "event_time", "action"],
+                "include_suggestions": True,
+                "optimize_performance": True
+            }
+        }
+
+
+class LookupTableInfo(BaseModel):
+    """Information about a lookup table"""
+    name: str = Field(..., description="Lookup table name")
+    type: str = Field(..., description="Lookup table type")
+    description: str = Field(..., description="Table description")
+    key_fields: List[str] = Field(..., description="Key fields for lookup")
+    output_fields: List[str] = Field(..., description="Available output fields")
+    file_path: Optional[str] = Field(None, description="CSV file path")
+    collection_name: Optional[str] = Field(None, description="KV store collection name")
+    case_sensitive: bool = Field(..., description="Whether lookup is case sensitive")
+    max_matches: int = Field(..., description="Maximum number of matches")
+    match_type: str = Field(..., description="Type of matching (exact, wildcard, etc.)")
+
+
+class LookupOperationInfo(BaseModel):
+    """Information about a detected lookup operation"""
+    operation_type: str = Field(..., description="Type of lookup operation")
+    lookup_table: LookupTableInfo = Field(..., description="Lookup table information")
+    source_fields: List[str] = Field(..., description="Source fields for lookup")
+    target_fields: List[str] = Field(..., description="Target fields to retrieve")
+    spl_command: str = Field(..., description="Generated SPL command")
+    output_mode: str = Field(..., description="Output mode (append, replace, overwrite)")
+    confidence: float = Field(..., description="Confidence in operation detection", ge=0.0, le=1.0)
+    performance_score: Optional[int] = Field(None, description="Performance score (1-10)")
+
+
+class LookupOperationResponse(BaseModel):
+    """Response for lookup operation analysis"""
+    detected_operations: List[LookupOperationInfo] = Field(..., description="Detected lookup operations")
+    total_operations: int = Field(..., description="Total number of detected operations")
+    validation_results: Dict[str, Any] = Field(..., description="Validation results for operations")
+    optimization_suggestions: List[str] = Field(default_factory=list, description="Performance optimization suggestions")
+    warnings: List[str] = Field(default_factory=list, description="Warnings about operations")
+
+
+class LookupSuggestionRequest(BaseModel):
+    """Request for lookup table suggestions"""
+    natural_query: str = Field(..., description="Natural language query", min_length=1)
+    available_fields: Optional[List[str]] = Field(None, description="Available fields in current data")
+    max_suggestions: int = Field(5, description="Maximum number of suggestions", ge=1, le=10)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "I need to get user information and geographic data for IP addresses",
+                "available_fields": ["username", "src_ip", "dest_ip", "action"],
+                "max_suggestions": 5
+            }
+        }
+
+
+class LookupSuggestion(BaseModel):
+    """Lookup table suggestion"""
+    lookup_table: str = Field(..., description="Lookup table name")
+    score: int = Field(..., description="Suggestion score")
+    description: str = Field(..., description="Table description")
+    reasons: List[str] = Field(..., description="Reasons for suggestion")
+    key_fields: List[str] = Field(..., description="Key fields for lookup")
+    output_fields: List[str] = Field(..., description="Available output fields")
+    example_spl: str = Field(..., description="Example SPL command")
+
+
+class LookupSuggestionResponse(BaseModel):
+    """Response for lookup table suggestions"""
+    suggestions: List[LookupSuggestion] = Field(..., description="Lookup table suggestions")
+    total_suggestions: int = Field(..., description="Total number of suggestions")
+    query_analysis: Dict[str, Any] = Field(..., description="Analysis of the query")
+    field_mapping: Dict[str, List[str]] = Field(..., description="Mapping of fields to lookup tables")
+
+
+class LookupValidationRequest(BaseModel):
+    """Request for lookup operation validation"""
+    lookup_table: str = Field(..., description="Lookup table name")
+    source_fields: List[str] = Field(..., description="Source fields for lookup", min_items=1)
+    target_fields: Optional[List[str]] = Field(None, description="Target fields to retrieve")
+    operation_type: str = Field("enrich", description="Type of lookup operation")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "lookup_table": "users",
+                "source_fields": ["username"],
+                "target_fields": ["full_name", "department", "email"],
+                "operation_type": "enrich"
+            }
+        }
+
+
+class LookupValidationResponse(BaseModel):
+    """Response for lookup operation validation"""
+    valid: bool = Field(..., description="Whether the lookup operation is valid")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    suggestions: List[str] = Field(default_factory=list, description="Optimization suggestions")
+    generated_spl: Optional[str] = Field(None, description="Generated SPL command")
+    performance_analysis: Dict[str, Any] = Field(..., description="Performance analysis")
+    table_info: Optional[LookupTableInfo] = Field(None, description="Lookup table information")
+
+
+class LookupCatalogResponse(BaseModel):
+    """Response for lookup table catalog"""
+    lookup_tables: List[str] = Field(..., description="Available lookup table names")
+    total_count: int = Field(..., description="Total number of lookup tables")
+    by_type: Dict[str, List[str]] = Field(..., description="Lookup tables grouped by type")
+    enrichment_mappings: List[str] = Field(..., description="Available enrichment mappings")
+    common_operations: List[str] = Field(..., description="Common lookup operations")
+    table_details: Dict[str, LookupTableInfo] = Field(..., description="Detailed table information")
+
+
+# Lookup Table Integration Endpoints
+@router.post("/lookup/analyze", response_model=LookupOperationResponse, tags=["Lookup Table Integration"])
+async def analyze_lookup_operations(request: LookupOperationRequest) -> LookupOperationResponse:
+    """
+    Analyze natural language query for lookup table operations
+    
+    Detect lookup table requirements from natural language and generate
+    appropriate SPL commands for data enrichment, validation, and transformation.
+    """
+    with LogContext(endpoint="analyze_lookup_operations", query_length=len(request.natural_query)):
+        try:
+            logger.info("Analyzing lookup operations", query=request.natural_query[:100])
+            
+            # Detect lookup operations from natural language
+            detected_operations = lookup_table_mapper.detect_lookup_operations(request.natural_query)
+            
+            # Generate operation info
+            operation_info_list = []
+            validation_results = {}
+            optimization_suggestions = []
+            warnings = []
+            
+            for lookup_op in detected_operations:
+                # Generate SPL
+                spl_command = lookup_table_mapper.generate_spl_for_lookup(lookup_op)
+                
+                # Validate operation
+                validation = lookup_table_mapper.validate_lookup_operation(lookup_op)
+                validation_results[f"{lookup_op.lookup_table.name}_{lookup_op.operation_type.value}"] = validation
+                
+                # Optimize if requested
+                if request.optimize_performance:
+                    lookup_op = lookup_table_mapper.optimize_lookup_operation(lookup_op)
+                
+                # Calculate confidence and performance score
+                confidence = 0.8  # Base confidence
+                if lookup_op.lookup_table.name in request.natural_query.lower():
+                    confidence += 0.15
+                if any(field in request.natural_query.lower() for field in lookup_op.source_fields):
+                    confidence += 0.05
+                confidence = min(1.0, confidence)
+                
+                performance_score = 8  # Base score
+                if lookup_op.lookup_table.lookup_type == LookupType.EXTERNAL_LOOKUP:
+                    performance_score -= 3
+                if len(lookup_op.target_fields) > 5:
+                    performance_score -= 2
+                if lookup_op.lookup_table.max_matches > 10:
+                    performance_score -= 1
+                performance_score = max(1, performance_score)
+                
+                # Create lookup table info
+                lookup_table_info = LookupTableInfo(
+                    name=lookup_op.lookup_table.name,
+                    type=lookup_op.lookup_table.lookup_type.value,
+                    description=lookup_op.lookup_table.description,
+                    key_fields=lookup_op.lookup_table.key_fields,
+                    output_fields=lookup_op.lookup_table.output_fields,
+                    file_path=lookup_op.lookup_table.file_path,
+                    collection_name=lookup_op.lookup_table.collection_name,
+                    case_sensitive=lookup_op.lookup_table.case_sensitive,
+                    max_matches=lookup_op.lookup_table.max_matches,
+                    match_type=lookup_op.lookup_table.match_type.value
+                )
+                
+                # Create operation info
+                operation_info = LookupOperationInfo(
+                    operation_type=lookup_op.operation_type.value,
+                    lookup_table=lookup_table_info,
+                    source_fields=lookup_op.source_fields,
+                    target_fields=lookup_op.target_fields,
+                    spl_command=spl_command,
+                    output_mode=lookup_op.output_mode,
+                    confidence=confidence,
+                    performance_score=performance_score
+                )
+                operation_info_list.append(operation_info)
+                
+                # Collect warnings and suggestions
+                warnings.extend(validation.get("warnings", []))
+                optimization_suggestions.extend(validation.get("suggestions", []))
+            
+            # Add general suggestions
+            if len(detected_operations) > 3:
+                optimization_suggestions.append("Consider consolidating multiple lookups for better performance")
+            
+            if request.include_suggestions and not detected_operations:
+                suggestions = lookup_table_mapper.suggest_lookup_tables(request.natural_query, request.available_fields)
+                if suggestions:
+                    optimization_suggestions.append(f"Consider using {suggestions[0]['lookup_table']} lookup table")
+            
+            logger.info(
+                "Lookup operation analysis completed",
+                operation_count=len(operation_info_list),
+                tables_used=[op.lookup_table.name for op in operation_info_list]
+            )
+            
+            return LookupOperationResponse(
+                detected_operations=operation_info_list,
+                total_operations=len(operation_info_list),
+                validation_results=validation_results,
+                optimization_suggestions=optimization_suggestions,
+                warnings=warnings
+            )
+            
+        except Exception as e:
+            logger.error(f"Lookup operation analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Lookup operation analysis failed: {str(e)}"
+            )
+
+
+@router.post("/lookup/suggestions", response_model=LookupSuggestionResponse, tags=["Lookup Table Integration"])
+async def get_lookup_suggestions(request: LookupSuggestionRequest) -> LookupSuggestionResponse:
+    """
+    Get lookup table suggestions based on natural language query
+    
+    Analyze the query and available fields to suggest appropriate lookup
+    tables for data enrichment and transformation operations.
+    """
+    with LogContext(endpoint="get_lookup_suggestions", query_length=len(request.natural_query)):
+        try:
+            logger.info("Getting lookup table suggestions", query=request.natural_query[:100])
+            
+            # Get suggestions from mapper
+            suggestions = lookup_table_mapper.suggest_lookup_tables(
+                request.natural_query, 
+                request.available_fields
+            )
+            
+            # Limit suggestions
+            limited_suggestions = suggestions[:request.max_suggestions]
+            
+            # Convert to response format
+            suggestion_list = []
+            field_mapping = {}
+            
+            for suggestion in limited_suggestions:
+                lookup_name = suggestion["lookup_table"]
+                lookup_info = lookup_table_mapper.get_lookup_table_info(lookup_name)
+                
+                if lookup_info:
+                    # Generate example SPL
+                    example_fields = suggestion["key_fields"][:1]  # Use first key field
+                    example_outputs = suggestion["output_fields"][:3]  # Use first 3 outputs
+                    example_spl = f"lookup {lookup_name} {' '.join(example_fields)} OUTPUT {' '.join(example_outputs)}"
+                    
+                    suggestion_obj = LookupSuggestion(
+                        lookup_table=lookup_name,
+                        score=suggestion["score"],
+                        description=suggestion["description"],
+                        reasons=suggestion["reasons"],
+                        key_fields=suggestion["key_fields"],
+                        output_fields=suggestion["output_fields"],
+                        example_spl=example_spl
+                    )
+                    suggestion_list.append(suggestion_obj)
+                    
+                    # Map fields to lookup tables
+                    for field in suggestion["key_fields"]:
+                        if field not in field_mapping:
+                            field_mapping[field] = []
+                        field_mapping[field].append(lookup_name)
+            
+            # Analyze query
+            query_analysis = {
+                "contains_lookup_keywords": any(word in request.natural_query.lower() 
+                                              for word in ["lookup", "enrich", "join", "merge"]),
+                "mentioned_fields": [field for field in (request.available_fields or []) 
+                                   if field in request.natural_query.lower()],
+                "query_length": len(request.natural_query),
+                "complexity": "simple" if len(request.natural_query.split()) < 10 else "complex"
+            }
+            
+            logger.info(
+                "Lookup suggestions completed",
+                suggestion_count=len(suggestion_list),
+                top_suggestion=suggestion_list[0].lookup_table if suggestion_list else None
+            )
+            
+            return LookupSuggestionResponse(
+                suggestions=suggestion_list,
+                total_suggestions=len(suggestion_list),
+                query_analysis=query_analysis,
+                field_mapping=field_mapping
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get lookup suggestions: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get lookup suggestions: {str(e)}"
+            )
+
+
+@router.post("/lookup/validate", response_model=LookupValidationResponse, tags=["Lookup Table Integration"])
+async def validate_lookup_operation(request: LookupValidationRequest) -> LookupValidationResponse:
+    """
+    Validate lookup operation configuration
+    
+    Validate a lookup operation configuration and provide optimization
+    suggestions and performance analysis.
+    """
+    with LogContext(endpoint="validate_lookup_operation", table=request.lookup_table):
+        try:
+            logger.info("Validating lookup operation", table=request.lookup_table)
+            
+            # Get lookup table info
+            table_info = lookup_table_mapper.get_lookup_table_info(request.lookup_table)
+            if not table_info:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Lookup table '{request.lookup_table}' not found"
+                )
+            
+            # Create lookup operation for validation
+            from ...ai.lookup_table_integration import LookupOperation as LookupOp, LookupTable, LookupField, FieldType
+            
+            # Reconstruct lookup table object
+            lookup_table = lookup_table_mapper.predefined_lookups.get(request.lookup_table)
+            if not lookup_table:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Lookup table '{request.lookup_table}' not found in predefined tables"
+                )
+            
+            # Map operation type
+            operation_type_map = {
+                "enrich": LookupOp.ENRICH,
+                "replace": LookupOp.REPLACE,
+                "validate": LookupOp.VALIDATE,
+                "transform": LookupOp.TRANSFORM,
+                "filter": LookupOp.FILTER,
+                "join": LookupOp.JOIN
+            }
+            
+            operation_type = operation_type_map.get(request.operation_type, LookupOp.ENRICH)
+            
+            # Create lookup operation
+            lookup_operation = LookupOperation(
+                operation_type=operation_type,
+                lookup_table=lookup_table,
+                source_fields=request.source_fields,
+                target_fields=request.target_fields or lookup_table.output_fields[:3]
+            )
+            
+            # Validate operation
+            validation = lookup_table_mapper.validate_lookup_operation(lookup_operation)
+            
+            # Generate SPL if valid
+            generated_spl = None
+            if validation["valid"]:
+                generated_spl = lookup_table_mapper.generate_spl_for_lookup(lookup_operation)
+            
+            # Performance analysis
+            performance_analysis = {
+                "lookup_type": lookup_table.lookup_type.value,
+                "estimated_performance": "good",
+                "key_field_count": len(lookup_table.key_fields),
+                "output_field_count": len(lookup_operation.target_fields),
+                "max_matches": lookup_table.max_matches,
+                "case_sensitive": lookup_table.case_sensitive
+            }
+            
+            # Adjust performance estimate
+            if lookup_table.lookup_type == LookupType.EXTERNAL_LOOKUP:
+                performance_analysis["estimated_performance"] = "moderate"
+            if len(lookup_operation.target_fields) > 10:
+                performance_analysis["estimated_performance"] = "slow"
+            if lookup_table.max_matches > 100:
+                performance_analysis["estimated_performance"] = "slow"
+            
+            # Create table info response
+            table_info_response = LookupTableInfo(
+                name=lookup_table.name,
+                type=lookup_table.lookup_type.value,
+                description=lookup_table.description,
+                key_fields=lookup_table.key_fields,
+                output_fields=lookup_table.output_fields,
+                file_path=lookup_table.file_path,
+                collection_name=lookup_table.collection_name,
+                case_sensitive=lookup_table.case_sensitive,
+                max_matches=lookup_table.max_matches,
+                match_type=lookup_table.match_type.value
+            )
+            
+            logger.info(
+                "Lookup operation validation completed",
+                valid=validation["valid"],
+                error_count=len(validation["errors"]),
+                warning_count=len(validation["warnings"])
+            )
+            
+            return LookupValidationResponse(
+                valid=validation["valid"],
+                errors=validation["errors"],
+                warnings=validation["warnings"],
+                suggestions=validation["suggestions"],
+                generated_spl=generated_spl,
+                performance_analysis=performance_analysis,
+                table_info=table_info_response
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Lookup operation validation failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Lookup operation validation failed: {str(e)}"
+            )
+
+
+@router.get("/lookup/catalog", response_model=LookupCatalogResponse, tags=["Lookup Table Integration"])
+async def get_lookup_catalog() -> LookupCatalogResponse:
+    """
+    Get comprehensive catalog of available lookup tables
+    
+    Retrieve the complete catalog of lookup tables, their types,
+    fields, and capabilities for data enrichment operations.
+    """
+    with LogContext(endpoint="get_lookup_catalog"):
+        try:
+            logger.info("Retrieving lookup table catalog")
+            
+            # Get all lookup tables info
+            catalog_info = lookup_table_mapper.get_all_lookup_tables()
+            
+            # Create detailed table information
+            table_details = {}
+            for table_name in catalog_info["lookup_tables"]:
+                table_info = lookup_table_mapper.get_lookup_table_info(table_name)
+                if table_info:
+                    table_details[table_name] = LookupTableInfo(
+                        name=table_info["name"],
+                        type=table_info["type"],
+                        description=table_info["description"],
+                        key_fields=table_info["key_fields"],
+                        output_fields=table_info["output_fields"],
+                        file_path=table_info.get("file_path"),
+                        collection_name=table_info.get("collection_name"),
+                        case_sensitive=table_info["case_sensitive"],
+                        max_matches=table_info["max_matches"],
+                        match_type=table_info["match_type"]
+                    )
+            
+            return LookupCatalogResponse(
+                lookup_tables=catalog_info["lookup_tables"],
+                total_count=catalog_info["total_count"],
+                by_type=catalog_info["by_type"],
+                enrichment_mappings=catalog_info["enrichment_mappings"],
+                common_operations=catalog_info["common_operations"],
+                table_details=table_details
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get lookup table catalog: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get lookup table catalog: {str(e)}"
             )
