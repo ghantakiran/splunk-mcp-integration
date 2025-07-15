@@ -10,6 +10,7 @@ import json
 
 from .providers import AIRequest, AIResponse, ai_manager
 from .spl_mapping import spl_mapper, SPLCommand, FieldMapping, IntentPattern
+from .query_constructor import query_constructor, ComplexQuery, QueryComplexity
 from ..core.config import settings
 from ..core.logging import get_logger, NLPMetrics
 
@@ -40,6 +41,9 @@ class SPLTranslationResponse:
     syntax_valid: bool = True
     syntax_errors: Optional[List[str]] = None
     command_suggestions: Optional[List[Tuple[str, float]]] = None
+    complex_query: Optional[ComplexQuery] = None
+    query_complexity: Optional[QueryComplexity] = None
+    performance_analysis: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -208,7 +212,7 @@ Extract entities from this query:
         }
     
     async def translate_to_spl(self, request: SPLTranslationRequest) -> SPLTranslationResponse:
-        """Translate natural language query to SPL using comprehensive mapping"""
+        """Translate natural language query to SPL using comprehensive mapping and complex query construction"""
         start_time = time.time()
         
         try:
@@ -218,6 +222,15 @@ Extract entities from this query:
             # Extract entities and intents using mapping
             entities = self._extract_entities_with_mapping(request.natural_query)
             intent_result = await self.classify_intent(request.natural_query)
+            
+            # Use complex query constructor for advanced queries
+            complex_query = query_constructor.construct_complex_query(
+                natural_query=request.natural_query,
+                context=request.context
+            )
+            
+            # Get performance analysis
+            performance_analysis = query_constructor.analyze_query_performance(complex_query)
             
             # Generate SPL template if intent matches
             spl_template = ""
@@ -238,13 +251,20 @@ Extract entities from this query:
                 for msg in request.conversation_history[-5:]:  # Last 5 messages
                     conversation_context += f"- {msg.get('role', 'user')}: {msg.get('content', '')}\n"
             
-            # Add SPL mapping context
+            # Add SPL mapping context with complex query analysis
             mapping_context = f"""
 SPL Mapping Analysis:
 - Detected Intent: {intent_result.primary_intent} (confidence: {intent_result.confidence_score:.2f})
 - Extracted Entities: {json.dumps(entities, indent=2)}
 - Suggested Commands: {[cmd for cmd, score in command_suggestions[:3]]}
 - Template Suggestion: {spl_template}
+
+Complex Query Analysis:
+- Query Complexity: {complex_query.complexity.value}
+- Performance Score: {performance_analysis['complexity_score']}
+- Estimated Cost: {performance_analysis['estimated_cost']}
+- Generated SPL: {complex_query.to_spl()}
+- Optimization Suggestions: {performance_analysis['optimization_suggestions'][:3]}
 """
             
             # Enhanced prompt with mapping knowledge
@@ -282,11 +302,18 @@ Please use this mapping knowledge to generate accurate, optimized SPL queries.""
                 confidence = response_data.get("confidence", 0.0)
                 explanation = response_data.get("explanation", "")
                 suggestions = response_data.get("suggestions", [])
+                
+                # Use complex query SPL if AI response is insufficient
+                if not spl_query or confidence < 0.5:
+                    spl_query = complex_query.to_spl()
+                    confidence = max(confidence, 0.7)  # Boost confidence for complex constructor
+                    explanation = f"Generated using complex query constructor. {explanation}"
+                    
             except json.JSONDecodeError:
-                # Fallback: treat entire response as SPL query
-                spl_query = ai_response.content.strip()
+                # Fallback to complex query constructor
+                spl_query = complex_query.to_spl()
                 confidence = 0.8
-                explanation = "Generated SPL query using comprehensive mapping"
+                explanation = "Generated SPL query using complex query constructor and comprehensive mapping"
                 suggestions = []
             
             # Validate and optimize SPL using mapping system
@@ -318,6 +345,9 @@ Please use this mapping knowledge to generate accurate, optimized SPL queries.""
                 syntax_valid=syntax_valid,
                 syntax_errors=syntax_errors if not syntax_valid else None,
                 command_suggestions=command_suggestions,
+                complex_query=complex_query,
+                query_complexity=complex_query.complexity,
+                performance_analysis=performance_analysis,
                 metadata={
                     "ai_provider": ai_response.provider,
                     "ai_model": ai_response.model,
@@ -325,7 +355,10 @@ Please use this mapping knowledge to generate accurate, optimized SPL queries.""
                     "output_tokens": ai_response.output_tokens,
                     "detected_intent": intent_result.primary_intent,
                     "extracted_entities": entities,
-                    "template_used": spl_template if spl_template else None
+                    "template_used": spl_template if spl_template else None,
+                    "complex_query_used": True,
+                    "query_complexity": complex_query.complexity.value,
+                    "performance_score": performance_analysis['complexity_score']
                 }
             )
             
@@ -593,6 +626,55 @@ Use this information to improve intent classification accuracy.""",
                 confidence_scores={}
             )
     
+    async def construct_complex_query(self, request: SPLTranslationRequest) -> Dict[str, Any]:
+        """Construct complex SPL query using advanced query constructor"""
+        try:
+            start_time = time.time()
+            
+            # Build complex query
+            complex_query = query_constructor.construct_complex_query(
+                natural_query=request.natural_query,
+                context=request.context
+            )
+            
+            # Get performance analysis
+            performance_analysis = query_constructor.analyze_query_performance(complex_query)
+            
+            # Generate SPL
+            spl_query = complex_query.to_spl()
+            
+            # Validate syntax
+            syntax_valid, syntax_errors = spl_mapper.validate_spl_syntax(spl_query)
+            
+            processing_time = time.time() - start_time
+            
+            return {
+                "spl_query": spl_query,
+                "complex_query": complex_query,
+                "query_complexity": complex_query.complexity.value,
+                "performance_analysis": performance_analysis,
+                "syntax_valid": syntax_valid,
+                "syntax_errors": syntax_errors if not syntax_valid else None,
+                "processing_time": processing_time,
+                "metadata": {
+                    "pipeline_components": len(complex_query.main_pipeline.transformations) + len(complex_query.main_pipeline.aggregations),
+                    "has_subqueries": len(complex_query.subqueries) > 0,
+                    "has_joins": len(complex_query.joins) > 0,
+                    "has_unions": len(complex_query.unions) > 0,
+                    "estimated_cost": performance_analysis['estimated_cost'],
+                    "optimization_suggestions": performance_analysis['optimization_suggestions'],
+                    "performance_warnings": performance_analysis['performance_warnings']
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Complex query construction failed: {e}")
+            return {
+                "spl_query": f"search {request.natural_query[:50]}",
+                "error": str(e),
+                "processing_time": time.time() - start_time
+            }
+
     async def enhance_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Enhance query with intent classification and entity extraction"""
         try:

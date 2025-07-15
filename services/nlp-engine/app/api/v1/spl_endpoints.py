@@ -10,6 +10,7 @@ from datetime import datetime
 
 from ...ai.spl_mapping import spl_mapper, SPLCommandType, FieldType
 from ...ai.nlp_service import NLPService, SPLTranslationRequest, SPLTranslationResponse
+from ...ai.query_constructor import QueryComplexity
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
@@ -104,6 +105,55 @@ class SPLValidationResponse(BaseModel):
     syntax_errors: List[str] = Field(default_factory=list, description="Syntax errors")
     optimization_suggestions: List[str] = Field(default_factory=list, description="Optimization suggestions")
     optimized_query: Optional[str] = Field(None, description="Optimized query suggestion")
+
+
+class ComplexQueryRequest(BaseModel):
+    """Complex query construction request"""
+    natural_query: str = Field(..., description="Natural language query", min_length=1)
+    context: Optional[Dict[str, Any]] = Field(None, description="Query context")
+    include_performance_analysis: bool = Field(True, description="Include performance analysis")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "natural_query": "Show me top 10 users with most failed login attempts over time for the last week grouped by hour",
+                "context": {
+                    "index": "security",
+                    "sourcetype": "auth_logs"
+                },
+                "include_performance_analysis": True
+            }
+        }
+
+
+class ComplexQueryResponse(BaseModel):
+    """Complex query construction response"""
+    spl_query: str = Field(..., description="Generated complex SPL query")
+    query_complexity: str = Field(..., description="Query complexity level")
+    performance_analysis: Dict[str, Any] = Field(..., description="Performance analysis")
+    syntax_valid: bool = Field(..., description="Whether syntax is valid")
+    syntax_errors: Optional[List[str]] = Field(None, description="Syntax errors if any")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    metadata: Dict[str, Any] = Field(..., description="Additional metadata")
+
+
+class QueryAnalysisRequest(BaseModel):
+    """Query analysis request"""
+    natural_query: str = Field(..., description="Natural language query to analyze", min_length=1)
+
+
+class QueryAnalysisResponse(BaseModel):
+    """Query analysis response"""
+    complexity_score: int = Field(..., description="Complexity score")
+    estimated_cost: str = Field(..., description="Estimated execution cost")
+    has_temporal_aspect: bool = Field(..., description="Whether query has time-based analysis")
+    has_aggregation: bool = Field(..., description="Whether query includes aggregation")
+    has_grouping: bool = Field(..., description="Whether query includes grouping")
+    has_comparison: bool = Field(..., description="Whether query includes comparisons")
+    condition_count: int = Field(..., description="Number of conditions detected")
+    command_indicators: List[str] = Field(..., description="Detected command indicators")
+    optimization_suggestions: List[str] = Field(..., description="Optimization suggestions")
+    performance_warnings: List[str] = Field(..., description="Performance warnings")
 
 
 # API Endpoints
@@ -471,4 +521,187 @@ async def get_mapping_stats() -> Dict[str, Any]:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve mapping statistics: {str(e)}"
+        )
+
+
+@router.post("/translate/complex", response_model=ComplexQueryResponse, tags=["Complex Query Construction"])
+async def construct_complex_query(request: ComplexQueryRequest) -> ComplexQueryResponse:
+    """
+    Construct complex SPL queries with advanced features
+    
+    Build sophisticated multi-step SPL queries with complex logical structures,
+    aggregations, joins, and performance optimizations.
+    """
+    with LogContext(endpoint="construct_complex_query", query_length=len(request.natural_query)):
+        try:
+            logger.info("Constructing complex SPL query", query=request.natural_query[:100])
+            
+            # Convert to NLP service request format
+            nlp_request = SPLTranslationRequest(
+                natural_query=request.natural_query,
+                context=request.context
+            )
+            
+            # Get complex query construction
+            result = await nlp_service.construct_complex_query(nlp_request)
+            
+            if "error" in result:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Complex query construction failed: {result['error']}"
+                )
+            
+            logger.info(
+                "Complex query construction completed",
+                complexity=result["query_complexity"],
+                processing_time=result["processing_time"]
+            )
+            
+            return ComplexQueryResponse(
+                spl_query=result["spl_query"],
+                query_complexity=result["query_complexity"],
+                performance_analysis=result["performance_analysis"],
+                syntax_valid=result["syntax_valid"],
+                syntax_errors=result.get("syntax_errors"),
+                processing_time=result["processing_time"],
+                metadata=result["metadata"]
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Complex query construction failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Complex query construction failed: {str(e)}"
+            )
+
+
+@router.post("/analyze", response_model=QueryAnalysisResponse, tags=["Query Analysis"])
+async def analyze_query_structure(request: QueryAnalysisRequest) -> QueryAnalysisResponse:
+    """
+    Analyze natural language query structure and complexity
+    
+    Examine the structure of a natural language query to determine complexity,
+    required features, and provide optimization suggestions.
+    """
+    with LogContext(endpoint="analyze_query", query_length=len(request.natural_query)):
+        try:
+            logger.info("Analyzing query structure", query=request.natural_query[:100])
+            
+            # Import query constructor for analysis
+            from ...ai.query_constructor import query_constructor
+            
+            # Analyze query structure
+            analysis = query_constructor._analyze_query_structure(request.natural_query)
+            complexity = query_constructor._determine_complexity(analysis)
+            
+            # Build a simple complex query to get performance analysis
+            nlp_request = SPLTranslationRequest(natural_query=request.natural_query)
+            complex_query_result = await nlp_service.construct_complex_query(nlp_request)
+            
+            performance_analysis = complex_query_result.get("performance_analysis", {})
+            
+            logger.info(
+                "Query analysis completed",
+                complexity=complexity.value,
+                condition_count=analysis["condition_count"]
+            )
+            
+            return QueryAnalysisResponse(
+                complexity_score=performance_analysis.get("complexity_score", 0),
+                estimated_cost=performance_analysis.get("estimated_cost", "unknown"),
+                has_temporal_aspect=analysis["has_temporal_aspect"],
+                has_aggregation=analysis["has_aggregation"],
+                has_grouping=analysis["has_grouping"],
+                has_comparison=analysis["has_comparison"],
+                condition_count=analysis["condition_count"],
+                command_indicators=analysis["command_indicators"],
+                optimization_suggestions=performance_analysis.get("optimization_suggestions", []),
+                performance_warnings=performance_analysis.get("performance_warnings", [])
+            )
+            
+        except Exception as e:
+            logger.error(f"Query analysis failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Query analysis failed: {str(e)}"
+            )
+
+
+@router.get("/complexity/levels", tags=["Query Analysis"])
+async def get_complexity_levels() -> Dict[str, Any]:
+    """
+    Get available query complexity levels and their characteristics
+    
+    Retrieve information about different query complexity levels and
+    what features each level supports.
+    """
+    try:
+        logger.info("Retrieving complexity levels")
+        
+        return {
+            "complexity_levels": {
+                "simple": {
+                    "name": "Simple",
+                    "description": "Single command queries with basic filtering",
+                    "max_commands": 1,
+                    "supports_subqueries": False,
+                    "supports_joins": False,
+                    "max_conditions": 3,
+                    "examples": [
+                        "search error",
+                        "search index=main status=500"
+                    ]
+                },
+                "moderate": {
+                    "name": "Moderate", 
+                    "description": "Multi-command pipelines with transformations",
+                    "max_commands": 3,
+                    "supports_subqueries": False,
+                    "supports_joins": False,
+                    "max_conditions": 5,
+                    "examples": [
+                        "search error | stats count by host",
+                        "search failed | dedup user | sort _time"
+                    ]
+                },
+                "complex": {
+                    "name": "Complex",
+                    "description": "Advanced queries with subqueries and multiple aggregations",
+                    "max_commands": 6,
+                    "supports_subqueries": True,
+                    "supports_joins": False,
+                    "max_conditions": 10,
+                    "examples": [
+                        "search error | stats count by host | where count > 10 | sort -count",
+                        "search failed login | timechart span=1h count by user"
+                    ]
+                },
+                "advanced": {
+                    "name": "Advanced",
+                    "description": "Enterprise-grade queries with joins, unions, and complex logic",
+                    "max_commands": "unlimited",
+                    "supports_subqueries": True,
+                    "supports_joins": True,
+                    "max_conditions": "unlimited",
+                    "examples": [
+                        "multisearch queries with joins",
+                        "complex event correlation with multiple data sources"
+                    ]
+                }
+            },
+            "performance_guidelines": {
+                "simple": "Excellent performance, suitable for real-time dashboards",
+                "moderate": "Good performance, suitable for regular reporting",
+                "complex": "Moderate performance, may require optimization for large datasets",
+                "advanced": "Resource intensive, requires careful optimization and monitoring"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get complexity levels: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve complexity levels: {str(e)}"
         )
