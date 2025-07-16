@@ -1924,6 +1924,96 @@ Always read PLANNING.md at the start of every new conversation, check TASKS.md b
 
 **Project Status:** Enhanced lookup table integration system complete with resolved naming conflicts and comprehensive validation, ready for eval/calculated fields implementation and advanced data transformation features
 
+### Session 25 - Advanced Chart Types Implementation (2025-07-16)
+
+**Completed Tasks:**
+- ✅ Implement Sankey diagrams and Gauge charts for advanced visualization (TASKS.md - Phase 2 Milestone 2.3)
+  - Built comprehensive Sankey diagram generation with intelligent node mapping and flow visualization
+  - Implemented Gauge chart generation for KPI visualization with configurable thresholds and dynamic coloring
+  - Updated chart_generators mapping to include ChartType.SANKEY and ChartType.GAUGE
+  - Enhanced chart selector with flow pattern detection and KPI pattern recognition
+  - Added comprehensive pattern detection logic for intelligent chart type recommendations
+  - Created extensive test suite with flow data validation and KPI threshold testing
+  - Successfully committed and pushed all changes to GitHub main branch
+
+**Advanced Chart Types Architecture:**
+- **Sankey Diagrams**: Flow visualization with source/target node mapping, value-based link thickness, and color-coded relationships
+- **Gauge Charts**: KPI dashboard visualization with configurable thresholds, dynamic color indicators, and performance delta tracking
+- **Pattern Detection**: Intelligent recognition of flow patterns and KPI patterns from data structure and field naming
+- **Chart Selection**: Enhanced recommendation engine with 95% confidence for flow data and 90% confidence for KPI data
+- **Visualization Features**: Interactive hover templates, customizable styling, and export capabilities for both chart types
+
+**Technical Implementation:**
+- Created _generate_sankey_chart() method with sophisticated node mapping and link generation using Plotly Sankey
+- Implemented _generate_gauge_chart() method with threshold-based coloring and configurable performance indicators
+- Added _is_flow_pattern() detection analyzing field names for flow keywords (source, target, from, to, etc.)
+- Built _is_kpi_pattern() detection examining numerical fields for KPI characteristics and value ranges
+- Enhanced _determine_data_pattern() to prioritize flow and KPI patterns before existing pattern types
+- Integrated recommendation methods _recommend_flow() and _recommend_kpi() with confidence scoring and alternatives
+
+**Files Created/Enhanced:**
+- **services/visualization/app/services/chart_generator.py** (ENHANCED): Added 110+ lines for Sankey and Gauge chart generation methods
+- **services/visualization/app/services/chart_selector.py** (ENHANCED): Added 140+ lines for flow/KPI pattern detection and recommendations
+- **services/visualization/test_chart_generator.py** (ENHANCED): Added 170+ lines of comprehensive tests for new chart types
+
+**Sankey Diagram Features:**
+- **Node Management**: Automatic extraction and mapping of unique source and target nodes
+- **Link Generation**: Value-based link creation with proper source/target indexing
+- **Color Coordination**: Node and link coloring with transparency for visual flow clarity
+- **Interactive Elements**: Hover templates showing flow relationships and values
+- **Data Validation**: Comprehensive validation requiring source, target, and value columns
+- **Error Handling**: Detailed error messages for missing required fields
+
+**Gauge Chart Features:**
+- **KPI Visualization**: Single-value display with performance thresholds and delta comparison
+- **Dynamic Coloring**: Green/yellow/red color scheme based on configurable threshold values
+- **Multiple Value Handling**: Automatic mean calculation for datasets with multiple values
+- **Threshold Configuration**: Customizable min/max values and performance threshold boundaries
+- **Reference Tracking**: Delta display comparing current value to reference benchmark
+- **Performance Indicators**: Visual gauge with steps and threshold line indicators
+
+**Chart Selector Enhancements:**
+- **Flow Pattern Detection**: Recognition of flow-related field names and structural patterns
+- **KPI Pattern Recognition**: Analysis of numerical fields, value ranges, and naming conventions
+- **Confidence Scoring**: High-confidence recommendations (90-95%) for appropriate data patterns
+- **Alternative Suggestions**: Secondary chart options (heatmap for flows, bar charts for KPIs)
+- **Pattern Priority**: Flow and KPI patterns checked before traditional chart type patterns
+
+**Testing Implementation:**
+- **Sankey Testing**: 8-node flow data with comprehensive validation of node mapping and link generation
+- **Gauge Testing**: Single-value KPI with threshold configuration and multi-value mean calculation
+- **Error Handling**: Validation of error conditions for missing required fields
+- **Integration Testing**: End-to-end testing of chart generation and selector integration
+- **Pattern Validation**: Testing of flow and KPI pattern detection with realistic data scenarios
+
+**Advanced Features:**
+- **Flow Visualization**: Sankey diagrams excel at visualizing process flows, data transfers, and relationship networks
+- **KPI Dashboards**: Gauge charts provide executive-level KPI visualization with performance context
+- **Intelligent Selection**: Automatic detection of appropriate chart types based on data characteristics
+- **Export Support**: Full export capabilities for both chart types in multiple formats (PNG, PDF, SVG, HTML, JSON)
+- **Interactive Features**: Zoom, pan, and hover capabilities for enhanced user interaction
+
+**Performance Characteristics:**
+- **Efficient Node Mapping**: Optimized unique node extraction and indexing for large flow datasets
+- **Threshold Processing**: Fast threshold evaluation and color assignment for gauge charts
+- **Pattern Detection**: Lightweight field analysis for pattern recognition without performance impact
+- **Memory Management**: Efficient color palette generation and link color calculation
+- **Export Optimization**: Streamlined export processes for both advanced chart types
+
+**GitHub Integration:**
+- **Direct Commit**: Successfully committed advanced chart types implementation to main branch
+- **Comprehensive Documentation**: Detailed commit message with feature overview and technical implementation details
+- **Code Quality**: Clean implementation with proper error handling, comprehensive comments, and extensive testing
+- **Session Tracking**: Complete documentation of implementation process and technical decisions
+
+**Next Steps:**
+- Begin Phase 2 Milestone 2.3 continuation: Implement interactive chart features (zoom, filter, drill-down)
+- Add dashboard layout engine for multi-chart visualization management
+- Create chart customization options for advanced styling and configuration
+- Implement real-time chart updates and data refresh capabilities
+
+**Project Status:** Advanced chart types implementation complete with Sankey diagrams and Gauge charts, ready for interactive features and dashboard layout engine development
+
 ### Session 23 - Visualization Engine Foundation with Automatic Chart Type Selection (2025-07-16)
 
 **Completed Tasks:**
