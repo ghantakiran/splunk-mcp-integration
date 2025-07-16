@@ -700,5 +700,186 @@ class InteractiveChartResponse(BaseModel):
     generation_time: float = Field(..., description="Generation time in seconds")
 
 
+# Drag-and-Drop Dashboard Builder Models
+
+class DragDropOperation(str, Enum):
+    """Drag-and-drop operation types"""
+    MOVE = "move"
+    RESIZE = "resize"
+    ADD = "add"
+    REMOVE = "remove"
+    COPY = "copy"
+
+
+class BuilderPermission(str, Enum):
+    """Dashboard builder permissions"""
+    READ = "read"
+    EDIT = "edit"
+    ADD_PANELS = "add_panels"
+    REMOVE_PANELS = "remove_panels"
+    MODIFY_LAYOUT = "modify_layout"
+    SHARE = "share"
+    ADMIN = "admin"
+
+
+class DragEvent(BaseModel):
+    """Drag event for dashboard builder"""
+    operation: DragDropOperation = Field(..., description="Type of drag operation")
+    panel_id: str = Field(..., description="Panel being dragged")
+    source_position: DashboardGridPosition = Field(..., description="Original position")
+    target_position: DashboardGridPosition = Field(..., description="Target position")
+    dashboard_id: str = Field(..., description="Dashboard identifier")
+    user_id: str = Field(..., description="User performing the operation")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    metadata: Dict[str, Any] = Field(default={}, description="Additional event metadata")
+
+
+class ResizeEvent(BaseModel):
+    """Panel resize event for dashboard builder"""
+    panel_id: str = Field(..., description="Panel being resized")
+    dashboard_id: str = Field(..., description="Dashboard identifier")
+    old_dimensions: Dict[str, int] = Field(..., description="Previous dimensions")
+    new_dimensions: Dict[str, int] = Field(..., description="New dimensions")
+    maintain_aspect_ratio: bool = Field(default=True, description="Maintain aspect ratio during resize")
+    user_id: str = Field(..., description="User performing the resize")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+
+
+class PanelTemplate(BaseModel):
+    """Template for creating new panels"""
+    template_id: str = Field(..., description="Template identifier")
+    name: str = Field(..., description="Template name")
+    description: str = Field(..., description="Template description")
+    panel_type: PanelType = Field(..., description="Panel type")
+    chart_type: Optional[ChartType] = Field(None, description="Default chart type")
+    default_dimensions: Dict[str, int] = Field(..., description="Default panel dimensions")
+    configuration: Dict[str, Any] = Field(default={}, description="Default panel configuration")
+    preview_url: Optional[str] = Field(None, description="Template preview image URL")
+    category: str = Field(default="general", description="Template category")
+    tags: List[str] = Field(default=[], description="Template tags")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Template creation time")
+
+
+class BuilderSession(BaseModel):
+    """Dashboard builder session"""
+    session_id: str = Field(..., description="Session identifier")
+    dashboard_id: str = Field(..., description="Dashboard being edited")
+    user_id: str = Field(..., description="User identifier")
+    permissions: List[BuilderPermission] = Field(..., description="User permissions for this session")
+    is_active: bool = Field(default=True, description="Session active status")
+    collaboration_enabled: bool = Field(default=True, description="Collaboration mode enabled")
+    auto_save_enabled: bool = Field(default=True, description="Auto-save enabled")
+    auto_save_interval: int = Field(default=30, description="Auto-save interval in seconds")
+    last_activity: datetime = Field(default_factory=datetime.utcnow, description="Last activity timestamp")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Session creation time")
+
+
+class CollaborationCursor(BaseModel):
+    """Collaboration cursor position"""
+    user_id: str = Field(..., description="User identifier")
+    user_name: str = Field(..., description="User display name")
+    position: Dict[str, float] = Field(..., description="Cursor position (x, y)")
+    color: str = Field(..., description="User cursor color")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
+
+
+class BuilderState(BaseModel):
+    """Dashboard builder state"""
+    dashboard_id: str = Field(..., description="Dashboard identifier")
+    active_sessions: List[BuilderSession] = Field(default=[], description="Active editing sessions")
+    collaboration_cursors: List[CollaborationCursor] = Field(default=[], description="User cursor positions")
+    undo_available: bool = Field(default=False, description="Undo operation available")
+    redo_available: bool = Field(default=False, description="Redo operation available")
+    pending_changes: bool = Field(default=False, description="Unsaved changes exist")
+    last_saved: Optional[datetime] = Field(None, description="Last save timestamp")
+    lock_status: Optional[Dict[str, Any]] = Field(None, description="Panel lock status")
+
+
+class DragDropResult(BaseModel):
+    """Result of drag-and-drop operation"""
+    success: bool = Field(..., description="Operation success status")
+    operation: DragDropOperation = Field(..., description="Operation type")
+    panel_id: str = Field(..., description="Affected panel ID")
+    old_position: Optional[DashboardGridPosition] = Field(None, description="Previous position")
+    new_position: Optional[DashboardGridPosition] = Field(None, description="New position")
+    conflicts_resolved: List[str] = Field(default=[], description="IDs of panels that were moved to resolve conflicts")
+    layout_optimized: bool = Field(default=False, description="Whether layout was optimized")
+    validation_errors: List[str] = Field(default=[], description="Validation errors")
+    warnings: List[str] = Field(default=[], description="Operation warnings")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Operation timestamp")
+
+
+class BuilderRequest(BaseModel):
+    """Base request for builder operations"""
+    dashboard_id: str = Field(..., description="Dashboard identifier")
+    session_id: str = Field(..., description="Builder session ID")
+    user_id: str = Field(..., description="User identifier")
+
+
+class AddPanelRequest(BuilderRequest):
+    """Request to add a new panel to dashboard"""
+    panel_type: PanelType = Field(..., description="Type of panel to add")
+    template_id: Optional[str] = Field(None, description="Panel template to use")
+    position: Optional[DashboardGridPosition] = Field(None, description="Specific position (auto if None)")
+    configuration: Dict[str, Any] = Field(default={}, description="Panel configuration")
+    title: str = Field(default="New Panel", description="Panel title")
+
+
+class MovePanelRequest(BuilderRequest):
+    """Request to move a panel"""
+    panel_id: str = Field(..., description="Panel to move")
+    target_position: DashboardGridPosition = Field(..., description="Target position")
+    copy_mode: bool = Field(default=False, description="Copy instead of move")
+
+
+class ResizePanelRequest(BuilderRequest):
+    """Request to resize a panel"""
+    panel_id: str = Field(..., description="Panel to resize")
+    new_width: int = Field(..., ge=1, le=12, description="New panel width")
+    new_height: int = Field(..., ge=1, le=20, description="New panel height")
+    maintain_aspect_ratio: bool = Field(default=True, description="Maintain aspect ratio")
+
+
+class RemovePanelRequest(BuilderRequest):
+    """Request to remove a panel"""
+    panel_id: str = Field(..., description="Panel to remove")
+    optimize_layout: bool = Field(default=True, description="Optimize layout after removal")
+
+
+class UpdatePanelRequest(BuilderRequest):
+    """Request to update panel configuration"""
+    panel_id: str = Field(..., description="Panel to update")
+    configuration: Dict[str, Any] = Field(..., description="Configuration updates")
+    title: Optional[str] = Field(None, description="New panel title")
+
+
+class UndoRedoRequest(BuilderRequest):
+    """Request for undo/redo operations"""
+    operation: str = Field(..., regex="^(undo|redo)$", description="Operation type")
+
+
+class SaveDashboardRequest(BuilderRequest):
+    """Request to save dashboard"""
+    auto_save: bool = Field(default=False, description="Whether this is an auto-save")
+    commit_message: Optional[str] = Field(None, description="Optional commit message")
+
+
+class DashboardBuilderResponse(BaseModel):
+    """Response from dashboard builder operations"""
+    success: bool = Field(..., description="Operation success status")
+    dashboard_id: str = Field(..., description="Dashboard identifier")
+    operation_type: str = Field(..., description="Type of operation performed")
+    result: Dict[str, Any] = Field(default={}, description="Operation result data")
+    builder_state: BuilderState = Field(..., description="Current builder state")
+    errors: List[str] = Field(default=[], description="Operation errors")
+    warnings: List[str] = Field(default=[], description="Operation warnings")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
+
+
 # Update forward references
 ChartRecommendation.model_rebuild()
+DragEvent.model_rebuild()
+ResizeEvent.model_rebuild()
+BuilderSession.model_rebuild()
+BuilderState.model_rebuild()
+DragDropResult.model_rebuild()
