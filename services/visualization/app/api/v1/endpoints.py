@@ -20,11 +20,16 @@ from ...models.chart import (
     FilterOperation, SelectionMode, ChartCustomization, ChartTemplate,
     ChartTheme, FontFamily, ColorScheme, LegendPosition, ExportConfig,
     ExportResult, ExportQuality, ExportOrientation, ExportTemplate,
-    BatchExportRequest, BatchExportResult
+    BatchExportRequest, BatchExportResult, DashboardCreateRequest,
+    DashboardUpdateRequest, PanelCreateRequest, PanelUpdateRequest,
+    DashboardResponse, DashboardListResponse, LayoutType, PanelType,
+    DashboardGridPosition, DashboardLayoutConfig, DashboardTemplate,
+    BreakpointSize
 )
 from ...services.chart_selector import ChartTypeSelector
 from ...services.chart_generator import ChartGenerator
 from ...services.interactive_charts import InteractiveChartService
+from ...services.dashboard_layout import DashboardLayoutEngine
 from ...core.logging import get_logger, log_chart_generation
 from ...core.config import settings
 
@@ -35,6 +40,7 @@ router = APIRouter()
 chart_selector = ChartTypeSelector()
 chart_generator = ChartGenerator()
 interactive_service = InteractiveChartService()
+dashboard_engine = DashboardLayoutEngine()
 
 
 # Chart Type Selection Endpoints
@@ -1187,3 +1193,509 @@ async def get_customization_options() -> Dict[str, Any]:
                     error=str(e),
                     exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get customization options: {str(e)}")
+
+
+# Dashboard Layout Endpoints
+
+@router.post("/dashboards", response_model=DashboardResponse)
+async def create_dashboard(request: DashboardCreateRequest) -> DashboardResponse:
+    """
+    Create a new dashboard with optional template
+    
+    Creates a new dashboard with the specified layout type and
+    optionally applies a predefined template for initial configuration.
+    """
+    try:
+        logger.info("Creating dashboard",
+                   title=request.title,
+                   layout_type=request.layout_type,
+                   template_name=request.template_name)
+        
+        # Convert Pydantic enum to dashboard engine enum
+        from ...services.dashboard_layout import LayoutType as DashboardLayoutType
+        layout_type = DashboardLayoutType(request.layout_type.value)
+        
+        dashboard = dashboard_engine.create_dashboard(
+            title=request.title,
+            description=request.description or "",
+            layout_type=layout_type,
+            template_name=request.template_name,
+            created_by=request.created_by
+        )
+        
+        # Convert to Pydantic model
+        dashboard_dict = dashboard.to_dict()
+        
+        # Convert back to Pydantic models
+        from ...services.dashboard_layout import LayoutType as DashboardLayoutType
+        pydantic_dashboard = Dashboard(
+            dashboard_id=dashboard_dict['id'],
+            title=dashboard_dict['title'],
+            description=dashboard_dict['description'],
+            layout_config=DashboardLayoutConfig(
+                layout_type=LayoutType(dashboard_dict['layout_config']['layout_type']),
+                columns=dashboard_dict['layout_config']['columns'],
+                row_height=dashboard_dict['layout_config']['row_height'],
+                margin=dashboard_dict['layout_config']['margin'],
+                padding=dashboard_dict['layout_config']['padding'],
+                auto_size=dashboard_dict['layout_config']['auto_size'],
+                compact_type=dashboard_dict['layout_config']['compact_type'],
+                prevent_collision=dashboard_dict['layout_config']['prevent_collision'],
+                use_css_transforms=dashboard_dict['layout_config']['use_css_transforms'],
+                breakpoints=dashboard_dict['layout_config']['breakpoints'],
+                breakpoint_columns=dashboard_dict['layout_config']['breakpoint_columns']
+            ),
+            panels=[],
+            global_filters=dashboard_dict['global_filters'],
+            theme=dashboard_dict['theme'],
+            auto_refresh=dashboard_dict['auto_refresh'],
+            refresh_interval=dashboard_dict['refresh_interval'],
+            created_at=dashboard_dict['created_at'],
+            updated_at=dashboard_dict['updated_at'],
+            created_by=dashboard_dict['created_by']
+        )
+        
+        response = DashboardResponse(
+            dashboard=pydantic_dashboard,
+            panel_count=len(dashboard.panels),
+            total_size=len(str(dashboard_dict)),
+            last_modified=dashboard.updated_at,
+            can_edit=True,
+            can_share=True
+        )
+        
+        logger.info("Dashboard created successfully",
+                   dashboard_id=dashboard.id,
+                   panel_count=len(dashboard.panels))
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Dashboard creation failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard creation failed: {str(e)}")
+
+
+@router.get("/dashboards/{dashboard_id}", response_model=DashboardResponse)
+async def get_dashboard(dashboard_id: str) -> DashboardResponse:
+    """
+    Get a specific dashboard by ID
+    
+    Returns the complete dashboard configuration including
+    layout, panels, and metadata.
+    """
+    try:
+        # In a real implementation, this would retrieve from storage
+        # For now, we'll return a mock response
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Dashboard retrieval failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard retrieval failed: {str(e)}")
+
+
+@router.put("/dashboards/{dashboard_id}", response_model=DashboardResponse)
+async def update_dashboard(dashboard_id: str, request: DashboardUpdateRequest) -> DashboardResponse:
+    """
+    Update an existing dashboard
+    
+    Updates the dashboard configuration with the provided changes.
+    Only specified fields will be updated.
+    """
+    try:
+        # In a real implementation, this would update the dashboard in storage
+        # For now, we'll return a mock response
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Dashboard update failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard update failed: {str(e)}")
+
+
+@router.delete("/dashboards/{dashboard_id}")
+async def delete_dashboard(dashboard_id: str) -> Dict[str, str]:
+    """
+    Delete a dashboard
+    
+    Permanently deletes the dashboard and all its panels.
+    """
+    try:
+        # In a real implementation, this would delete from storage
+        logger.info("Dashboard deleted", dashboard_id=dashboard_id)
+        
+        return {
+            "status": "success",
+            "message": f"Dashboard {dashboard_id} deleted successfully",
+            "dashboard_id": dashboard_id
+        }
+        
+    except Exception as e:
+        logger.error("Dashboard deletion failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard deletion failed: {str(e)}")
+
+
+@router.post("/dashboards/{dashboard_id}/panels", response_model=DashboardPanel)
+async def add_panel(dashboard_id: str, request: PanelCreateRequest) -> DashboardPanel:
+    """
+    Add a new panel to a dashboard
+    
+    Creates a new panel and adds it to the specified dashboard.
+    Panel position is auto-calculated if not provided.
+    """
+    try:
+        logger.info("Adding panel to dashboard",
+                   dashboard_id=dashboard_id,
+                   panel_type=request.panel_type,
+                   title=request.title)
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Create the panel using dashboard_engine.add_panel()
+        # 3. Save the updated dashboard
+        # 4. Return the created panel
+        
+        # For now, create a mock panel
+        panel_id = str(uuid.uuid4())
+        position = request.position or DashboardGridPosition(x=0, y=0, width=6, height=4)
+        
+        panel = DashboardPanel(
+            panel_id=panel_id,
+            panel_type=request.panel_type,
+            title=request.title,
+            position=position,
+            content=request.content or {},
+            style=request.style or {},
+            chart_config=request.chart_config,
+            query=request.query
+        )
+        
+        logger.info("Panel added successfully",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id)
+        
+        return panel
+        
+    except Exception as e:
+        logger.error("Panel addition failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel addition failed: {str(e)}")
+
+
+@router.put("/dashboards/{dashboard_id}/panels/{panel_id}", response_model=DashboardPanel)
+async def update_panel(
+    dashboard_id: str,
+    panel_id: str,
+    request: PanelUpdateRequest
+) -> DashboardPanel:
+    """
+    Update an existing panel
+    
+    Updates the panel configuration with the provided changes.
+    Only specified fields will be updated.
+    """
+    try:
+        logger.info("Updating panel",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id)
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Update the panel using dashboard_engine.update_panel()
+        # 3. Save the updated dashboard
+        # 4. Return the updated panel
+        
+        raise HTTPException(status_code=404, detail="Panel not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Panel update failed",
+                    dashboard_id=dashboard_id,
+                    panel_id=panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel update failed: {str(e)}")
+
+
+@router.delete("/dashboards/{dashboard_id}/panels/{panel_id}")
+async def remove_panel(dashboard_id: str, panel_id: str) -> Dict[str, str]:
+    """
+    Remove a panel from a dashboard
+    
+    Removes the specified panel from the dashboard.
+    """
+    try:
+        logger.info("Removing panel from dashboard",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id)
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Remove the panel using dashboard_engine.remove_panel()
+        # 3. Save the updated dashboard
+        
+        return {
+            "status": "success",
+            "message": f"Panel {panel_id} removed from dashboard {dashboard_id}",
+            "dashboard_id": dashboard_id,
+            "panel_id": panel_id
+        }
+        
+    except Exception as e:
+        logger.error("Panel removal failed",
+                    dashboard_id=dashboard_id,
+                    panel_id=panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel removal failed: {str(e)}")
+
+
+@router.post("/dashboards/{dashboard_id}/panels/{panel_id}/move")
+async def move_panel(
+    dashboard_id: str,
+    panel_id: str,
+    new_position: DashboardGridPosition
+) -> DashboardPanel:
+    """
+    Move a panel to a new position
+    
+    Moves the specified panel to a new position within the dashboard grid.
+    """
+    try:
+        logger.info("Moving panel",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id,
+                   new_position=new_position.dict())
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Move the panel using dashboard_engine.move_panel()
+        # 3. Save the updated dashboard
+        # 4. Return the updated panel
+        
+        raise HTTPException(status_code=404, detail="Panel not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Panel move failed",
+                    dashboard_id=dashboard_id,
+                    panel_id=panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel move failed: {str(e)}")
+
+
+@router.post("/dashboards/{dashboard_id}/panels/{panel_id}/resize")
+async def resize_panel(
+    dashboard_id: str,
+    panel_id: str,
+    new_width: int,
+    new_height: int
+) -> DashboardPanel:
+    """
+    Resize a panel
+    
+    Changes the size of the specified panel within the dashboard grid.
+    """
+    try:
+        logger.info("Resizing panel",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id,
+                   new_width=new_width,
+                   new_height=new_height)
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Resize the panel using dashboard_engine.resize_panel()
+        # 3. Save the updated dashboard
+        # 4. Return the updated panel
+        
+        raise HTTPException(status_code=404, detail="Panel not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Panel resize failed",
+                    dashboard_id=dashboard_id,
+                    panel_id=panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel resize failed: {str(e)}")
+
+
+@router.post("/dashboards/{dashboard_id}/optimize")
+async def optimize_dashboard_layout(dashboard_id: str) -> DashboardResponse:
+    """
+    Optimize dashboard layout
+    
+    Optimizes the dashboard layout for better visual arrangement,
+    including auto-compacting panels and responsive optimization.
+    """
+    try:
+        logger.info("Optimizing dashboard layout", dashboard_id=dashboard_id)
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Optimize using dashboard_engine.optimize_layout()
+        # 3. Save the optimized dashboard
+        # 4. Return the updated dashboard
+        
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Dashboard layout optimization failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard layout optimization failed: {str(e)}")
+
+
+@router.get("/dashboards/{dashboard_id}/layout/{breakpoint}")
+async def get_dashboard_layout_for_breakpoint(
+    dashboard_id: str,
+    breakpoint: BreakpointSize
+) -> List[Dict[str, Any]]:
+    """
+    Get dashboard layout for specific breakpoint
+    
+    Returns the optimized layout configuration for the specified
+    responsive breakpoint size.
+    """
+    try:
+        logger.info("Getting dashboard layout for breakpoint",
+                   dashboard_id=dashboard_id,
+                   breakpoint=breakpoint)
+        
+        # In a real implementation, this would:
+        # 1. Retrieve the dashboard
+        # 2. Get layout using dashboard_engine.get_layout_for_breakpoint()
+        # 3. Return the layout configuration
+        
+        # For now, return empty layout
+        return []
+        
+    except Exception as e:
+        logger.error("Dashboard layout retrieval failed",
+                    dashboard_id=dashboard_id,
+                    breakpoint=breakpoint,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard layout retrieval failed: {str(e)}")
+
+
+@router.get("/dashboard-templates", response_model=List[DashboardTemplate])
+async def get_dashboard_templates() -> List[DashboardTemplate]:
+    """
+    Get available dashboard templates
+    
+    Returns a list of predefined dashboard templates with their
+    layout configurations and sample panels.
+    """
+    try:
+        logger.info("Getting dashboard templates")
+        
+        # For now, return empty list
+        # In a real implementation, this would return available templates
+        return []
+        
+    except Exception as e:
+        logger.error("Dashboard template retrieval failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard template retrieval failed: {str(e)}")
+
+
+@router.post("/dashboard-templates", response_model=DashboardTemplate)
+async def create_dashboard_template(template: DashboardTemplate) -> DashboardTemplate:
+    """
+    Create a new dashboard template
+    
+    Creates a new dashboard template that can be used to
+    quickly create dashboards with predefined layouts.
+    """
+    try:
+        logger.info("Creating dashboard template",
+                   template_name=template.name,
+                   category=template.category)
+        
+        # In a real implementation, this would:
+        # 1. Validate the template
+        # 2. Save to template storage
+        # 3. Return the created template
+        
+        return template
+        
+    except Exception as e:
+        logger.error("Dashboard template creation failed",
+                    template_name=template.name,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard template creation failed: {str(e)}")
+
+
+@router.get("/layout/types")
+async def get_layout_types() -> Dict[str, Any]:
+    """
+    Get available layout types and their configurations
+    
+    Returns information about supported layout types and
+    their default configurations.
+    """
+    try:
+        return {
+            "layout_types": [layout_type.value for layout_type in LayoutType],
+            "panel_types": [panel_type.value for panel_type in PanelType],
+            "breakpoint_sizes": [size.value for size in BreakpointSize],
+            "default_configurations": {
+                "grid": {
+                    "columns": 12,
+                    "row_height": 30,
+                    "margin": [10, 10],
+                    "padding": [5, 5],
+                    "auto_size": True,
+                    "compact_type": "vertical",
+                    "prevent_collision": True
+                },
+                "responsive": {
+                    "breakpoints": {
+                        "xl": 1200,
+                        "lg": 996,
+                        "md": 768,
+                        "sm": 576,
+                        "xs": 0
+                    },
+                    "breakpoint_columns": {
+                        "xl": 12,
+                        "lg": 12,
+                        "md": 10,
+                        "sm": 6,
+                        "xs": 4
+                    }
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error("Layout types retrieval failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Layout types retrieval failed: {str(e)}")

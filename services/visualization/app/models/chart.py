@@ -474,18 +474,173 @@ class DashboardPanel(BaseModel):
     query: Optional[str] = Field(None, description="SPL query for data")
 
 
+class LayoutType(str, Enum):
+    """Dashboard layout types"""
+    GRID = "grid"
+    FLUID = "fluid"
+    FIXED = "fixed"
+    RESPONSIVE = "responsive"
+
+
+class PanelType(str, Enum):
+    """Dashboard panel types"""
+    CHART = "chart"
+    TABLE = "table"
+    METRIC = "metric"
+    TEXT = "text"
+    IMAGE = "image"
+    IFRAME = "iframe"
+    CUSTOM = "custom"
+
+
+class BreakpointSize(str, Enum):
+    """Responsive breakpoint sizes"""
+    XS = "xs"
+    SM = "sm"
+    MD = "md"
+    LG = "lg"
+    XL = "xl"
+
+
+class DashboardGridPosition(BaseModel):
+    """Dashboard panel grid position"""
+    x: int = Field(default=0, description="Grid X position")
+    y: int = Field(default=0, description="Grid Y position")
+    width: int = Field(default=1, description="Grid width")
+    height: int = Field(default=1, description="Grid height")
+    min_width: int = Field(default=1, description="Minimum width")
+    min_height: int = Field(default=1, description="Minimum height")
+    max_width: Optional[int] = Field(None, description="Maximum width")
+    max_height: Optional[int] = Field(None, description="Maximum height")
+
+
+class DashboardLayoutConfig(BaseModel):
+    """Dashboard layout configuration"""
+    layout_type: LayoutType = Field(default=LayoutType.GRID, description="Layout type")
+    columns: int = Field(default=12, description="Number of columns")
+    row_height: int = Field(default=30, description="Row height in pixels")
+    margin: List[int] = Field(default=[10, 10], description="Margin [x, y]")
+    padding: List[int] = Field(default=[5, 5], description="Padding [x, y]")
+    auto_size: bool = Field(default=True, description="Auto-size panels")
+    compact_type: str = Field(default="vertical", description="Compact type")
+    prevent_collision: bool = Field(default=True, description="Prevent panel collision")
+    use_css_transforms: bool = Field(default=True, description="Use CSS transforms")
+    breakpoints: Dict[str, int] = Field(default={
+        "xl": 1200, "lg": 996, "md": 768, "sm": 576, "xs": 0
+    }, description="Responsive breakpoints")
+    breakpoint_columns: Dict[str, int] = Field(default={
+        "xl": 12, "lg": 12, "md": 10, "sm": 6, "xs": 4
+    }, description="Columns per breakpoint")
+
+
+class DashboardPanel(BaseModel):
+    """Enhanced dashboard panel definition"""
+    panel_id: str = Field(..., description="Panel identifier")
+    panel_type: PanelType = Field(..., description="Panel type")
+    title: str = Field(..., description="Panel title")
+    position: DashboardGridPosition = Field(..., description="Panel grid position")
+    content: Dict[str, Any] = Field(default={}, description="Panel content configuration")
+    style: Dict[str, Any] = Field(default={}, description="Panel styling")
+    responsive_positions: Dict[str, DashboardGridPosition] = Field(default={}, description="Responsive positions")
+    chart_config: Optional[ChartConfig] = Field(None, description="Chart configuration if panel is chart")
+    refresh_interval: Optional[int] = Field(None, description="Refresh interval in seconds")
+    query: Optional[str] = Field(None, description="SPL query for data")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Update timestamp")
+
+
 class Dashboard(BaseModel):
-    """Dashboard definition"""
+    """Enhanced dashboard definition"""
     dashboard_id: str = Field(..., description="Dashboard identifier")
     title: str = Field(..., description="Dashboard title")
     description: Optional[str] = Field(None, description="Dashboard description")
-    panels: List[DashboardPanel] = Field(..., description="Dashboard panels")
-    layout: Dict[str, Any] = Field(default={}, description="Layout configuration")
-    filters: List[Dict[str, Any]] = Field(default=[], description="Global filters")
+    layout_config: DashboardLayoutConfig = Field(..., description="Layout configuration")
+    panels: List[DashboardPanel] = Field(default=[], description="Dashboard panels")
+    global_filters: Dict[str, Any] = Field(default={}, description="Global filters")
+    theme: str = Field(default="default", description="Dashboard theme")
+    auto_refresh: bool = Field(default=False, description="Auto-refresh dashboard")
+    refresh_interval: int = Field(default=300, description="Refresh interval in seconds")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Update timestamp")
-    created_by: str = Field(..., description="Creator user ID")
+    created_by: Optional[str] = Field(None, description="Creator user ID")
     permissions: Dict[str, List[str]] = Field(default={}, description="Access permissions")
+
+
+class DashboardTemplate(BaseModel):
+    """Dashboard template configuration"""
+    template_id: str = Field(..., description="Template identifier")
+    name: str = Field(..., description="Template name")
+    description: Optional[str] = Field(None, description="Template description")
+    layout_config: DashboardLayoutConfig = Field(..., description="Layout configuration")
+    panels: List[DashboardPanel] = Field(default=[], description="Template panels")
+    preview_url: Optional[str] = Field(None, description="Preview image URL")
+    category: str = Field(default="general", description="Template category")
+    tags: List[str] = Field(default=[], description="Template tags")
+    created_by: Optional[str] = Field(None, description="Template creator")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    is_public: bool = Field(default=True, description="Public template")
+    use_count: int = Field(default=0, description="Usage count")
+
+
+class DashboardCreateRequest(BaseModel):
+    """Dashboard creation request"""
+    title: str = Field(..., description="Dashboard title")
+    description: Optional[str] = Field(None, description="Dashboard description")
+    layout_type: LayoutType = Field(default=LayoutType.GRID, description="Layout type")
+    template_name: Optional[str] = Field(None, description="Template to use")
+    created_by: Optional[str] = Field(None, description="Creator user ID")
+
+
+class DashboardUpdateRequest(BaseModel):
+    """Dashboard update request"""
+    title: Optional[str] = Field(None, description="Dashboard title")
+    description: Optional[str] = Field(None, description="Dashboard description")
+    layout_config: Optional[DashboardLayoutConfig] = Field(None, description="Layout configuration")
+    global_filters: Optional[Dict[str, Any]] = Field(None, description="Global filters")
+    theme: Optional[str] = Field(None, description="Dashboard theme")
+    auto_refresh: Optional[bool] = Field(None, description="Auto-refresh setting")
+    refresh_interval: Optional[int] = Field(None, description="Refresh interval")
+
+
+class PanelCreateRequest(BaseModel):
+    """Panel creation request"""
+    panel_type: PanelType = Field(..., description="Panel type")
+    title: str = Field(..., description="Panel title")
+    position: Optional[DashboardGridPosition] = Field(None, description="Panel position")
+    content: Optional[Dict[str, Any]] = Field(None, description="Panel content")
+    style: Optional[Dict[str, Any]] = Field(None, description="Panel style")
+    chart_config: Optional[ChartConfig] = Field(None, description="Chart configuration")
+    query: Optional[str] = Field(None, description="SPL query")
+
+
+class PanelUpdateRequest(BaseModel):
+    """Panel update request"""
+    title: Optional[str] = Field(None, description="Panel title")
+    position: Optional[DashboardGridPosition] = Field(None, description="Panel position")
+    content: Optional[Dict[str, Any]] = Field(None, description="Panel content")
+    style: Optional[Dict[str, Any]] = Field(None, description="Panel style")
+    chart_config: Optional[ChartConfig] = Field(None, description="Chart configuration")
+    query: Optional[str] = Field(None, description="SPL query")
+
+
+class DashboardResponse(BaseModel):
+    """Dashboard response"""
+    dashboard: Dashboard = Field(..., description="Dashboard configuration")
+    panel_count: int = Field(..., description="Number of panels")
+    total_size: int = Field(..., description="Total dashboard size in bytes")
+    last_modified: datetime = Field(..., description="Last modification time")
+    can_edit: bool = Field(default=False, description="User can edit dashboard")
+    can_share: bool = Field(default=False, description="User can share dashboard")
+
+
+class DashboardListResponse(BaseModel):
+    """Dashboard list response"""
+    dashboards: List[Dashboard] = Field(..., description="List of dashboards")
+    total_count: int = Field(..., description="Total number of dashboards")
+    page: int = Field(default=1, description="Current page")
+    page_size: int = Field(default=20, description="Page size")
+    has_next: bool = Field(default=False, description="Has next page")
+    has_previous: bool = Field(default=False, description="Has previous page")
 
 
 class ChartFilter(BaseModel):
