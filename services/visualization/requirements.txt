@@ -19,6 +19,7 @@ polars==0.20.2
 plotly==5.17.0
 matplotlib==3.8.2
 seaborn==0.13.0
+kaleido==0.2.1
 
 # Image Processing
 Pillow==10.1.0

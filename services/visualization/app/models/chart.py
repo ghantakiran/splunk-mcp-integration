@@ -139,6 +139,7 @@ class ChartResponse(BaseModel):
     file_size: Optional[int] = Field(None, description="File size in bytes if exported")
     export_url: Optional[str] = Field(None, description="URL to exported chart")
     interactive_url: Optional[str] = Field(None, description="URL to interactive chart")
+    plotly_json: Optional[str] = Field(None, description="Plotly JSON representation of the chart")
 
 
 class ChartRequest(BaseModel):

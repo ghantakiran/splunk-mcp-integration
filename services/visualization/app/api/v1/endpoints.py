@@ -6,16 +6,18 @@ and dashboard management.
 """
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import asyncio
 import time
 import uuid
+import plotly.graph_objects as go
 
 from ...models.chart import (
     ChartRequest, ChartResponse, ChartRecommendation, ChartData, 
-    ChartConfig, ChartType, Dashboard, DashboardPanel
+    ChartConfig, ChartType, Dashboard, DashboardPanel, ExportFormat
 )
 from ...services.chart_selector import ChartTypeSelector
+from ...services.chart_generator import ChartGenerator
 from ...core.logging import get_logger, log_chart_generation
 from ...core.config import settings
 
@@ -24,6 +26,7 @@ router = APIRouter()
 
 # Initialize services
 chart_selector = ChartTypeSelector()
+chart_generator = ChartGenerator()
 
 
 # Chart Type Selection Endpoints
@@ -273,14 +276,14 @@ async def generate_chart(
     and configuration. If no configuration is provided, automatically
     selects the best chart type.
     """
-    start_time = time.time()
     chart_id = str(uuid.uuid4())
     
     try:
         logger.info("Chart generation request received",
                    chart_id=chart_id,
                    auto_select=request.auto_select,
-                   requested_type=request.config.chart_type if request.config else None)
+                   requested_type=request.config.chart_type if request.config else None,
+                   data_rows=request.data.total_rows)
         
         # Auto-select chart type if not specified
         if request.auto_select and (not request.config or request.config.chart_type == ChartType.AUTO):
@@ -289,54 +292,91 @@ async def generate_chart(
                 user_preferences=request.user_preferences
             )
             config = recommendation.config
+            logger.info("Auto-selected chart type",
+                       chart_id=chart_id,
+                       selected_type=config.chart_type,
+                       confidence=recommendation.confidence)
         else:
             config = request.config or ChartConfig(chart_type=ChartType.TABLE)
         
-        # TODO: Implement actual chart generation logic
-        # For now, return a mock response
-        generation_time = time.time() - start_time
-        
-        # Log chart generation
-        log_chart_generation(
-            chart_type=config.chart_type,
-            data_points=request.data.total_rows,
-            generation_time=generation_time,
-            success=True
-        )
-        
-        response = ChartResponse(
-            chart_id=chart_id,
-            chart_type=config.chart_type,
+        # Generate the actual chart using ChartGenerator
+        response = chart_generator.generate_chart(
+            data=request.data,
             config=config,
-            data_summary={
-                "total_rows": request.data.total_rows,
-                "total_fields": len(request.data.fields),
-                "chart_type": config.chart_type,
-                "generation_method": "automatic" if request.auto_select else "manual"
-            },
-            generation_time=generation_time,
-            file_size=None,  # Will be set after actual generation
-            export_url=None,  # Will be set after actual generation
-            interactive_url=f"/charts/{chart_id}/interactive"
+            chart_id=chart_id
         )
         
         logger.info("Chart generation completed",
                    chart_id=chart_id,
                    chart_type=config.chart_type,
-                   generation_time=generation_time)
+                   generation_time=response.generation_time,
+                   data_points=request.data.total_rows)
         
         return response
         
     except Exception as e:
-        log_chart_generation(
-            chart_type=request.config.chart_type if request.config else "unknown",
-            data_points=request.data.total_rows,
-            generation_time=time.time() - start_time,
-            success=False,
-            error=str(e)
-        )
-        logger.error("Chart generation failed", chart_id=chart_id, error=str(e), exc_info=True)
+        logger.error("Chart generation failed", 
+                    chart_id=chart_id, 
+                    error=str(e), 
+                    exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chart generation failed: {str(e)}")
+
+
+@router.post("/charts/{chart_id}/export")
+async def export_chart(
+    chart_id: str,
+    format: ExportFormat,
+    plotly_json: str,
+    filename: Optional[str] = None
+) -> Response:
+    """
+    Export a generated chart to specified format
+    
+    Takes the Plotly JSON representation of a chart and exports it
+    to the requested format (PNG, PDF, SVG, HTML, JSON).
+    """
+    try:
+        logger.info("Chart export request received",
+                   chart_id=chart_id,
+                   export_format=format,
+                   filename=filename)
+        
+        # Reconstruct the Plotly figure from JSON
+        fig = go.Figure.from_json(plotly_json)
+        
+        # Export the chart
+        file_bytes, content_type = chart_generator.export_chart(
+            fig=fig,
+            format=format,
+            filename=filename
+        )
+        
+        # Set filename for download
+        if not filename:
+            extension = format.value
+            filename = f"chart_{chart_id}.{extension}"
+        
+        logger.info("Chart export completed",
+                   chart_id=chart_id,
+                   export_format=format,
+                   file_size=len(file_bytes))
+        
+        return Response(
+            content=file_bytes,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(file_bytes))
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Chart export failed",
+                    chart_id=chart_id,
+                    export_format=format,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chart export failed: {str(e)}")
 
 
 # Dashboard Management Endpoints (Placeholder)
