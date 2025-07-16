@@ -18,11 +18,13 @@ import plotly.io as pio
 
 from ..models.chart import (
     ChartType, ChartConfig, ChartData, ChartResponse, 
-    ColorScheme, ExportFormat, DataType
+    ColorScheme, ExportFormat, DataType, ExportConfig, ExportResult,
+    BatchExportRequest, BatchExportResult
 )
 from ..core.logging import get_logger, log_chart_generation
 from ..core.config import settings
 from .chart_customization import ChartCustomizationService
+from .chart_export import ChartExportService
 
 logger = get_logger(__name__)
 
@@ -34,8 +36,9 @@ class ChartGenerator:
         # Configure Plotly defaults
         pio.templates.default = "plotly_white"
         
-        # Initialize customization service
+        # Initialize services
         self.customization_service = ChartCustomizationService()
+        self.export_service = ChartExportService()
         
         # Color schemes mapping
         self.color_schemes = {
@@ -750,7 +753,7 @@ class ChartGenerator:
         filename: Optional[str] = None
     ) -> Tuple[bytes, str]:
         """
-        Export chart to specified format
+        Export chart to specified format (legacy method)
         
         Args:
             fig: Plotly figure
@@ -761,32 +764,89 @@ class ChartGenerator:
             Tuple of (file_bytes, content_type)
         """
         try:
-            if format == ExportFormat.PNG:
-                img_bytes = fig.to_image(format="png")
-                return img_bytes, "image/png"
+            # Use basic export config for legacy compatibility
+            export_config = ExportConfig(format=format)
             
-            elif format == ExportFormat.PDF:
-                img_bytes = fig.to_image(format="pdf")
-                return img_bytes, "application/pdf"
+            # Use the new export service with a placeholder chart_id
+            result = self.export_service.export_chart(
+                fig=fig,
+                config=export_config,
+                chart_id="legacy_export",
+                filename=filename
+            )
             
-            elif format == ExportFormat.SVG:
-                img_bytes = fig.to_image(format="svg")
-                return img_bytes, "image/svg+xml"
-            
-            elif format == ExportFormat.HTML:
-                html_str = fig.to_html(include_plotlyjs=True)
-                return html_str.encode('utf-8'), "text/html"
-            
-            elif format == ExportFormat.JSON:
-                json_str = fig.to_json()
-                return json_str.encode('utf-8'), "application/json"
-            
-            else:
-                raise ValueError(f"Unsupported export format: {format}")
+            # Read the exported file (in a real implementation, this would retrieve from storage)
+            # For now, we'll use the legacy method as fallback
+            return self._legacy_export(fig, format)
                 
         except Exception as e:
             logger.error("Chart export failed", format=format, error=str(e))
             raise ValueError(f"Export failed: {str(e)}")
+    
+    def _legacy_export(self, fig: go.Figure, format: ExportFormat) -> Tuple[bytes, str]:
+        """Legacy export method for backward compatibility"""
+        if format == ExportFormat.PNG:
+            img_bytes = fig.to_image(format="png")
+            return img_bytes, "image/png"
+        
+        elif format == ExportFormat.PDF:
+            img_bytes = fig.to_image(format="pdf")
+            return img_bytes, "application/pdf"
+        
+        elif format == ExportFormat.SVG:
+            img_bytes = fig.to_image(format="svg")
+            return img_bytes, "image/svg+xml"
+        
+        elif format == ExportFormat.HTML:
+            html_str = fig.to_html(include_plotlyjs=True)
+            return html_str.encode('utf-8'), "text/html"
+        
+        elif format == ExportFormat.JSON:
+            json_str = fig.to_json()
+            return json_str.encode('utf-8'), "application/json"
+        
+        elif format == ExportFormat.JPEG:
+            img_bytes = fig.to_image(format="jpg")
+            return img_bytes, "image/jpeg"
+        
+        elif format == ExportFormat.WEBP:
+            # WebP export requires PIL conversion
+            import io
+            from PIL import Image
+            png_bytes = fig.to_image(format="png")
+            img = Image.open(io.BytesIO(png_bytes))
+            webp_buffer = io.BytesIO()
+            img.save(webp_buffer, format='WEBP', quality=90)
+            return webp_buffer.getvalue(), "image/webp"
+        
+        else:
+            raise ValueError(f"Unsupported export format: {format}")
+    
+    def export_chart_advanced(
+        self,
+        fig: go.Figure,
+        config: ExportConfig,
+        chart_id: str,
+        filename: Optional[str] = None
+    ) -> ExportResult:
+        """
+        Export chart with advanced configuration options
+        
+        Args:
+            fig: Plotly figure
+            config: Export configuration
+            chart_id: Chart identifier
+            filename: Optional filename
+            
+        Returns:
+            ExportResult with detailed export information
+        """
+        return self.export_service.export_chart(
+            fig=fig,
+            config=config,
+            chart_id=chart_id,
+            filename=filename
+        )
     
     def _get_line_config(self, config: ChartConfig) -> Dict[str, Any]:
         """Get line configuration for line charts"""
@@ -973,3 +1033,19 @@ class ChartGenerator:
     def get_customization_service(self) -> ChartCustomizationService:
         """Get the customization service instance"""
         return self.customization_service
+    
+    def get_export_service(self) -> ChartExportService:
+        """Get the export service instance"""
+        return self.export_service
+    
+    def batch_export_charts(self, request: BatchExportRequest) -> BatchExportResult:
+        """
+        Export multiple charts in batch
+        
+        Args:
+            request: BatchExportRequest with chart IDs and configuration
+            
+        Returns:
+            BatchExportResult with export results and archive information
+        """
+        return self.export_service.batch_export(request)

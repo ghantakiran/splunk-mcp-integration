@@ -18,7 +18,9 @@ from ...models.chart import (
     ChartFilter, ChartSelection, DrillDownConfig, InteractionEvent,
     ChartInteractiveConfig, InteractiveChartResponse, InteractionType,
     FilterOperation, SelectionMode, ChartCustomization, ChartTemplate,
-    ChartTheme, FontFamily, ColorScheme, LegendPosition
+    ChartTheme, FontFamily, ColorScheme, LegendPosition, ExportConfig,
+    ExportResult, ExportQuality, ExportOrientation, ExportTemplate,
+    BatchExportRequest, BatchExportResult
 )
 from ...services.chart_selector import ChartTypeSelector
 from ...services.chart_generator import ChartGenerator
@@ -336,7 +338,7 @@ async def export_chart(
     filename: Optional[str] = None
 ) -> Response:
     """
-    Export a generated chart to specified format
+    Export a generated chart to specified format (legacy endpoint)
     
     Takes the Plotly JSON representation of a chart and exports it
     to the requested format (PNG, PDF, SVG, HTML, JSON).
@@ -350,7 +352,7 @@ async def export_chart(
         # Reconstruct the Plotly figure from JSON
         fig = go.Figure.from_json(plotly_json)
         
-        # Export the chart
+        # Export the chart using legacy method
         file_bytes, content_type = chart_generator.export_chart(
             fig=fig,
             format=format,
@@ -383,6 +385,230 @@ async def export_chart(
                     error=str(e),
                     exc_info=True)
         raise HTTPException(status_code=500, detail=f"Chart export failed: {str(e)}")
+
+
+@router.post("/charts/{chart_id}/export-advanced", response_model=ExportResult)
+async def export_chart_advanced(
+    chart_id: str,
+    plotly_json: str,
+    config: ExportConfig,
+    filename: Optional[str] = None
+) -> ExportResult:
+    """
+    Export a generated chart with advanced configuration options
+    
+    Takes the Plotly JSON representation of a chart and exports it
+    with comprehensive configuration options including quality settings,
+    templates, optimization, and format-specific features.
+    """
+    try:
+        logger.info("Advanced chart export request received",
+                   chart_id=chart_id,
+                   export_format=config.format,
+                   quality=config.quality,
+                   template=config.template,
+                   filename=filename)
+        
+        # Reconstruct the Plotly figure from JSON
+        fig = go.Figure.from_json(plotly_json)
+        
+        # Export the chart using advanced method
+        result = chart_generator.export_chart_advanced(
+            fig=fig,
+            config=config,
+            chart_id=chart_id,
+            filename=filename
+        )
+        
+        logger.info("Advanced chart export completed",
+                   chart_id=chart_id,
+                   export_id=result.export_id,
+                   export_format=config.format,
+                   file_size=result.file_size,
+                   export_time=result.export_time)
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Advanced chart export failed",
+                    chart_id=chart_id,
+                    export_format=config.format,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Advanced chart export failed: {str(e)}")
+
+
+@router.post("/charts/{chart_id}/export-advanced/download")
+async def download_advanced_export(
+    chart_id: str,
+    plotly_json: str,
+    config: ExportConfig,
+    filename: Optional[str] = None
+) -> Response:
+    """
+    Export and download a chart with advanced configuration options
+    
+    Similar to export_chart_advanced but returns the file directly
+    for download instead of metadata.
+    """
+    try:
+        logger.info("Advanced chart export download request received",
+                   chart_id=chart_id,
+                   export_format=config.format,
+                   quality=config.quality,
+                   template=config.template)
+        
+        # Reconstruct the Plotly figure from JSON
+        fig = go.Figure.from_json(plotly_json)
+        
+        # Export the chart using advanced method
+        result = chart_generator.export_chart_advanced(
+            fig=fig,
+            config=config,
+            chart_id=chart_id,
+            filename=filename
+        )
+        
+        # Get the file bytes (this would be implemented in the service)
+        # For now, we'll use the legacy method to get the actual bytes
+        file_bytes, content_type = chart_generator.export_chart(
+            fig=fig,
+            format=config.format,
+            filename=result.filename
+        )
+        
+        logger.info("Advanced chart export download completed",
+                   chart_id=chart_id,
+                   export_id=result.export_id,
+                   file_size=len(file_bytes))
+        
+        return Response(
+            content=file_bytes,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"attachment; filename={result.filename}",
+                "Content-Length": str(len(file_bytes)),
+                "X-Export-ID": result.export_id,
+                "X-Export-Time": str(result.export_time)
+            }
+        )
+        
+    except Exception as e:
+        logger.error("Advanced chart export download failed",
+                    chart_id=chart_id,
+                    export_format=config.format,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Advanced chart export download failed: {str(e)}")
+
+
+@router.post("/charts/batch-export", response_model=BatchExportResult)
+async def batch_export_charts(
+    request: BatchExportRequest,
+    background_tasks: BackgroundTasks
+) -> BatchExportResult:
+    """
+    Export multiple charts in batch with archiving
+    
+    Processes multiple charts for export using the same configuration
+    and creates an archive file containing all exported charts.
+    """
+    try:
+        logger.info("Batch export request received",
+                   chart_count=len(request.charts),
+                   export_format=request.format,
+                   archive_format=request.archive_format)
+        
+        # Process batch export using the export service
+        # This would be implemented in the chart generator's export service
+        result = chart_generator.batch_export_charts(request)
+        
+        logger.info("Batch export completed",
+                   batch_id=result.batch_id,
+                   successful_exports=result.successful_exports,
+                   failed_exports=result.failed_exports,
+                   processing_time=result.processing_time)
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Batch export failed",
+                    chart_count=len(request.charts),
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Batch export failed: {str(e)}")
+
+
+@router.get("/charts/export/formats", response_model=List[Dict[str, Any]])
+async def get_export_formats() -> List[Dict[str, Any]]:
+    """
+    Get available export formats with their capabilities
+    
+    Returns comprehensive information about supported export formats
+    including their features, use cases, and technical specifications.
+    """
+    try:
+        export_service = chart_generator.get_export_service()
+        formats = export_service.get_export_formats()
+        
+        logger.info("Export formats retrieved",
+                   format_count=len(formats))
+        
+        return formats
+        
+    except Exception as e:
+        logger.error("Failed to retrieve export formats",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve export formats: {str(e)}")
+
+
+@router.get("/charts/export/quality-options", response_model=List[Dict[str, Any]])
+async def get_export_quality_options() -> List[Dict[str, Any]]:
+    """
+    Get available export quality options
+    
+    Returns information about quality levels including their
+    performance characteristics and use cases.
+    """
+    try:
+        export_service = chart_generator.get_export_service()
+        quality_options = export_service.get_quality_options()
+        
+        logger.info("Export quality options retrieved",
+                   option_count=len(quality_options))
+        
+        return quality_options
+        
+    except Exception as e:
+        logger.error("Failed to retrieve export quality options",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve quality options: {str(e)}")
+
+
+@router.get("/charts/export/templates", response_model=List[Dict[str, Any]])
+async def get_export_templates() -> List[Dict[str, Any]]:
+    """
+    Get available export templates
+    
+    Returns information about export templates including their
+    dimensions, DPI settings, and intended use cases.
+    """
+    try:
+        export_service = chart_generator.get_export_service()
+        templates = export_service.get_template_options()
+        
+        logger.info("Export templates retrieved",
+                   template_count=len(templates))
+        
+        return templates
+        
+    except Exception as e:
+        logger.error("Failed to retrieve export templates",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve export templates: {str(e)}")
 
 
 # Dashboard Management Endpoints (Placeholder)
@@ -672,7 +898,7 @@ async def health_check() -> Dict[str, Any]:
             "chart_types": len(ChartType),
             "auto_selection": True,
             "dashboard_management": True,
-            "export_formats": ["png", "pdf", "svg", "html"],
+            "export_formats": ["png", "pdf", "svg", "html", "json", "jpeg", "webp"],
             "interactive_features": {
                 "filtering": True,
                 "drill_down": True,
@@ -690,6 +916,22 @@ async def health_check() -> Dict[str, Any]:
                 "annotations": True,
                 "axis_customization": True,
                 "legend_customization": True
+            },
+            "export_features": {
+                "advanced_export": True,
+                "batch_export": True,
+                "quality_levels": ["low", "medium", "high", "ultra"],
+                "export_templates": ["presentation", "print", "web", "social", "report"],
+                "optimization": True,
+                "format_specific_features": {
+                    "png": ["transparency", "compression"],
+                    "jpeg": ["quality", "progressive"],
+                    "webp": ["quality", "compression"],
+                    "pdf": ["vector_graphics", "high_dpi"],
+                    "svg": ["scalable", "embed_fonts"],
+                    "html": ["interactive", "responsive"],
+                    "json": ["metadata", "programmatic_access"]
+                }
             }
         },
         "timestamp": time.time()

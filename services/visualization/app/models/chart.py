@@ -122,6 +122,33 @@ class ExportFormat(str, Enum):
     SVG = "svg"
     HTML = "html"
     JSON = "json"
+    JPEG = "jpeg"
+    WEBP = "webp"
+
+
+class ExportQuality(str, Enum):
+    """Export quality levels"""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    ULTRA = "ultra"
+
+
+class ExportOrientation(str, Enum):
+    """Export orientation options"""
+    PORTRAIT = "portrait"
+    LANDSCAPE = "landscape"
+    AUTO = "auto"
+
+
+class ExportTemplate(str, Enum):
+    """Export template presets"""
+    PRESENTATION = "presentation"
+    PRINT = "print"
+    WEB = "web"
+    SOCIAL = "social"
+    REPORT = "report"
+    CUSTOM = "custom"
 
 
 class InteractionType(str, Enum):
@@ -282,6 +309,77 @@ class ChartTemplate(BaseModel):
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     tags: List[str] = Field(default=[], description="Template tags")
     is_public: bool = Field(default=True, description="Public template")
+
+
+class ExportConfig(BaseModel):
+    """Export configuration for charts"""
+    format: ExportFormat = Field(..., description="Export format")
+    quality: ExportQuality = Field(default=ExportQuality.HIGH, description="Export quality")
+    width: Optional[int] = Field(None, ge=100, le=8000, description="Export width in pixels")
+    height: Optional[int] = Field(None, ge=100, le=8000, description="Export height in pixels")
+    dpi: int = Field(default=300, ge=72, le=600, description="Export DPI (dots per inch)")
+    orientation: ExportOrientation = Field(default=ExportOrientation.AUTO, description="Export orientation")
+    template: ExportTemplate = Field(default=ExportTemplate.WEB, description="Export template preset")
+    include_metadata: bool = Field(default=True, description="Include chart metadata in export")
+    include_title: bool = Field(default=True, description="Include chart title in export")
+    include_legend: bool = Field(default=True, description="Include legend in export")
+    background_color: str = Field(default="#FFFFFF", description="Background color for export")
+    transparent_background: bool = Field(default=False, description="Use transparent background")
+    font_scale: float = Field(default=1.0, ge=0.5, le=3.0, description="Font scale multiplier")
+    margin_top: int = Field(default=50, ge=0, le=200, description="Top margin in pixels")
+    margin_bottom: int = Field(default=50, ge=0, le=200, description="Bottom margin in pixels")
+    margin_left: int = Field(default=50, ge=0, le=200, description="Left margin in pixels")
+    margin_right: int = Field(default=50, ge=0, le=200, description="Right margin in pixels")
+    compression_level: int = Field(default=6, ge=1, le=9, description="Compression level for applicable formats")
+    optimize: bool = Field(default=True, description="Optimize file size")
+    progressive: bool = Field(default=False, description="Use progressive encoding (JPEG)")
+    embed_fonts: bool = Field(default=True, description="Embed fonts in export")
+    
+    @validator('background_color')
+    def validate_background_color(cls, v):
+        """Validate background color format"""
+        import re
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', v):
+            raise ValueError('Background color must be in hex format (#RRGGBB)')
+        return v
+
+
+class ExportResult(BaseModel):
+    """Export result information"""
+    export_id: str = Field(..., description="Unique export identifier")
+    chart_id: str = Field(..., description="Source chart identifier")
+    format: ExportFormat = Field(..., description="Export format")
+    filename: str = Field(..., description="Export filename")
+    file_size: int = Field(..., description="File size in bytes")
+    content_type: str = Field(..., description="MIME content type")
+    export_time: float = Field(..., description="Export processing time in seconds")
+    config: ExportConfig = Field(..., description="Export configuration used")
+    metadata: Dict[str, Any] = Field(default={}, description="Additional export metadata")
+    url: Optional[str] = Field(None, description="Download URL if available")
+    expires_at: Optional[datetime] = Field(None, description="URL expiration time")
+
+
+class BatchExportRequest(BaseModel):
+    """Batch export request for multiple charts"""
+    charts: List[str] = Field(..., description="List of chart IDs to export")
+    format: ExportFormat = Field(..., description="Export format for all charts")
+    config: ExportConfig = Field(..., description="Export configuration")
+    archive_format: str = Field(default="zip", description="Archive format (zip, tar)")
+    archive_name: Optional[str] = Field(None, description="Archive filename")
+    include_manifest: bool = Field(default=True, description="Include export manifest")
+
+
+class BatchExportResult(BaseModel):
+    """Batch export result"""
+    batch_id: str = Field(..., description="Batch export identifier")
+    total_charts: int = Field(..., description="Total number of charts")
+    successful_exports: int = Field(..., description="Number of successful exports")
+    failed_exports: int = Field(..., description="Number of failed exports")
+    results: List[ExportResult] = Field(..., description="Individual export results")
+    archive_size: int = Field(..., description="Archive file size in bytes")
+    archive_filename: str = Field(..., description="Archive filename")
+    processing_time: float = Field(..., description="Total processing time in seconds")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
 
 
 class ChartData(BaseModel):
