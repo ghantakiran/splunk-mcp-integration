@@ -66,6 +66,43 @@ class ExportFormat(str, Enum):
     JSON = "json"
 
 
+class InteractionType(str, Enum):
+    """Types of chart interactions"""
+    CLICK = "click"
+    HOVER = "hover"
+    SELECT = "select"
+    BRUSH = "brush"
+    LASSO = "lasso"
+    ZOOM = "zoom"
+    PAN = "pan"
+    DRILL_DOWN = "drill_down"
+    FILTER = "filter"
+
+
+class SelectionMode(str, Enum):
+    """Selection modes for chart interactions"""
+    SINGLE = "single"
+    MULTIPLE = "multiple"
+    RANGE = "range"
+
+
+class FilterOperation(str, Enum):
+    """Filter operations for data filtering"""
+    EQUALS = "equals"
+    NOT_EQUALS = "not_equals"
+    GREATER_THAN = "greater_than"
+    LESS_THAN = "less_than"
+    GREATER_EQUAL = "greater_equal"
+    LESS_EQUAL = "less_equal"
+    CONTAINS = "contains"
+    NOT_CONTAINS = "not_contains"
+    IN = "in"
+    NOT_IN = "not_in"
+    BETWEEN = "between"
+    IS_NULL = "is_null"
+    IS_NOT_NULL = "is_not_null"
+
+
 class DataField(BaseModel):
     """Data field definition"""
     name: str = Field(..., description="Field name")
@@ -111,6 +148,10 @@ class ChartConfig(BaseModel):
     zoom_enabled: bool = Field(default=True, description="Enable zoom")
     pan_enabled: bool = Field(default=True, description="Enable pan")
     hover_enabled: bool = Field(default=True, description="Enable hover tooltips")
+    crossfilter_enabled: bool = Field(default=False, description="Enable crossfilter for data filtering")
+    drill_down_enabled: bool = Field(default=False, description="Enable drill-down functionality")
+    brush_enabled: bool = Field(default=False, description="Enable brush selection")
+    lasso_enabled: bool = Field(default=False, description="Enable lasso selection")
     
     # Aggregation options
     aggregation: Optional[AggregationType] = Field(None, description="Aggregation type")
@@ -173,6 +214,63 @@ class Dashboard(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="Update timestamp")
     created_by: str = Field(..., description="Creator user ID")
     permissions: Dict[str, List[str]] = Field(default={}, description="Access permissions")
+
+
+class ChartFilter(BaseModel):
+    """Chart data filter definition"""
+    field: str = Field(..., description="Field to filter on")
+    operation: FilterOperation = Field(..., description="Filter operation")
+    value: Union[str, int, float, List[Any]] = Field(..., description="Filter value(s)")
+    case_sensitive: bool = Field(default=True, description="Case sensitive filtering for string operations")
+
+
+class ChartSelection(BaseModel):
+    """Chart selection state"""
+    selection_mode: SelectionMode = Field(..., description="Selection mode")
+    selected_points: List[Dict[str, Any]] = Field(default=[], description="Selected data points")
+    selection_bounds: Optional[Dict[str, Any]] = Field(None, description="Selection bounds (for brush/lasso)")
+    active: bool = Field(default=False, description="Whether selection is active")
+
+
+class DrillDownConfig(BaseModel):
+    """Drill-down configuration"""
+    enabled: bool = Field(default=False, description="Enable drill-down")
+    target_field: Optional[str] = Field(None, description="Field to drill down on")
+    aggregation_level: str = Field(default="next", description="Aggregation level for drill-down")
+    breadcrumb_enabled: bool = Field(default=True, description="Show drill-down breadcrumb")
+    max_levels: int = Field(default=5, description="Maximum drill-down levels")
+
+
+class InteractionEvent(BaseModel):
+    """Chart interaction event"""
+    event_type: InteractionType = Field(..., description="Type of interaction")
+    chart_id: str = Field(..., description="Chart identifier")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
+    data: Dict[str, Any] = Field(..., description="Event data (selected points, bounds, etc.)")
+    user_id: Optional[str] = Field(None, description="User who triggered the interaction")
+
+
+class ChartInteractiveConfig(BaseModel):
+    """Extended interactive configuration for charts"""
+    filters: List[ChartFilter] = Field(default=[], description="Applied filters")
+    selection: Optional[ChartSelection] = Field(None, description="Current selection state")
+    drill_down: Optional[DrillDownConfig] = Field(None, description="Drill-down configuration")
+    zoom_level: float = Field(default=1.0, description="Current zoom level")
+    pan_offset: Dict[str, float] = Field(default={}, description="Pan offset (x, y)")
+    crossfilter_enabled: bool = Field(default=False, description="Enable crossfilter mode")
+    linked_charts: List[str] = Field(default=[], description="IDs of linked charts for crossfilter")
+
+
+class InteractiveChartResponse(BaseModel):
+    """Interactive chart response with state"""
+    chart_id: str = Field(..., description="Chart identifier")
+    chart_type: ChartType = Field(..., description="Chart type")
+    config: ChartConfig = Field(..., description="Chart configuration")
+    interactive_config: ChartInteractiveConfig = Field(..., description="Interactive configuration")
+    data_summary: Dict[str, Any] = Field(..., description="Data summary")
+    plotly_json: str = Field(..., description="Plotly JSON with interactive features")
+    interaction_events: List[InteractionEvent] = Field(default=[], description="Recent interaction events")
+    generation_time: float = Field(..., description="Generation time in seconds")
 
 
 # Update forward references

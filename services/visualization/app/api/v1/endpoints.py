@@ -14,10 +14,14 @@ import plotly.graph_objects as go
 
 from ...models.chart import (
     ChartRequest, ChartResponse, ChartRecommendation, ChartData, 
-    ChartConfig, ChartType, Dashboard, DashboardPanel, ExportFormat
+    ChartConfig, ChartType, Dashboard, DashboardPanel, ExportFormat,
+    ChartFilter, ChartSelection, DrillDownConfig, InteractionEvent,
+    ChartInteractiveConfig, InteractiveChartResponse, InteractionType,
+    FilterOperation, SelectionMode
 )
 from ...services.chart_selector import ChartTypeSelector
 from ...services.chart_generator import ChartGenerator
+from ...services.interactive_charts import InteractiveChartService
 from ...core.logging import get_logger, log_chart_generation
 from ...core.config import settings
 
@@ -27,6 +31,7 @@ router = APIRouter()
 # Initialize services
 chart_selector = ChartTypeSelector()
 chart_generator = ChartGenerator()
+interactive_service = InteractiveChartService()
 
 
 # Chart Type Selection Endpoints
@@ -429,6 +434,232 @@ async def list_dashboards(
     return mock_dashboards[start_idx:end_idx]
 
 
+# Interactive Chart Endpoints
+
+@router.post("/charts/interactive", response_model=InteractiveChartResponse)
+async def create_interactive_chart(
+    chart_data: ChartData,
+    config: ChartConfig,
+    interactive_config: Optional[ChartInteractiveConfig] = None,
+    chart_id: Optional[str] = Query(None, description="Chart identifier")
+) -> InteractiveChartResponse:
+    """
+    Create an interactive chart with advanced features
+    
+    Creates a chart with interactive capabilities including:
+    - Data filtering and crossfilter
+    - Drill-down functionality
+    - Advanced selection modes (brush, lasso)
+    - Zoom and pan controls
+    """
+    try:
+        logger.info("Interactive chart creation request",
+                   chart_type=config.chart_type,
+                   data_rows=chart_data.total_rows,
+                   interactive_features=bool(interactive_config))
+        
+        response = interactive_service.create_interactive_chart(
+            data=chart_data,
+            config=config,
+            interactive_config=interactive_config,
+            chart_id=chart_id
+        )
+        
+        logger.info("Interactive chart created successfully",
+                   chart_id=response.chart_id,
+                   generation_time=response.generation_time)
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Interactive chart creation failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Interactive chart creation failed: {str(e)}")
+
+
+@router.post("/charts/{chart_id}/interactions")
+async def handle_chart_interaction(
+    chart_id: str,
+    event_type: InteractionType,
+    event_data: Dict[str, Any],
+    user_id: Optional[str] = Query(None, description="User ID")
+) -> Dict[str, Any]:
+    """
+    Handle chart interaction events
+    
+    Processes various types of chart interactions including:
+    - Click events for drill-down
+    - Selection events (brush, lasso)
+    - Filter events for data manipulation
+    - Zoom and pan events
+    """
+    try:
+        logger.info("Chart interaction event",
+                   chart_id=chart_id,
+                   event_type=event_type,
+                   user_id=user_id)
+        
+        response = interactive_service.handle_interaction_event(
+            chart_id=chart_id,
+            event_type=event_type,
+            event_data=event_data,
+            user_id=user_id
+        )
+        
+        logger.info("Interaction event processed",
+                   chart_id=chart_id,
+                   event_type=event_type,
+                   status=response.get('status'))
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Interaction event handling failed",
+                    chart_id=chart_id,
+                    event_type=event_type,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Interaction handling failed: {str(e)}")
+
+
+@router.post("/charts/linked", response_model=List[InteractiveChartResponse])
+async def create_linked_charts(
+    chart_configs: List[Dict[str, Any]],
+    crossfilter_enabled: bool = Query(True, description="Enable crossfilter linking")
+) -> List[InteractiveChartResponse]:
+    """
+    Create multiple linked charts with crossfilter capabilities
+    
+    Creates a set of charts that are linked together for crossfilter
+    interactions, allowing selections in one chart to filter others.
+    """
+    try:
+        logger.info("Linked charts creation request",
+                   chart_count=len(chart_configs),
+                   crossfilter_enabled=crossfilter_enabled)
+        
+        # Parse chart configurations
+        parsed_configs = []
+        for config_data in chart_configs:
+            chart_data = ChartData(**config_data['data'])
+            chart_config = ChartConfig(**config_data['config'])
+            parsed_configs.append((chart_data, chart_config))
+        
+        charts = interactive_service.create_linked_charts(
+            chart_configs=parsed_configs,
+            crossfilter_enabled=crossfilter_enabled
+        )
+        
+        logger.info("Linked charts created successfully",
+                   chart_count=len(charts))
+        
+        return charts
+        
+    except Exception as e:
+        logger.error("Linked charts creation failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Linked charts creation failed: {str(e)}")
+
+
+@router.get("/charts/{chart_id}/state")
+async def get_chart_state(chart_id: str) -> Dict[str, Any]:
+    """
+    Get current state of an interactive chart
+    
+    Returns the current interaction state including:
+    - Active selections
+    - Applied filters
+    - Zoom/pan state
+    - Linked chart information
+    """
+    try:
+        state = interactive_service.get_chart_state(chart_id)
+        
+        logger.info("Chart state retrieved",
+                   chart_id=chart_id,
+                   has_selection=state.get('has_selection', False))
+        
+        return state
+        
+    except Exception as e:
+        logger.error("Chart state retrieval failed",
+                    chart_id=chart_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chart state retrieval failed: {str(e)}")
+
+
+@router.delete("/charts/{chart_id}/state")
+async def clear_chart_state(chart_id: str) -> Dict[str, str]:
+    """
+    Clear stored state for an interactive chart
+    
+    Removes all stored interaction state including selections,
+    filters, and cached data for the specified chart.
+    """
+    try:
+        interactive_service.clear_chart_state(chart_id)
+        
+        logger.info("Chart state cleared", chart_id=chart_id)
+        
+        return {
+            "status": "success",
+            "message": f"State cleared for chart {chart_id}",
+            "chart_id": chart_id
+        }
+        
+    except Exception as e:
+        logger.error("Chart state clearing failed",
+                    chart_id=chart_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chart state clearing failed: {str(e)}")
+
+
+@router.post("/charts/{chart_id}/filters")
+async def apply_chart_filters(
+    chart_id: str,
+    filters: List[ChartFilter],
+    chart_data: ChartData,
+    config: ChartConfig
+) -> InteractiveChartResponse:
+    """
+    Apply filters to a chart and regenerate
+    
+    Applies the specified filters to the chart data and
+    returns an updated interactive chart with filtered data.
+    """
+    try:
+        logger.info("Applying chart filters",
+                   chart_id=chart_id,
+                   filter_count=len(filters))
+        
+        # Create interactive config with filters
+        interactive_config = ChartInteractiveConfig(filters=filters)
+        
+        response = interactive_service.create_interactive_chart(
+            data=chart_data,
+            config=config,
+            interactive_config=interactive_config,
+            chart_id=chart_id
+        )
+        
+        logger.info("Chart filters applied successfully",
+                   chart_id=chart_id,
+                   filter_count=len(filters))
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Chart filter application failed",
+                    chart_id=chart_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chart filter application failed: {str(e)}")
+
+
 @router.get("/health")
 async def health_check() -> Dict[str, Any]:
     """Health check endpoint for visualization service"""
@@ -440,7 +671,16 @@ async def health_check() -> Dict[str, Any]:
             "chart_types": len(ChartType),
             "auto_selection": True,
             "dashboard_management": True,
-            "export_formats": ["png", "pdf", "svg", "html"]
+            "export_formats": ["png", "pdf", "svg", "html"],
+            "interactive_features": {
+                "filtering": True,
+                "drill_down": True,
+                "crossfilter": True,
+                "brush_selection": True,
+                "lasso_selection": True,
+                "zoom_pan": True,
+                "linked_charts": True
+            }
         },
         "timestamp": time.time()
     }
