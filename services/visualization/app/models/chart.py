@@ -55,6 +55,64 @@ class ColorScheme(str, Enum):
     REDS = "reds"
     GREENS = "greens"
     CATEGORICAL = "categorical"
+    PASTEL = "pastel"
+    DARK = "dark"
+    COLORBLIND = "colorblind"
+
+
+class ChartTheme(str, Enum):
+    """Chart themes"""
+    DEFAULT = "plotly_white"
+    DARK = "plotly_dark"
+    MINIMAL = "simple_white"
+    PRESENTATION = "presentation"
+    SEABORN = "seaborn"
+    GGPLOT2 = "ggplot2"
+    NONE = "none"
+
+
+class FontFamily(str, Enum):
+    """Font families for charts"""
+    DEFAULT = "Arial"
+    ARIAL = "Arial"
+    HELVETICA = "Helvetica"
+    TIMES = "Times New Roman"
+    COURIER = "Courier New"
+    VERDANA = "Verdana"
+    CALIBRI = "Calibri"
+    OPEN_SANS = "Open Sans"
+    ROBOTO = "Roboto"
+
+
+class LegendPosition(str, Enum):
+    """Legend position options"""
+    RIGHT = "right"
+    LEFT = "left"
+    TOP = "top"
+    BOTTOM = "bottom"
+    TOP_LEFT = "top_left"
+    TOP_RIGHT = "top_right"
+    BOTTOM_LEFT = "bottom_left"
+    BOTTOM_RIGHT = "bottom_right"
+    NONE = "none"
+
+
+class AxisType(str, Enum):
+    """Axis type options"""
+    AUTO = "auto"
+    LINEAR = "linear"
+    LOG = "log"
+    DATE = "date"
+    CATEGORY = "category"
+
+
+class GridStyle(str, Enum):
+    """Grid style options"""
+    SOLID = "solid"
+    DASH = "dash"
+    DOT = "dot"
+    DASHDOT = "dashdot"
+    NONE = "none"
 
 
 class ExportFormat(str, Enum):
@@ -114,6 +172,118 @@ class DataField(BaseModel):
     max_value: Optional[Union[float, str, datetime]] = Field(None, description="Maximum value")
 
 
+class ChartFont(BaseModel):
+    """Font configuration for charts"""
+    family: FontFamily = Field(default=FontFamily.DEFAULT, description="Font family")
+    size: int = Field(default=12, ge=8, le=72, description="Font size")
+    color: str = Field(default="#000000", description="Font color (hex)")
+    bold: bool = Field(default=False, description="Bold text")
+    italic: bool = Field(default=False, description="Italic text")
+
+
+class ChartMargin(BaseModel):
+    """Chart margin configuration"""
+    top: int = Field(default=60, ge=0, description="Top margin")
+    bottom: int = Field(default=60, ge=0, description="Bottom margin")
+    left: int = Field(default=60, ge=0, description="Left margin")
+    right: int = Field(default=60, ge=0, description="Right margin")
+
+
+class ChartGrid(BaseModel):
+    """Grid configuration for charts"""
+    show_x: bool = Field(default=True, description="Show X-axis grid")
+    show_y: bool = Field(default=True, description="Show Y-axis grid")
+    color: str = Field(default="#E0E0E0", description="Grid color (hex)")
+    width: int = Field(default=1, ge=1, le=5, description="Grid line width")
+    style: GridStyle = Field(default=GridStyle.SOLID, description="Grid line style")
+
+
+class ChartAxis(BaseModel):
+    """Axis configuration for charts"""
+    title: Optional[str] = Field(None, description="Axis title")
+    title_font: Optional[ChartFont] = Field(None, description="Title font configuration")
+    label_font: Optional[ChartFont] = Field(None, description="Label font configuration")
+    type: AxisType = Field(default=AxisType.AUTO, description="Axis type")
+    show_line: bool = Field(default=True, description="Show axis line")
+    show_ticks: bool = Field(default=True, description="Show tick marks")
+    show_labels: bool = Field(default=True, description="Show axis labels")
+    line_color: str = Field(default="#000000", description="Axis line color")
+    line_width: int = Field(default=1, ge=1, le=5, description="Axis line width")
+    tick_color: str = Field(default="#000000", description="Tick mark color")
+    tick_length: int = Field(default=5, ge=1, le=20, description="Tick mark length")
+    range_min: Optional[Union[float, str]] = Field(None, description="Minimum axis range")
+    range_max: Optional[Union[float, str]] = Field(None, description="Maximum axis range")
+    tick_format: Optional[str] = Field(None, description="Tick format string")
+    tick_angle: int = Field(default=0, ge=-90, le=90, description="Tick label angle")
+
+
+class ChartLegend(BaseModel):
+    """Legend configuration for charts"""
+    show: bool = Field(default=True, description="Show legend")
+    position: LegendPosition = Field(default=LegendPosition.RIGHT, description="Legend position")
+    font: Optional[ChartFont] = Field(None, description="Legend font configuration")
+    background_color: str = Field(default="rgba(255,255,255,0.8)", description="Legend background color")
+    border_color: str = Field(default="#000000", description="Legend border color")
+    border_width: int = Field(default=0, ge=0, le=5, description="Legend border width")
+    item_spacing: int = Field(default=5, ge=0, le=20, description="Spacing between legend items")
+    orientation: str = Field(default="vertical", description="Legend orientation")
+
+
+class ChartTitle(BaseModel):
+    """Title configuration for charts"""
+    text: Optional[str] = Field(None, description="Title text")
+    font: Optional[ChartFont] = Field(None, description="Title font configuration")
+    position: str = Field(default="center", description="Title position")
+    show: bool = Field(default=True, description="Show title")
+    pad: int = Field(default=20, ge=0, le=100, description="Title padding")
+
+
+class ChartAnnotation(BaseModel):
+    """Annotation configuration for charts"""
+    text: str = Field(..., description="Annotation text")
+    x: Union[float, str] = Field(..., description="X position")
+    y: Union[float, str] = Field(..., description="Y position")
+    font: Optional[ChartFont] = Field(None, description="Annotation font")
+    background_color: str = Field(default="rgba(255,255,255,0.8)", description="Background color")
+    border_color: str = Field(default="#000000", description="Border color")
+    border_width: int = Field(default=1, ge=0, le=5, description="Border width")
+    arrow_show: bool = Field(default=False, description="Show arrow")
+    arrow_color: str = Field(default="#000000", description="Arrow color")
+
+
+class ChartCustomization(BaseModel):
+    """Comprehensive chart customization configuration"""
+    theme: ChartTheme = Field(default=ChartTheme.DEFAULT, description="Chart theme")
+    title: Optional[ChartTitle] = Field(None, description="Title configuration")
+    font_family: FontFamily = Field(default=FontFamily.DEFAULT, description="Default font family")
+    font_size: int = Field(default=12, ge=8, le=72, description="Default font size")
+    background_color: str = Field(default="#FFFFFF", description="Chart background color")
+    plot_background_color: str = Field(default="#FFFFFF", description="Plot area background color")
+    margin: Optional[ChartMargin] = Field(None, description="Chart margins")
+    grid: Optional[ChartGrid] = Field(None, description="Grid configuration")
+    x_axis: Optional[ChartAxis] = Field(None, description="X-axis configuration")
+    y_axis: Optional[ChartAxis] = Field(None, description="Y-axis configuration")
+    legend: Optional[ChartLegend] = Field(None, description="Legend configuration")
+    annotations: List[ChartAnnotation] = Field(default=[], description="Chart annotations")
+    show_toolbar: bool = Field(default=True, description="Show Plotly toolbar")
+    show_tips: bool = Field(default=True, description="Show hover tips")
+    custom_css: Optional[str] = Field(None, description="Custom CSS styling")
+    custom_js: Optional[str] = Field(None, description="Custom JavaScript")
+
+
+class ChartTemplate(BaseModel):
+    """Chart template configuration"""
+    name: str = Field(..., description="Template name")
+    description: Optional[str] = Field(None, description="Template description")
+    chart_type: Optional[ChartType] = Field(None, description="Applicable chart type")
+    customization: ChartCustomization = Field(..., description="Customization settings")
+    preview_url: Optional[str] = Field(None, description="Template preview image URL")
+    created_by: Optional[str] = Field(None, description="Template creator")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
+    tags: List[str] = Field(default=[], description="Template tags")
+    is_public: bool = Field(default=True, description="Public template")
+
+
 class ChartData(BaseModel):
     """Chart data structure"""
     fields: List[DataField] = Field(..., description="Data fields")
@@ -138,7 +308,7 @@ class ChartConfig(BaseModel):
     color_field: Optional[str] = Field(None, description="Color grouping field")
     size_field: Optional[str] = Field(None, description="Size field for scatter plots")
     
-    # Styling options
+    # Basic styling options
     width: int = Field(default=800, description="Chart width in pixels")
     height: int = Field(default=600, description="Chart height in pixels")
     color_scheme: ColorScheme = Field(default=ColorScheme.DEFAULT, description="Color scheme")
@@ -156,6 +326,10 @@ class ChartConfig(BaseModel):
     # Aggregation options
     aggregation: Optional[AggregationType] = Field(None, description="Aggregation type")
     group_by: Optional[List[str]] = Field(None, description="Group by fields")
+    
+    # Advanced customization options
+    customization: Optional[ChartCustomization] = Field(None, description="Advanced chart customization")
+    template: Optional[str] = Field(None, description="Chart template name")
     
     # Specific chart options
     chart_options: Dict[str, Any] = Field(default={}, description="Chart-specific options")

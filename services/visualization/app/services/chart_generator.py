@@ -22,6 +22,7 @@ from ..models.chart import (
 )
 from ..core.logging import get_logger, log_chart_generation
 from ..core.config import settings
+from .chart_customization import ChartCustomizationService
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,9 @@ class ChartGenerator:
     def __init__(self):
         # Configure Plotly defaults
         pio.templates.default = "plotly_white"
+        
+        # Initialize customization service
+        self.customization_service = ChartCustomizationService()
         
         # Color schemes mapping
         self.color_schemes = {
@@ -77,8 +81,23 @@ class ChartGenerator:
             # Generate the chart based on type
             fig = self._generate_chart_by_type(df, config)
             
-            # Apply styling and configuration
+            # Apply basic styling and configuration
             fig = self._apply_styling(fig, config)
+            
+            # Apply advanced customization if provided
+            if config.customization or config.template:
+                customization = config.customization
+                
+                # Apply template if specified
+                if config.template:
+                    template = self.customization_service.get_template(config.template)
+                    if template:
+                        customization = template.customization
+                        logger.info("Applied chart template", template_name=config.template)
+                
+                # Apply customization
+                if customization:
+                    fig = self.customization_service.apply_customization(fig, config, customization)
             
             # Calculate generation time
             generation_time = time.time() - start_time
@@ -220,11 +239,16 @@ class ChartGenerator:
                     ))
             else:
                 # Single colored line
+                line_config = self._get_line_config(config)
+                marker_config = self._get_marker_config(config)
+                
                 fig.add_trace(go.Scatter(
                     x=x_data,
                     y=df[config.y_axis],
                     mode='lines+markers',
                     name=config.y_axis,
+                    line=line_config,
+                    marker=marker_config,
                     hovertemplate=f'{config.x_axis}: %{{x}}<br>' +
                                  f'{config.y_axis}: %{{y}}<br>' +
                                  '<extra></extra>'
@@ -763,3 +787,189 @@ class ChartGenerator:
         except Exception as e:
             logger.error("Chart export failed", format=format, error=str(e))
             raise ValueError(f"Export failed: {str(e)}")
+    
+    def _get_line_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get line configuration for line charts"""
+        line_config = {
+            "width": config.chart_options.get("line_width", 2),
+            "color": config.chart_options.get("line_color", self._get_color_palette(config.color_scheme, 1)[0])
+        }
+        
+        # Line style
+        line_style = config.chart_options.get("line_style", "solid")
+        if line_style != "solid":
+            dash_map = {
+                "dash": "dash",
+                "dot": "dot",
+                "dashdot": "dashdot"
+            }
+            if line_style in dash_map:
+                line_config["dash"] = dash_map[line_style]
+        
+        # Line smoothing
+        if config.chart_options.get("line_smoothing", False):
+            line_config["smoothing"] = config.chart_options.get("smoothing_factor", 1.3)
+        
+        return line_config
+    
+    def _get_marker_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get marker configuration for scatter and line charts"""
+        marker_config = {
+            "size": config.chart_options.get("marker_size", 6),
+            "color": config.chart_options.get("marker_color", self._get_color_palette(config.color_scheme, 1)[0]),
+            "opacity": config.chart_options.get("marker_opacity", 1.0)
+        }
+        
+        # Marker symbol
+        marker_symbol = config.chart_options.get("marker_symbol", "circle")
+        if marker_symbol != "circle":
+            marker_config["symbol"] = marker_symbol
+        
+        # Marker line (border)
+        if config.chart_options.get("marker_line_width", 0) > 0:
+            marker_config["line"] = {
+                "width": config.chart_options.get("marker_line_width", 0),
+                "color": config.chart_options.get("marker_line_color", "#000000")
+            }
+        
+        return marker_config
+    
+    def _get_bar_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get bar configuration for bar charts"""
+        bar_config = {}
+        
+        # Bar width
+        if "bar_width" in config.chart_options:
+            bar_config["width"] = config.chart_options["bar_width"]
+        
+        # Bar opacity
+        if "bar_opacity" in config.chart_options:
+            bar_config["opacity"] = config.chart_options["bar_opacity"]
+        
+        # Bar orientation
+        if config.chart_options.get("horizontal", False):
+            bar_config["orientation"] = "h"
+        
+        # Bar gap
+        if "bar_gap" in config.chart_options:
+            bar_config["gap"] = config.chart_options["bar_gap"]
+        
+        # Bar group gap
+        if "bar_group_gap" in config.chart_options:
+            bar_config["bargroupgap"] = config.chart_options["bar_group_gap"]
+        
+        return bar_config
+    
+    def _get_pie_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get pie chart configuration"""
+        pie_config = {}
+        
+        # Donut hole
+        if config.chart_options.get("donut", False):
+            pie_config["hole"] = config.chart_options.get("hole_size", 0.3)
+        
+        # Start angle
+        if "start_angle" in config.chart_options:
+            pie_config["startangle"] = config.chart_options["start_angle"]
+        
+        # Direction
+        if "direction" in config.chart_options:
+            pie_config["direction"] = config.chart_options["direction"]
+        
+        # Pull (explode) slices
+        if "pull_slices" in config.chart_options:
+            pie_config["pull"] = config.chart_options["pull_slices"]
+        
+        # Text position
+        if "text_position" in config.chart_options:
+            pie_config["textposition"] = config.chart_options["text_position"]
+        
+        # Text info
+        text_info = config.chart_options.get("text_info", "label+percent")
+        pie_config["textinfo"] = text_info
+        
+        return pie_config
+    
+    def _get_scatter_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get scatter plot configuration"""
+        scatter_config = {}
+        
+        # Bubble size reference
+        if config.size_field and "size_reference" in config.chart_options:
+            scatter_config["sizeref"] = config.chart_options["size_reference"]
+        
+        # Size mode
+        if "size_mode" in config.chart_options:
+            scatter_config["sizemode"] = config.chart_options["size_mode"]
+        
+        # Size minimum
+        if "size_min" in config.chart_options:
+            scatter_config["sizemin"] = config.chart_options["size_min"]
+        
+        # Color scale
+        if "color_scale" in config.chart_options:
+            scatter_config["colorscale"] = config.chart_options["color_scale"]
+        
+        # Show color bar
+        if config.chart_options.get("show_colorbar", True) and config.color_field:
+            scatter_config["showscale"] = True
+        
+        return scatter_config
+    
+    def _get_histogram_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get histogram configuration"""
+        histogram_config = {}
+        
+        # Number of bins
+        if "bins" in config.chart_options:
+            histogram_config["nbinsx"] = config.chart_options["bins"]
+        
+        # Bin size
+        if "bin_size" in config.chart_options:
+            histogram_config["xbins"] = {"size": config.chart_options["bin_size"]}
+        
+        # Histogram function
+        if "hist_func" in config.chart_options:
+            histogram_config["histfunc"] = config.chart_options["hist_func"]
+        
+        # Histogram norm
+        if "hist_norm" in config.chart_options:
+            histogram_config["histnorm"] = config.chart_options["hist_norm"]
+        
+        # Cumulative
+        if config.chart_options.get("cumulative", False):
+            histogram_config["cumulative"] = {"enabled": True}
+        
+        return histogram_config
+    
+    def _get_heatmap_config(self, config: ChartConfig) -> Dict[str, Any]:
+        """Get heatmap configuration"""
+        heatmap_config = {}
+        
+        # Color scale
+        if "color_scale" in config.chart_options:
+            heatmap_config["colorscale"] = config.chart_options["color_scale"]
+        
+        # Show scale
+        if "show_scale" in config.chart_options:
+            heatmap_config["showscale"] = config.chart_options["show_scale"]
+        
+        # Z minimum and maximum
+        if "z_min" in config.chart_options:
+            heatmap_config["zmin"] = config.chart_options["z_min"]
+        if "z_max" in config.chart_options:
+            heatmap_config["zmax"] = config.chart_options["z_max"]
+        
+        # Z auto scaling
+        if "z_auto" in config.chart_options:
+            heatmap_config["zauto"] = config.chart_options["z_auto"]
+        
+        # Color bar
+        if "colorbar" in config.chart_options:
+            heatmap_config["colorbar"] = config.chart_options["colorbar"]
+        
+        return heatmap_config
+    
+    def get_customization_service(self) -> ChartCustomizationService:
+        """Get the customization service instance"""
+        return self.customization_service

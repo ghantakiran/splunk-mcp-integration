@@ -17,7 +17,8 @@ from ...models.chart import (
     ChartConfig, ChartType, Dashboard, DashboardPanel, ExportFormat,
     ChartFilter, ChartSelection, DrillDownConfig, InteractionEvent,
     ChartInteractiveConfig, InteractiveChartResponse, InteractionType,
-    FilterOperation, SelectionMode
+    FilterOperation, SelectionMode, ChartCustomization, ChartTemplate,
+    ChartTheme, FontFamily, ColorScheme, LegendPosition
 )
 from ...services.chart_selector import ChartTypeSelector
 from ...services.chart_generator import ChartGenerator
@@ -680,7 +681,267 @@ async def health_check() -> Dict[str, Any]:
                 "lasso_selection": True,
                 "zoom_pan": True,
                 "linked_charts": True
+            },
+            "customization_features": {
+                "themes": True,
+                "fonts": True,
+                "colors": True,
+                "templates": True,
+                "annotations": True,
+                "axis_customization": True,
+                "legend_customization": True
             }
         },
         "timestamp": time.time()
     }
+
+
+# Chart Customization Endpoints
+
+@router.post("/charts/customize", response_model=ChartResponse)
+async def customize_chart(
+    chart_data: ChartData,
+    config: ChartConfig,
+    customization: ChartCustomization,
+    chart_id: Optional[str] = Query(None, description="Chart identifier")
+) -> ChartResponse:
+    """
+    Generate a chart with advanced customization options
+    
+    Creates a chart with comprehensive customization including:
+    - Theme and color scheme configuration
+    - Font and typography customization
+    - Axis, legend, and grid styling
+    - Custom annotations and styling
+    """
+    try:
+        logger.info("Customized chart generation request",
+                   chart_type=config.chart_type,
+                   theme=customization.theme,
+                   font_family=customization.font_family)
+        
+        # Apply customization to config
+        config.customization = customization
+        
+        # Generate the chart
+        response = chart_generator.generate_chart(
+            data=chart_data,
+            config=config,
+            chart_id=chart_id
+        )
+        
+        logger.info("Customized chart created successfully",
+                   chart_id=response.chart_id,
+                   generation_time=response.generation_time)
+        
+        return response
+        
+    except Exception as e:
+        logger.error("Customized chart generation failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Customized chart generation failed: {str(e)}")
+
+
+@router.get("/charts/templates", response_model=List[ChartTemplate])
+async def get_chart_templates() -> List[ChartTemplate]:
+    """
+    Get available chart templates
+    
+    Returns a list of predefined chart templates with their
+    customization settings and metadata.
+    """
+    try:
+        customization_service = chart_generator.get_customization_service()
+        templates = customization_service.list_templates()
+        
+        logger.info("Chart templates retrieved",
+                   template_count=len(templates))
+        
+        return templates
+        
+    except Exception as e:
+        logger.error("Failed to retrieve chart templates",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve templates: {str(e)}")
+
+
+@router.get("/charts/templates/{template_name}", response_model=ChartTemplate)
+async def get_chart_template(template_name: str) -> ChartTemplate:
+    """
+    Get a specific chart template by name
+    
+    Returns the template configuration and metadata
+    for the specified template name.
+    """
+    try:
+        customization_service = chart_generator.get_customization_service()
+        template = customization_service.get_template(template_name)
+        
+        if not template:
+            raise HTTPException(status_code=404, detail=f"Template '{template_name}' not found")
+        
+        logger.info("Chart template retrieved",
+                   template_name=template_name)
+        
+        return template
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to retrieve chart template",
+                    template_name=template_name,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve template: {str(e)}")
+
+
+@router.post("/charts/templates", response_model=ChartTemplate)
+async def create_chart_template(template: ChartTemplate) -> ChartTemplate:
+    """
+    Create a new chart template
+    
+    Creates a new chart template with the specified
+    customization settings and metadata.
+    """
+    try:
+        customization_service = chart_generator.get_customization_service()
+        
+        # Validate customization
+        warnings = customization_service.validate_customization(template.customization)
+        if warnings:
+            logger.warning("Template validation warnings",
+                          template_name=template.name,
+                          warnings=warnings)
+        
+        created_template = customization_service.create_template(template)
+        
+        logger.info("Chart template created",
+                   template_name=template.name,
+                   template_description=template.description)
+        
+        return created_template
+        
+    except Exception as e:
+        logger.error("Failed to create chart template",
+                    template_name=template.name,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create template: {str(e)}")
+
+
+@router.post("/charts/from-template", response_model=ChartResponse)
+async def create_chart_from_template(
+    chart_data: ChartData,
+    config: ChartConfig,
+    template_name: str,
+    chart_id: Optional[str] = Query(None, description="Chart identifier")
+) -> ChartResponse:
+    """
+    Create a chart using a predefined template
+    
+    Generates a chart using the specified template's
+    customization settings applied to the given data and config.
+    """
+    try:
+        customization_service = chart_generator.get_customization_service()
+        template = customization_service.get_template(template_name)
+        
+        if not template:
+            raise HTTPException(status_code=404, detail=f"Template '{template_name}' not found")
+        
+        logger.info("Chart generation from template",
+                   template_name=template_name,
+                   chart_type=config.chart_type)
+        
+        # Apply template to config
+        config.template = template_name
+        
+        # Generate the chart
+        response = chart_generator.generate_chart(
+            data=chart_data,
+            config=config,
+            chart_id=chart_id
+        )
+        
+        logger.info("Chart created from template successfully",
+                   chart_id=response.chart_id,
+                   template_name=template_name,
+                   generation_time=response.generation_time)
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to create chart from template",
+                    template_name=template_name,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create chart from template: {str(e)}")
+
+
+@router.post("/charts/customization/validate")
+async def validate_chart_customization(customization: ChartCustomization) -> Dict[str, Any]:
+    """
+    Validate chart customization configuration
+    
+    Validates the provided customization configuration and
+    returns any warnings or validation errors.
+    """
+    try:
+        customization_service = chart_generator.get_customization_service()
+        warnings = customization_service.validate_customization(customization)
+        
+        return {
+            "valid": len(warnings) == 0,
+            "warnings": warnings,
+            "customization_summary": {
+                "theme": customization.theme,
+                "font_family": customization.font_family,
+                "font_size": customization.font_size,
+                "has_title": customization.title is not None,
+                "has_legend": customization.legend is not None,
+                "has_grid": customization.grid is not None,
+                "has_annotations": len(customization.annotations) > 0,
+                "has_custom_axes": customization.x_axis is not None or customization.y_axis is not None
+            }
+        }
+        
+    except Exception as e:
+        logger.error("Failed to validate customization",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to validate customization: {str(e)}")
+
+
+@router.get("/charts/customization/options")
+async def get_customization_options() -> Dict[str, Any]:
+    """
+    Get available customization options
+    
+    Returns comprehensive information about available
+    customization options including themes, fonts, colors, etc.
+    """
+    try:
+        customization_service = chart_generator.get_customization_service()
+        
+        return {
+            "themes": [theme.value for theme in ChartTheme],
+            "font_families": [font.value for font in FontFamily],
+            "color_schemes": [scheme.value for scheme in ColorScheme],
+            "legend_positions": [pos.value for pos in LegendPosition],
+            "theme_configs": customization_service.theme_configs,
+            "color_palettes": {
+                scheme.value: customization_service.get_color_palette(scheme, 10)
+                for scheme in ColorScheme
+            },
+            "default_templates": [template.name for template in customization_service.list_templates()]
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get customization options",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get customization options: {str(e)}")
