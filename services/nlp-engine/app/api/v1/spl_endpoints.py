@@ -18,12 +18,14 @@ from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, Look
 from ...ai.eval_calculated_fields import eval_calculated_fields_mapper, EvalFunctionType, ExpressionComplexity
 from ...ai.query_performance_analysis import query_performance_analyzer, PerformanceLevel, OptimizationType, BottleneckType
 from ...ai.index_selection_optimization import index_selection_optimizer, IndexSelectionStrategy, IndexCategory, IndexOptimizationLevel
+from ...ai.time_range_optimization import TimeRangeOptimizer, TimeOptimizationStrategy, TimeRangeType, TimeRangeRecommendationLevel
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
 
 logger = get_logger(__name__)
 router = APIRouter()
 nlp_service = NLPService()
+time_range_optimizer = TimeRangeOptimizer()
 
 
 # Request/Response Models
@@ -3600,3 +3602,300 @@ async def get_index_optimization_documentation() -> IndexOptimizationDocumentati
                 status_code=500,
                 detail=f"Failed to get index optimization documentation: {str(e)}"
             )
+
+
+# ===== TIME RANGE OPTIMIZATION ENDPOINTS =====
+
+class TimeRangeOptimizationRequest(BaseModel):
+    """Request for time range optimization analysis"""
+    spl_query: str = Field(..., description="SPL query to analyze for time range optimization", min_length=1)
+    natural_query: Optional[str] = Field(None, description="Original natural language query")
+    context: Optional[Dict[str, Any]] = Field(None, description="Query context information")
+    optimization_strategy: Optional[str] = Field("balanced", description="Optimization strategy to apply")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "spl_query": "search failed login | stats count by user",
+                "natural_query": "Show me failed login attempts",
+                "context": {
+                    "data_type": "security",
+                    "user_intent": "investigation",
+                    "environment": "production"
+                },
+                "optimization_strategy": "balanced"
+            }
+        }
+
+
+class TimeRangeOptimizationResponse(BaseModel):
+    """Response for time range optimization analysis"""
+    original_spl: str = Field(..., description="Original SPL query")
+    optimized_spl: str = Field(..., description="Time range optimized SPL query")
+    detected_time_range: Optional[Dict[str, Any]] = Field(None, description="Detected time range information")
+    recommendations: List[Dict[str, Any]] = Field(..., description="Time range optimization recommendations")
+    primary_recommendation: Dict[str, Any] = Field(..., description="Primary optimization recommendation")
+    performance_analysis: Dict[str, Any] = Field(..., description="Performance impact analysis")
+    optimization_summary: Dict[str, Any] = Field(..., description="Optimization summary")
+
+
+class TimeRangeValidationRequest(BaseModel):
+    """Request for time range validation"""
+    time_range_expression: str = Field(..., description="Time range expression to validate", min_length=1)
+    context: Optional[Dict[str, Any]] = Field(None, description="Validation context")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "time_range_expression": "earliest=-24h@h latest=now",
+                "context": {
+                    "data_type": "security",
+                    "query_type": "investigation"
+                }
+            }
+        }
+
+
+class TimeRangeValidationResponse(BaseModel):
+    """Response for time range validation"""
+    valid: bool = Field(..., description="Whether the time range expression is valid")
+    parsed_range: Optional[Dict[str, Any]] = Field(None, description="Parsed time range information")
+    errors: List[str] = Field(default_factory=list, description="Validation errors")
+    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
+    suggestions: List[str] = Field(default_factory=list, description="Optimization suggestions")
+    performance_impact: Optional[str] = Field(None, description="Expected performance impact")
+
+
+@router.post("/time-range/optimize", response_model=TimeRangeOptimizationResponse, tags=["Time Range Optimization"])
+async def optimize_time_range(request: TimeRangeOptimizationRequest) -> TimeRangeOptimizationResponse:
+    """
+    Analyze and optimize time range for SPL query
+    
+    Perform comprehensive time range optimization analysis including:
+    - Time range detection and parsing from SPL query
+    - Performance impact analysis and optimization recommendations
+    - Context-aware time range suggestions based on data type and user intent
+    - Optimization strategy application for improved query performance
+    """
+    with LogContext(endpoint="optimize_time_range", spl_query=request.spl_query):
+        try:
+            logger.info("Starting time range optimization analysis")
+            
+            # Perform time range optimization analysis
+            analysis = time_range_optimizer.analyze_time_range_optimization(
+                spl_query=request.spl_query,
+                natural_query=request.natural_query,
+                context=request.context
+            )
+            
+            # Convert detected time range to response format
+            detected_range = None
+            if analysis.detected_time_range:
+                detected_range = {
+                    "original_text": analysis.detected_time_range.original_text,
+                    "range_type": analysis.detected_time_range.range_type.value,
+                    "earliest": analysis.detected_time_range.earliest,
+                    "latest": analysis.detected_time_range.latest,
+                    "duration": analysis.detected_time_range.duration,
+                    "confidence": analysis.detected_time_range.confidence
+                }
+            
+            # Convert recommendations to response format
+            recommendations = []
+            for rec in analysis.recommendations:
+                recommendations.append({
+                    "recommended_spl": rec.recommended_spl,
+                    "strategy": rec.strategy.value,
+                    "confidence_level": rec.confidence_level.value,
+                    "performance_improvement": rec.performance_improvement,
+                    "reasoning": rec.reasoning,
+                    "trade_offs": rec.trade_offs,
+                    "alternative_ranges": rec.alternative_ranges,
+                    "implementation_notes": rec.implementation_notes
+                })
+            
+            # Primary recommendation
+            primary_rec = {
+                "recommended_spl": analysis.primary_recommendation.recommended_spl,
+                "strategy": analysis.primary_recommendation.strategy.value,
+                "confidence_level": analysis.primary_recommendation.confidence_level.value,
+                "performance_improvement": analysis.primary_recommendation.performance_improvement,
+                "reasoning": analysis.primary_recommendation.reasoning,
+                "trade_offs": analysis.primary_recommendation.trade_offs
+            }
+            
+            # Performance analysis
+            performance_analysis = {
+                "current_metrics": {
+                    "estimated_data_volume": analysis.current_metrics.estimated_data_volume,
+                    "estimated_execution_time": analysis.current_metrics.estimated_execution_time,
+                    "performance_impact": analysis.current_metrics.performance_impact,
+                    "optimization_score": analysis.current_metrics.optimization_score
+                },
+                "optimized_metrics": {
+                    "estimated_data_volume": analysis.optimized_metrics.estimated_data_volume,
+                    "estimated_execution_time": analysis.optimized_metrics.estimated_execution_time,
+                    "performance_impact": analysis.optimized_metrics.performance_impact,
+                    "optimization_score": analysis.optimized_metrics.optimization_score
+                }
+            }
+            
+            logger.info("Time range optimization analysis completed successfully")
+            
+            return TimeRangeOptimizationResponse(
+                original_spl=analysis.original_spl,
+                optimized_spl=analysis.primary_recommendation.recommended_spl,
+                detected_time_range=detected_range,
+                recommendations=recommendations,
+                primary_recommendation=primary_rec,
+                performance_analysis=performance_analysis,
+                optimization_summary=analysis.optimization_summary
+            )
+            
+        except Exception as e:
+            logger.error(f"Time range optimization failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Time range optimization failed: {str(e)}"
+            )
+
+
+@router.post("/time-range/validate", response_model=TimeRangeValidationResponse, tags=["Time Range Optimization"])
+async def validate_time_range(request: TimeRangeValidationRequest) -> TimeRangeValidationResponse:
+    """
+    Validate time range expression for SPL queries
+    
+    Validate time range syntax, parse time expressions, and provide
+    optimization suggestions for better performance.
+    """
+    with LogContext(endpoint="validate_time_range", time_range=request.time_range_expression):
+        try:
+            logger.info("Starting time range validation")
+            
+            # Validate time range expression
+            validation_result = time_range_optimizer.validate_time_range_expression(
+                request.time_range_expression,
+                context=request.context
+            )
+            
+            # Convert parsed range to response format
+            parsed_range = None
+            if validation_result.get("parsed_range"):
+                parsed_range = {
+                    "range_type": validation_result["parsed_range"].range_type.value,
+                    "earliest": validation_result["parsed_range"].earliest,
+                    "latest": validation_result["parsed_range"].latest,
+                    "duration": validation_result["parsed_range"].duration,
+                    "confidence": validation_result["parsed_range"].confidence
+                }
+            
+            logger.info("Time range validation completed successfully")
+            
+            return TimeRangeValidationResponse(
+                valid=validation_result["valid"],
+                parsed_range=parsed_range,
+                errors=validation_result.get("errors", []),
+                warnings=validation_result.get("warnings", []),
+                suggestions=validation_result.get("suggestions", []),
+                performance_impact=validation_result.get("performance_impact")
+            )
+            
+        except Exception as e:
+            logger.error(f"Time range validation failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Time range validation failed: {str(e)}"
+            )
+
+
+@router.get("/time-range/strategies", tags=["Time Range Optimization"])
+async def get_time_range_strategies() -> Dict[str, Any]:
+    """
+    Get available time range optimization strategies
+    
+    Retrieve information about different time range optimization strategies
+    and their characteristics for various use cases.
+    """
+    try:
+        logger.info("Retrieving time range optimization strategies")
+        
+        return {
+            "optimization_strategies": {
+                "minimal": {
+                    "name": "Minimal",
+                    "description": "Use smallest effective time range for maximum performance",
+                    "use_cases": ["Real-time monitoring", "Live dashboards", "Alerting"],
+                    "performance_impact": "excellent",
+                    "data_coverage": "focused"
+                },
+                "balanced": {
+                    "name": "Balanced", 
+                    "description": "Balance between performance and data coverage",
+                    "use_cases": ["Standard reporting", "Investigation", "Analysis"],
+                    "performance_impact": "good",
+                    "data_coverage": "comprehensive"
+                },
+                "comprehensive": {
+                    "name": "Comprehensive",
+                    "description": "Prioritize complete data coverage over performance",
+                    "use_cases": ["Historical analysis", "Compliance reporting", "Forensics"],
+                    "performance_impact": "moderate",
+                    "data_coverage": "complete"
+                },
+                "performance_first": {
+                    "name": "Performance First",
+                    "description": "Optimize for fastest possible execution",
+                    "use_cases": ["High-frequency queries", "Interactive exploration", "Resource-constrained environments"],
+                    "performance_impact": "excellent",
+                    "data_coverage": "optimized"
+                },
+                "accuracy_first": {
+                    "name": "Accuracy First",
+                    "description": "Ensure complete and accurate data coverage",
+                    "use_cases": ["Audit trails", "Regulatory compliance", "Critical business metrics"],
+                    "performance_impact": "moderate",
+                    "data_coverage": "complete"
+                },
+                "adaptive": {
+                    "name": "Adaptive",
+                    "description": "Adapt strategy based on query patterns and historical data",
+                    "use_cases": ["Mixed workloads", "Dynamic environments", "Machine learning optimization"],
+                    "performance_impact": "variable",
+                    "data_coverage": "adaptive"
+                }
+            },
+            "data_type_guidelines": {
+                "security": {
+                    "typical_range": "24h",
+                    "max_efficient": "7d",
+                    "recommended_strategy": "balanced"
+                },
+                "web": {
+                    "typical_range": "4h",
+                    "max_efficient": "24h", 
+                    "recommended_strategy": "performance_first"
+                },
+                "application": {
+                    "typical_range": "6h",
+                    "max_efficient": "48h",
+                    "recommended_strategy": "balanced"
+                },
+                "network": {
+                    "typical_range": "1h",
+                    "max_efficient": "12h",
+                    "recommended_strategy": "minimal"
+                },
+                "system": {
+                    "typical_range": "2h",
+                    "max_efficient": "24h",
+                    "recommended_strategy": "performance_first"
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get time range strategies: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve time range strategies: {str(e)}"
+        )
