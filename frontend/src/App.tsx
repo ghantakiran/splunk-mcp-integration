@@ -1,55 +1,152 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import { Container, Typography, Box, Paper } from '@mui/material';
+import { CssBaseline, Box } from '@mui/material';
+import { Provider } from 'react-redux';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+import { store } from './store';
+import { useAuth } from './hooks/useAuth';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
+import Login from './components/Auth/Login';
+import ChatInterface from './components/Chat/ChatInterface';
+import Dashboard from './components/Dashboard/Dashboard';
+import Layout from './components/Layout/Layout';
 
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
       main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
     },
     secondary: {
       main: '#dc004e',
+      light: '#ff5983',
+      dark: '#9a0036',
+    },
+    background: {
+      default: '#fafafa',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    h1: {
+      fontWeight: 600,
+    },
+    h2: {
+      fontWeight: 600,
+    },
+    h3: {
+      fontWeight: 600,
+    },
+    h4: {
+      fontWeight: 600,
+    },
+    h5: {
+      fontWeight: 600,
+    },
+    h6: {
+      fontWeight: 600,
+    },
+  },
+  shape: {
+    borderRadius: 8,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 600,
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+        },
+      },
     },
   },
 });
 
-function App() {
+const AppContent: React.FC = () => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+        }}
+      >
+        Loading...
+      </Box>
+    );
+  }
+
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Container maxWidth="lg">
-        <Box sx={{ my: 4 }}>
-          <Typography variant="h2" component="h1" gutterBottom align="center">
-            Splunk MCP Integration
-          </Typography>
-          <Paper elevation={3} sx={{ p: 4, mt: 4 }}>
-            <Typography variant="h4" component="h2" gutterBottom>
-              Welcome to Splunk MCP Integration
-            </Typography>
-            <Typography variant="body1" paragraph>
-              Transform your Splunk Enterprise into an intelligent, conversational analytics platform. 
-              Chat with your data in natural language and get instant insights.
-            </Typography>
-            <Typography variant="h6" component="h3" gutterBottom sx={{ mt: 3 }}>
-              Key Features:
-            </Typography>
-            <ul>
-              <li>Natural Language Queries - Ask questions about your data in plain English</li>
-              <li>Intelligent SPL Translation - Automatic conversion from natural language to Splunk SPL</li>
-              <li>Interactive Dashboards - Create sophisticated dashboards without learning complex syntax</li>
-              <li>Smart Alerts - Set up intelligent alerts through natural conversation</li>
-              <li>Enterprise Security - Full RBAC integration and compliance with existing security policies</li>
-            </ul>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
-              Status: Development Environment - Services Starting...
-            </Typography>
-          </Paper>
-        </Box>
-      </Container>
-    </ThemeProvider>
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? <Navigate to="/chat" replace /> : <Login />
+          }
+        />
+
+        {/* Protected Routes */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="/chat" replace />} />
+          <Route path="chat" element={<ChatInterface />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="dashboards/:id" element={<Dashboard />} />
+        </Route>
+
+        {/* Catch all route */}
+        <Route path="*" element={<Navigate to="/chat" replace />} />
+      </Routes>
+    </Router>
   );
-}
+};
+
+const App: React.FC = () => {
+  return (
+    <Provider store={store}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AppContent />
+        <ToastContainer
+          position="top-right"
+          autoClose={5000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="light"
+        />
+      </ThemeProvider>
+    </Provider>
+  );
+};
 
 export default App;
