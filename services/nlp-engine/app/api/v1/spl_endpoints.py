@@ -14,7 +14,7 @@ from ...ai.query_constructor import QueryComplexity
 from ...ai.advanced_aggregation import advanced_aggregation_handler, AggregationFunction, AggregationType
 from ...ai.statistical_functions import statistical_function_mapper, StatisticalFunction, StatisticalCategory
 from ...ai.regex_pattern_matching import regex_pattern_mapper, PatternType, RegexCommand, RegexComplexity
-from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, LookupMatchType
+from ...ai.lookup_table_integration import lookup_table_mapper, LookupType, LookupOperationType, LookupMatchType
 from ...ai.eval_calculated_fields import eval_calculated_fields_mapper, EvalFunctionType, ExpressionComplexity
 from ...ai.query_performance_analysis import query_performance_analyzer, PerformanceLevel, OptimizationType, BottleneckType
 from ...ai.index_selection_optimization import index_selection_optimizer, IndexSelectionStrategy, IndexCategory, IndexOptimizationLevel

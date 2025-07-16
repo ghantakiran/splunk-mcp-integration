@@ -33,7 +33,7 @@ class LookupType(Enum):
     TEMPORAL_LOOKUP = "temporal"        # Time-based lookup
 
 
-class LookupOperation(Enum):
+class LookupOperationType(Enum):
     """Lookup operations supported"""
     ENRICH = "enrich"                  # Add fields from lookup
     REPLACE = "replace"                # Replace field values
@@ -86,7 +86,7 @@ class LookupTable:
 @dataclass
 class LookupOperation:
     """Lookup operation specification"""
-    operation_type: LookupOperation
+    operation_type: LookupOperationType
     lookup_table: LookupTable
     source_fields: List[str]
     target_fields: List[str] = field(default_factory=list)
@@ -322,31 +322,31 @@ class LookupTableMapper:
             "user_lookup": {
                 "pattern": r"(?:get|find|lookup|show).*(?:user|username|employee).*(?:information|details|data)",
                 "lookup_table": "users",
-                "operation": LookupOperation.ENRICH,
+                "operation": LookupOperationType.ENRICH,
                 "description": "Lookup user information"
             },
             "host_lookup": {
                 "pattern": r"(?:get|find|lookup|show).*(?:host|server|machine).*(?:information|details|data)",
                 "lookup_table": "hosts",
-                "operation": LookupOperation.ENRICH,
+                "operation": LookupOperationType.ENRICH,
                 "description": "Lookup host information"
             },
             "geo_lookup": {
                 "pattern": r"(?:get|find|lookup|show).*(?:location|geographic|geo|country|city).*(?:information|data)",
                 "lookup_table": "geoip",
-                "operation": LookupOperation.ENRICH,
+                "operation": LookupOperationType.ENRICH,
                 "description": "Geographic IP lookup"
             },
             "status_lookup": {
                 "pattern": r"(?:get|find|lookup|show).*(?:status|response|http).*(?:code|description|meaning)",
                 "lookup_table": "http_status",
-                "operation": LookupOperation.ENRICH,
+                "operation": LookupOperationType.ENRICH,
                 "description": "HTTP status code lookup"
             },
             "threat_lookup": {
                 "pattern": r"(?:check|lookup|find|identify).*(?:threat|malware|malicious|suspicious).*(?:indicators|intelligence|data)",
                 "lookup_table": "threat_intel",
-                "operation": LookupOperation.ENRICH,
+                "operation": LookupOperationType.ENRICH,
                 "description": "Threat intelligence lookup"
             }
         }
@@ -384,7 +384,7 @@ class LookupTableMapper:
                 lookup_table = self._find_lookup_table(field_name, lookup_name)
                 if lookup_table:
                     lookup_op = LookupOperation(
-                        operation_type=LookupOperation.ENRICH,
+                        operation_type=LookupOperationType.ENRICH,
                         lookup_table=lookup_table,
                         source_fields=[self._normalize_field_name(field_name)],
                         target_fields=lookup_table.output_fields[:3],
@@ -432,7 +432,7 @@ class LookupTableMapper:
                     lookup_table = self.predefined_lookups.get(enrichment_info["lookup_table"])
                     if lookup_table:
                         lookup_op = LookupOperation(
-                            operation_type=LookupOperation.ENRICH,
+                            operation_type=LookupOperationType.ENRICH,
                             lookup_table=lookup_table,
                             source_fields=[source_field],
                             target_fields=enrichment_info["common_outputs"],
@@ -548,7 +548,7 @@ class LookupTableMapper:
         
         where_clause = " AND ".join(where_conditions) if where_conditions else ""
         
-        if lookup_operation.operation_type == LookupOperation.ENRICH:
+        if lookup_operation.operation_type == LookupOperationType.ENRICH:
             # Use join for enrichment
             return f"join {' '.join(lookup_operation.source_fields)} [| inputlookup {collection_name}" + \
                    (f" | where {where_clause}" if where_clause else "") + "]"
