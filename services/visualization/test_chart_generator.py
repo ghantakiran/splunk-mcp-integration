@@ -505,6 +505,180 @@ class TestChartGenerator:
         assert summary['categorical_fields'] == ['category']
         assert summary['numerical_fields'] == ['value']
         assert summary['temporal_fields'] == ['date']
+    
+    def test_sankey_chart_generation(self):
+        """Test Sankey diagram generation with flow data"""
+        fields = [
+            {'name': 'source', 'data_type': DataType.CATEGORICAL, 'unique_count': 4},
+            {'name': 'target', 'data_type': DataType.CATEGORICAL, 'unique_count': 4},
+            {'name': 'value', 'data_type': DataType.NUMERICAL, 'unique_count': 8}
+        ]
+        
+        rows = [
+            {'source': 'A', 'target': 'X', 'value': 100},
+            {'source': 'A', 'target': 'Y', 'value': 50},
+            {'source': 'B', 'target': 'X', 'value': 75},
+            {'source': 'B', 'target': 'Z', 'value': 25},
+            {'source': 'C', 'target': 'Y', 'value': 40},
+            {'source': 'C', 'target': 'Z', 'value': 60},
+            {'source': 'D', 'target': 'X', 'value': 30},
+            {'source': 'D', 'target': 'Z', 'value': 90}
+        ]
+        
+        data = self.create_test_data(fields, rows)
+        config = ChartConfig(
+            chart_type=ChartType.SANKEY,
+            title="Process Flow Analysis",
+            x_axis='source',
+            y_axis='target',
+            color_field='value',
+            color_scheme=ColorScheme.DEFAULT
+        )
+        
+        response = self.generator.generate_chart(data, config)
+        
+        # Validate response
+        assert response.chart_type == ChartType.SANKEY
+        assert response.generation_time > 0
+        assert response.data_summary['total_rows'] == 8
+        
+        # Validate the Plotly figure
+        fig = go.Figure.from_json(response.plotly_json)
+        assert len(fig.data) > 0
+        assert fig.data[0].type == 'sankey'
+        assert 'node' in fig.data[0]
+        assert 'link' in fig.data[0]
+        
+        # Check that we have the correct number of unique nodes
+        all_sources = [row['source'] for row in rows]
+        all_targets = [row['target'] for row in rows]
+        unique_nodes = len(set(all_sources + all_targets))
+        assert len(fig.data[0].node.label) == unique_nodes
+    
+    def test_gauge_chart_generation(self):
+        """Test gauge chart generation with KPI data"""
+        fields = [
+            {'name': 'performance_score', 'data_type': DataType.NUMERICAL, 'unique_count': 1}
+        ]
+        
+        rows = [
+            {'performance_score': 85.5}
+        ]
+        
+        data = self.create_test_data(fields, rows)
+        config = ChartConfig(
+            chart_type=ChartType.GAUGE,
+            title="Performance KPI",
+            y_axis='performance_score',
+            chart_options={
+                'min': 0,
+                'max': 100,
+                'threshold_1': 70,
+                'threshold_2': 85,
+                'reference': 80
+            }
+        )
+        
+        response = self.generator.generate_chart(data, config)
+        
+        # Validate response
+        assert response.chart_type == ChartType.GAUGE
+        assert response.generation_time > 0
+        assert response.data_summary['total_rows'] == 1
+        
+        # Validate the Plotly figure
+        fig = go.Figure.from_json(response.plotly_json)
+        assert len(fig.data) > 0
+        assert fig.data[0].type == 'indicator'
+        assert fig.data[0].mode == 'gauge+number+delta'
+        assert fig.data[0].value == 85.5
+    
+    def test_gauge_chart_with_multiple_values(self):
+        """Test gauge chart with multiple values (should use mean)"""
+        fields = [
+            {'name': 'efficiency', 'data_type': DataType.NUMERICAL, 'unique_count': 3},
+            {'name': 'department', 'data_type': DataType.CATEGORICAL, 'unique_count': 3}
+        ]
+        
+        rows = [
+            {'efficiency': 75, 'department': 'Sales'},
+            {'efficiency': 85, 'department': 'Marketing'},
+            {'efficiency': 95, 'department': 'Engineering'}
+        ]
+        
+        data = self.create_test_data(fields, rows)
+        config = ChartConfig(
+            chart_type=ChartType.GAUGE,
+            title="Average Department Efficiency",
+            y_axis='efficiency',
+            chart_options={
+                'min': 0,
+                'max': 100,
+                'threshold_1': 70,
+                'threshold_2': 85
+            }
+        )
+        
+        response = self.generator.generate_chart(data, config)
+        
+        # Validate response
+        assert response.chart_type == ChartType.GAUGE
+        assert response.generation_time > 0
+        
+        # Validate the Plotly figure
+        fig = go.Figure.from_json(response.plotly_json)
+        assert len(fig.data) > 0
+        assert fig.data[0].type == 'indicator'
+        
+        # Check that it uses the mean of the values (75 + 85 + 95) / 3 = 85
+        expected_mean = (75 + 85 + 95) / 3
+        assert abs(fig.data[0].value - expected_mean) < 0.01
+    
+    def test_sankey_error_handling(self):
+        """Test error handling for invalid Sankey configuration"""
+        fields = [
+            {'name': 'category', 'data_type': DataType.CATEGORICAL, 'unique_count': 3},
+            {'name': 'value', 'data_type': DataType.NUMERICAL, 'unique_count': 3}
+        ]
+        
+        rows = [
+            {'category': 'A', 'value': 10},
+            {'category': 'B', 'value': 20},
+            {'category': 'C', 'value': 15}
+        ]
+        
+        data = self.create_test_data(fields, rows)
+        
+        # Test missing required fields for Sankey
+        with pytest.raises(ValueError, match="Sankey diagram requires source, target, and value columns"):
+            config = ChartConfig(
+                chart_type=ChartType.SANKEY,
+                x_axis='category',
+                # Missing y_axis (target) and color_field (value)
+            )
+            self.generator.generate_chart(data, config)
+    
+    def test_gauge_error_handling(self):
+        """Test error handling for invalid Gauge configuration"""
+        fields = [
+            {'name': 'category', 'data_type': DataType.CATEGORICAL, 'unique_count': 3}
+        ]
+        
+        rows = [
+            {'category': 'A'},
+            {'category': 'B'},
+            {'category': 'C'}
+        ]
+        
+        data = self.create_test_data(fields, rows)
+        
+        # Test missing required value field for Gauge
+        with pytest.raises(ValueError, match="Gauge chart requires a value column"):
+            config = ChartConfig(
+                chart_type=ChartType.GAUGE,
+                # Missing y_axis (value column)
+            )
+            self.generator.generate_chart(data, config)
 
 
 def test_chart_generator_integration():

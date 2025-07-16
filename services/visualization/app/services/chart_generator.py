@@ -165,6 +165,8 @@ class ChartGenerator:
             ChartType.HISTOGRAM: self._generate_histogram,
             ChartType.HEATMAP: self._generate_heatmap,
             ChartType.TREEMAP: self._generate_treemap,
+            ChartType.SANKEY: self._generate_sankey_chart,
+            ChartType.GAUGE: self._generate_gauge_chart,
             ChartType.TABLE: self._generate_table
         }
         
@@ -488,6 +490,118 @@ class ChartGenerator:
                          'Value: %{value}<br>' +
                          'Percentage: %{percentParent}<br>' +
                          '<extra></extra>'
+        ))
+        
+        return fig
+    
+    def _generate_sankey_chart(
+        self, 
+        df: pd.DataFrame, 
+        config: ChartConfig
+    ) -> go.Figure:
+        """Generate sankey diagram for flow visualization"""
+        source_col = config.x_axis
+        target_col = config.y_axis if isinstance(config.y_axis, str) else config.y_axis[0]
+        value_col = config.color_field
+        
+        if not all([source_col, target_col, value_col]):
+            raise ValueError("Sankey diagram requires source, target, and value columns")
+        
+        # Prepare data for Sankey
+        # Get unique nodes (sources and targets)
+        sources = df[source_col].unique().tolist()
+        targets = df[target_col].unique().tolist()
+        all_nodes = list(set(sources + targets))
+        
+        # Create node mappings
+        node_map = {node: i for i, node in enumerate(all_nodes)}
+        
+        # Prepare Sankey data
+        source_indices = [node_map[source] for source in df[source_col]]
+        target_indices = [node_map[target] for target in df[target_col]]
+        values = df[value_col].tolist()
+        
+        # Generate colors for nodes and links
+        colors = self._get_color_palette(config.color_scheme, len(all_nodes))
+        node_colors = colors[:len(all_nodes)]
+        link_colors = [f"rgba({int(colors[i % len(colors)][1:3], 16)}, "
+                      f"{int(colors[i % len(colors)][3:5], 16)}, "
+                      f"{int(colors[i % len(colors)][5:7], 16)}, 0.4)" 
+                      for i in source_indices]
+        
+        fig = go.Figure(data=[go.Sankey(
+            node=dict(
+                pad=15,
+                thickness=20,
+                line=dict(color="black", width=0.5),
+                label=all_nodes,
+                color=node_colors
+            ),
+            link=dict(
+                source=source_indices,
+                target=target_indices,
+                value=values,
+                color=link_colors,
+                hovertemplate='%{source.label} → %{target.label}<br>' +
+                             'Value: %{value}<br>' +
+                             '<extra></extra>'
+            )
+        )])
+        
+        return fig
+    
+    def _generate_gauge_chart(
+        self, 
+        df: pd.DataFrame, 
+        config: ChartConfig
+    ) -> go.Figure:
+        """Generate gauge chart for KPI visualization"""
+        value_col = config.y_axis if isinstance(config.y_axis, str) else config.y_axis[0]
+        
+        if not value_col:
+            raise ValueError("Gauge chart requires a value column")
+        
+        # Get the value (use first row or aggregate if multiple)
+        if len(df) > 1:
+            # Use mean for multiple values
+            value = df[value_col].mean()
+        else:
+            value = df[value_col].iloc[0]
+        
+        # Get gauge configuration from chart options
+        gauge_options = config.chart_options
+        min_value = gauge_options.get('min', 0)
+        max_value = gauge_options.get('max', 100)
+        threshold_1 = gauge_options.get('threshold_1', max_value * 0.6)
+        threshold_2 = gauge_options.get('threshold_2', max_value * 0.8)
+        
+        # Determine gauge color based on value
+        if value <= threshold_1:
+            gauge_color = "green"
+        elif value <= threshold_2:
+            gauge_color = "yellow"
+        else:
+            gauge_color = "red"
+        
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=value,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': config.title or value_col},
+            delta={'reference': gauge_options.get('reference', threshold_1)},
+            gauge={
+                'axis': {'range': [None, max_value]},
+                'bar': {'color': gauge_color},
+                'steps': [
+                    {'range': [min_value, threshold_1], 'color': "lightgray"},
+                    {'range': [threshold_1, threshold_2], 'color': "gray"}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': threshold_2
+                }
+            }
         ))
         
         return fig

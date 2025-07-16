@@ -172,12 +172,82 @@ class ChartTypeSelector:
         
         return False
     
+    def _is_flow_pattern(self, analysis: Dict[str, Any]) -> bool:
+        """Check if data represents a flow pattern suitable for Sankey diagram"""
+        num_categorical = len(analysis['categorical_fields'])
+        num_numerical = len(analysis['numerical_fields'])
+        
+        # Sankey requires at least 2 categorical fields (source, target) and 1 numerical (value)
+        if num_categorical < 2 or num_numerical < 1:
+            return False
+        
+        # Check field names for flow-related patterns
+        categorical_fields = analysis['categorical_fields']
+        flow_keywords = ['source', 'target', 'from', 'to', 'origin', 'destination', 
+                        'input', 'output', 'start', 'end', 'sender', 'receiver']
+        
+        field_names_lower = [field.lower() for field in categorical_fields]
+        flow_matches = sum(1 for keyword in flow_keywords 
+                          if any(keyword in name for name in field_names_lower))
+        
+        # If we have flow-related field names or exactly the right structure
+        return flow_matches >= 2 or (num_categorical == 2 and num_numerical == 1)
+    
+    def _is_kpi_pattern(self, analysis: Dict[str, Any]) -> bool:
+        """Check if data represents a KPI pattern suitable for Gauge chart"""
+        num_categorical = len(analysis['categorical_fields'])
+        num_numerical = len(analysis['numerical_fields'])
+        num_rows = analysis['row_count']
+        
+        # KPI typically has 1 numerical value, possibly 1 categorical for grouping
+        if num_numerical != 1 or num_rows > 10:
+            return False
+        
+        # Check for KPI-related field names
+        numerical_fields = analysis['numerical_fields']
+        kpi_keywords = ['kpi', 'metric', 'score', 'rating', 'performance', 'efficiency',
+                       'utilization', 'percentage', 'ratio', 'index', 'target', 'goal']
+        
+        field_names_lower = [field.lower() for field in numerical_fields]
+        kpi_matches = sum(1 for keyword in kpi_keywords 
+                         if any(keyword in name for name in field_names_lower))
+        
+        # Check if values are in typical KPI ranges (0-100, 0-1, etc.)
+        if numerical_fields:
+            field_name = numerical_fields[0]
+            field_info = analysis['field_types'].get(field_name, {})
+            sample_values = field_info.get('sample_values', [])
+            
+            if sample_values:
+                # Check if values are in percentage range (0-100) or ratio range (0-1)
+                numeric_values = [v for v in sample_values if isinstance(v, (int, float))]
+                if numeric_values:
+                    min_val = min(numeric_values)
+                    max_val = max(numeric_values)
+                    
+                    # Percentage range or ratio range
+                    is_percentage = 0 <= min_val and max_val <= 100
+                    is_ratio = 0 <= min_val and max_val <= 1
+                    
+                    if is_percentage or is_ratio or kpi_matches > 0:
+                        return True
+        
+        return kpi_matches > 0
+    
     def _determine_data_pattern(self, analysis: Dict[str, Any]) -> str:
         """Determine the overall data pattern"""
         num_fields = analysis['field_count']
         num_categorical = len(analysis['categorical_fields'])
         num_numerical = len(analysis['numerical_fields'])
         num_temporal = len(analysis['temporal_fields'])
+        
+        # Check for flow pattern (Sankey diagram)
+        if self._is_flow_pattern(analysis):
+            return 'flow'
+        
+        # Check for KPI pattern (Gauge chart)
+        if self._is_kpi_pattern(analysis):
+            return 'kpi'
         
         # Time series pattern
         if num_temporal > 0 and num_numerical > 0:
@@ -216,7 +286,11 @@ class ChartTypeSelector:
         pattern = analysis['data_pattern']
         
         # Apply pattern-specific recommendation logic
-        if pattern == 'time_series':
+        if pattern == 'flow':
+            recommendations.extend(self._recommend_flow(analysis, data))
+        elif pattern == 'kpi':
+            recommendations.extend(self._recommend_kpi(analysis, data))
+        elif pattern == 'time_series':
             recommendations.extend(self._recommend_time_series(analysis, data))
         elif pattern == 'correlation':
             recommendations.extend(self._recommend_correlation(analysis, data))
@@ -512,6 +586,112 @@ class ChartTypeSelector:
                 reasoning="Bar charts work well for general categorical comparisons",
                 config=bar_config
             ))
+        
+        return recommendations
+    
+    def _recommend_flow(self, analysis: Dict[str, Any], data: ChartData) -> List[ChartRecommendation]:
+        """Recommend charts for flow data (Sankey diagrams)"""
+        recommendations = []
+        categorical_fields = analysis['categorical_fields']
+        numerical_fields = analysis['numerical_fields']
+        
+        # Sankey diagram (primary recommendation for flow data)
+        config = ChartConfig(
+            chart_type=ChartType.SANKEY,
+            title="Flow Analysis",
+            x_axis=categorical_fields[0],  # Source
+            y_axis=categorical_fields[1],  # Target
+            color_field=numerical_fields[0] if numerical_fields else None,  # Value
+            interactive=True,
+            hover_enabled=True
+        )
+        
+        recommendations.append(ChartRecommendation(
+            chart_type=ChartType.SANKEY,
+            confidence=0.95,
+            reasoning="Sankey diagrams excel at visualizing flows and relationships between categories",
+            config=config
+        ))
+        
+        # Alternative: Chord diagram-style visualization using heatmap
+        if len(categorical_fields) >= 2:
+            heatmap_config = ChartConfig(
+                chart_type=ChartType.HEATMAP,
+                title="Flow Relationship Matrix",
+                x_axis=categorical_fields[0],
+                y_axis=categorical_fields[1],
+                color_field=numerical_fields[0] if numerical_fields else None,
+                interactive=True
+            )
+            
+            recommendations.append(ChartRecommendation(
+                chart_type=ChartType.HEATMAP,
+                confidence=0.70,
+                reasoning="Heatmap provides alternative view of flow relationships",
+                config=heatmap_config
+            ))
+        
+        return recommendations
+    
+    def _recommend_kpi(self, analysis: Dict[str, Any], data: ChartData) -> List[ChartRecommendation]:
+        """Recommend charts for KPI data (Gauge charts)"""
+        recommendations = []
+        numerical_fields = analysis['numerical_fields']
+        categorical_fields = analysis['categorical_fields']
+        
+        # Gauge chart (primary recommendation for KPI data)
+        config = ChartConfig(
+            chart_type=ChartType.GAUGE,
+            title="KPI Dashboard",
+            y_axis=numerical_fields[0] if numerical_fields else None,
+            interactive=True,
+            chart_options={
+                'min': 0,
+                'max': 100,
+                'threshold_1': 60,
+                'threshold_2': 80,
+                'reference': 75
+            }
+        )
+        
+        recommendations.append(ChartRecommendation(
+            chart_type=ChartType.GAUGE,
+            confidence=0.90,
+            reasoning="Gauge charts are ideal for displaying KPI values with performance thresholds",
+            config=config
+        ))
+        
+        # Alternative: Bar chart for KPI comparison
+        if categorical_fields:
+            bar_config = ChartConfig(
+                chart_type=ChartType.BAR,
+                title="KPI Comparison",
+                x_axis=categorical_fields[0],
+                y_axis=numerical_fields[0] if numerical_fields else None,
+                interactive=True
+            )
+            
+            recommendations.append(ChartRecommendation(
+                chart_type=ChartType.BAR,
+                confidence=0.75,
+                reasoning="Bar charts provide good comparison view for multiple KPIs",
+                config=bar_config
+            ))
+        
+        # Alternative: Simple number display using table
+        table_config = ChartConfig(
+            chart_type=ChartType.TABLE,
+            title="KPI Summary",
+            interactive=True,
+            chart_options={'max_rows': 5}
+        )
+        
+        recommendations.append(ChartRecommendation(
+            chart_type=ChartType.TABLE,
+            confidence=0.60,
+            reasoning="Table format provides clear numeric display for KPI values",
+            config=table_config
+        ))
         
         return recommendations
     
