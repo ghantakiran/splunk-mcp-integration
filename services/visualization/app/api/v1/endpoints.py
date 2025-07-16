@@ -30,6 +30,10 @@ from ...services.chart_selector import ChartTypeSelector
 from ...services.chart_generator import ChartGenerator
 from ...services.interactive_charts import InteractiveChartService
 from ...services.dashboard_layout import DashboardLayoutEngine
+from ...services.dashboard_builder import (
+    DashboardBuilderService, DragOperation, ResizeOperation, 
+    PanelConfiguration, CollaborationEvent
+)
 from ...core.logging import get_logger, log_chart_generation
 from ...core.config import settings
 
@@ -41,6 +45,7 @@ chart_selector = ChartTypeSelector()
 chart_generator = ChartGenerator()
 interactive_service = InteractiveChartService()
 dashboard_engine = DashboardLayoutEngine()
+dashboard_builder = DashboardBuilderService()
 
 
 # Chart Type Selection Endpoints
@@ -1699,3 +1704,985 @@ async def get_layout_types() -> Dict[str, Any]:
                     error=str(e),
                     exc_info=True)
         raise HTTPException(status_code=500, detail=f"Layout types retrieval failed: {str(e)}")
+
+
+# Dashboard Builder Endpoints
+
+@router.post("/builder/sessions", response_model=Dict[str, Any])
+async def create_builder_session(
+    dashboard_id: str = Query(..., description="Dashboard identifier"),
+    user_id: str = Query(..., description="User identifier")
+) -> Dict[str, Any]:
+    """
+    Create a new dashboard builder session for collaborative editing
+    
+    Creates a new session for the dashboard builder, enabling real-time
+    collaboration and state management.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        session = builder_service.create_builder_session(dashboard_id, user_id)
+        
+        logger.info("Builder session created",
+                   session_id=session["session"]["session_id"],
+                   dashboard_id=dashboard_id,
+                   user_id=user_id)
+        
+        return session
+        
+    except Exception as e:
+        logger.error("Builder session creation failed",
+                    dashboard_id=dashboard_id,
+                    user_id=user_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Builder session creation failed: {str(e)}")
+
+
+@router.post("/builder/drag", response_model=Dict[str, Any])
+async def handle_drag_operation(
+    operation: "DragEvent"  # Forward reference to avoid circular import
+) -> Dict[str, Any]:
+    """
+    Handle drag-and-drop operations for dashboard panels
+    
+    Processes drag events including move, resize, add, and remove operations
+    with collision detection and layout validation.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService, DragOperation
+        builder_service = DashboardBuilderService()
+        
+        # Convert DragEvent to DragOperation
+        drag_op = DragOperation(
+            panel_id=operation.panel_id,
+            source_position=operation.source_position,
+            target_position=operation.target_position,
+            dashboard_id=operation.dashboard_id,
+            operation_type=operation.operation.value
+        )
+        
+        result = builder_service.handle_drag_operation(drag_op)
+        
+        logger.info("Drag operation processed",
+                   operation_type=operation.operation.value,
+                   panel_id=operation.panel_id,
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Drag operation failed",
+                    operation=operation.dict(),
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Drag operation failed: {str(e)}")
+
+
+@router.post("/builder/resize", response_model=Dict[str, Any])
+async def handle_resize_operation(
+    operation: "ResizeEvent"  # Forward reference
+) -> Dict[str, Any]:
+    """
+    Handle panel resize operations with collision detection
+    
+    Processes panel resize events with automatic collision resolution
+    and layout optimization.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService, ResizeOperation
+        builder_service = DashboardBuilderService()
+        
+        # Convert ResizeEvent to ResizeOperation
+        resize_op = ResizeOperation(
+            panel_id=operation.panel_id,
+            dashboard_id=operation.dashboard_id,
+            new_width=operation.new_dimensions["width"],
+            new_height=operation.new_dimensions["height"],
+            maintain_aspect_ratio=operation.maintain_aspect_ratio
+        )
+        
+        result = builder_service.handle_resize_operation(resize_op)
+        
+        logger.info("Resize operation processed",
+                   panel_id=operation.panel_id,
+                   new_dimensions=operation.new_dimensions,
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Resize operation failed",
+                    operation=operation.dict(),
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Resize operation failed: {str(e)}")
+
+
+@router.post("/builder/panels/add", response_model=Dict[str, Any])
+async def add_panel_to_dashboard(
+    request: "AddPanelRequest"  # Forward reference
+) -> Dict[str, Any]:
+    """
+    Add a new panel to the dashboard with automatic positioning
+    
+    Creates a new panel and adds it to the dashboard with optimal
+    positioning and collision avoidance.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService, PanelConfiguration
+        builder_service = DashboardBuilderService()
+        
+        # Create panel configuration
+        panel_config = PanelConfiguration(
+            panel_id=str(uuid.uuid4()),
+            panel_type=request.panel_type,
+            title=request.title,
+            chart_type=None,  # Will be set based on configuration
+            data_source=request.configuration.get("data_source"),
+            query=request.configuration.get("query"),
+            styling=request.configuration.get("styling", {}),
+            interactions=request.configuration.get("interactions", {})
+        )
+        
+        result = builder_service.add_panel_to_dashboard(
+            request.dashboard_id,
+            panel_config,
+            request.position
+        )
+        
+        logger.info("Panel added to dashboard",
+                   dashboard_id=request.dashboard_id,
+                   panel_id=panel_config.panel_id,
+                   panel_type=request.panel_type.value,
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Add panel operation failed",
+                    request=request.dict(),
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Add panel operation failed: {str(e)}")
+
+
+@router.delete("/builder/panels/{panel_id}", response_model=Dict[str, Any])
+async def remove_panel_from_dashboard(
+    panel_id: str,
+    dashboard_id: str = Query(..., description="Dashboard identifier"),
+    optimize_layout: bool = Query(True, description="Optimize layout after removal")
+) -> Dict[str, Any]:
+    """
+    Remove a panel from the dashboard and optionally optimize layout
+    
+    Removes the specified panel and can automatically optimize
+    the remaining layout to close gaps.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        result = builder_service.remove_panel_from_dashboard(
+            dashboard_id,
+            panel_id,
+            optimize_layout
+        )
+        
+        logger.info("Panel removed from dashboard",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id,
+                   layout_optimized=optimize_layout,
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Remove panel operation failed",
+                    panel_id=panel_id,
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Remove panel operation failed: {str(e)}")
+
+
+@router.put("/builder/panels/{panel_id}", response_model=Dict[str, Any])
+async def update_panel_configuration(
+    panel_id: str,
+    request: "UpdatePanelRequest"  # Forward reference
+) -> Dict[str, Any]:
+    """
+    Update panel configuration without changing layout
+    
+    Updates panel settings, styling, and behavior without
+    affecting its position or size.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        # Update title if provided
+        config_updates = request.configuration.copy()
+        if request.title:
+            config_updates["title"] = request.title
+        
+        result = builder_service.update_panel_configuration(
+            request.dashboard_id,
+            panel_id,
+            config_updates
+        )
+        
+        logger.info("Panel configuration updated",
+                   dashboard_id=request.dashboard_id,
+                   panel_id=panel_id,
+                   updates=list(config_updates.keys()),
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Update panel configuration failed",
+                    panel_id=panel_id,
+                    request=request.dict(),
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Update panel configuration failed: {str(e)}")
+
+
+@router.post("/builder/templates/{template_name}/create", response_model=Dict[str, Any])
+async def create_dashboard_from_template(
+    template_name: str,
+    dashboard_config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Create a new dashboard based on a predefined template
+    
+    Creates a complete dashboard from a template with automatic
+    panel placement and configuration.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        result = builder_service.create_dashboard_from_template(
+            template_name,
+            dashboard_config
+        )
+        
+        logger.info("Dashboard created from template",
+                   template_name=template_name,
+                   dashboard_id=result.get("dashboard", {}).get("id"),
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Template dashboard creation failed",
+                    template_name=template_name,
+                    dashboard_config=dashboard_config,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Template dashboard creation failed: {str(e)}")
+
+
+@router.get("/builder/collaboration/{dashboard_id}", response_model=Dict[str, Any])
+async def get_collaboration_state(dashboard_id: str) -> Dict[str, Any]:
+    """
+    Get current collaboration state for a dashboard
+    
+    Returns information about active users, recent events,
+    and collaboration status for the dashboard.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        state = builder_service.get_collaboration_state(dashboard_id)
+        
+        logger.info("Collaboration state retrieved",
+                   dashboard_id=dashboard_id,
+                   active_users=len(state["active_users"]),
+                   collaboration_enabled=state["collaboration_enabled"])
+        
+        return state
+        
+    except Exception as e:
+        logger.error("Collaboration state retrieval failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Collaboration state retrieval failed: {str(e)}")
+
+
+@router.post("/builder/undo/{dashboard_id}", response_model=Dict[str, Any])
+async def undo_last_operation(dashboard_id: str) -> Dict[str, Any]:
+    """
+    Undo the last operation on a dashboard
+    
+    Reverts the most recent change to the dashboard layout
+    or panel configuration.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        result = builder_service.undo_last_operation(dashboard_id)
+        
+        logger.info("Undo operation processed",
+                   dashboard_id=dashboard_id,
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Undo operation failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Undo operation failed: {str(e)}")
+
+
+@router.post("/builder/redo/{dashboard_id}", response_model=Dict[str, Any])
+async def redo_last_operation(dashboard_id: str) -> Dict[str, Any]:
+    """
+    Redo the last undone operation on a dashboard
+    
+    Re-applies the most recently undone change to the dashboard.
+    """
+    try:
+        from ...services.dashboard_builder import DashboardBuilderService
+        builder_service = DashboardBuilderService()
+        
+        result = builder_service.redo_last_operation(dashboard_id)
+        
+        logger.info("Redo operation processed",
+                   dashboard_id=dashboard_id,
+                   success=result["success"])
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Redo operation failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Redo operation failed: {str(e)}")
+
+
+@router.get("/builder/templates", response_model=List[Dict[str, Any]])
+async def get_panel_templates() -> List[Dict[str, Any]]:
+    """
+    Get available panel templates for the dashboard builder
+    
+    Returns a list of predefined panel templates that can be
+    used to quickly create common panel types.
+    """
+    try:
+        # Mock panel templates - in real implementation, this would be stored in database
+        templates = [
+            {
+                "template_id": "chart_line",
+                "name": "Line Chart",
+                "description": "Time series line chart for trend analysis",
+                "panel_type": "chart",
+                "chart_type": "line",
+                "default_dimensions": {"width": 6, "height": 4},
+                "category": "charts",
+                "tags": ["time_series", "trends", "analytics"]
+            },
+            {
+                "template_id": "chart_bar",
+                "name": "Bar Chart",
+                "description": "Categorical comparison bar chart",
+                "panel_type": "chart",
+                "chart_type": "bar",
+                "default_dimensions": {"width": 6, "height": 4},
+                "category": "charts",
+                "tags": ["comparison", "categorical", "analytics"]
+            },
+            {
+                "template_id": "metric_kpi",
+                "name": "KPI Metric",
+                "description": "Single value KPI display with status indicator",
+                "panel_type": "metric",
+                "chart_type": "gauge",
+                "default_dimensions": {"width": 3, "height": 2},
+                "category": "metrics",
+                "tags": ["kpi", "performance", "monitoring"]
+            },
+            {
+                "template_id": "table_data",
+                "name": "Data Table",
+                "description": "Detailed data table with sorting and pagination",
+                "panel_type": "table",
+                "chart_type": "table",
+                "default_dimensions": {"width": 12, "height": 6},
+                "category": "data",
+                "tags": ["table", "detailed", "raw_data"]
+            },
+            {
+                "template_id": "text_markdown",
+                "name": "Text Panel",
+                "description": "Markdown text panel for documentation and notes",
+                "panel_type": "text",
+                "chart_type": None,
+                "default_dimensions": {"width": 6, "height": 3},
+                "category": "content",
+                "tags": ["text", "documentation", "notes"]
+            }
+        ]
+        
+        logger.info("Panel templates retrieved", template_count=len(templates))
+        
+        return templates
+        
+    except Exception as e:
+        logger.error("Panel templates retrieval failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel templates retrieval failed: {str(e)}")
+
+
+# Dashboard Builder Endpoints
+
+@router.post("/dashboard-builder/sessions")
+async def create_builder_session(
+    dashboard_id: str,
+    user_id: str
+) -> Dict[str, Any]:
+    """
+    Create a new dashboard builder session for collaborative editing
+    
+    Creates a builder session that enables drag-and-drop functionality,
+    collaborative editing, and real-time state management.
+    """
+    try:
+        logger.info("Creating builder session",
+                   dashboard_id=dashboard_id,
+                   user_id=user_id)
+        
+        session = dashboard_builder.create_builder_session(dashboard_id, user_id)
+        
+        logger.info("Builder session created",
+                   session_id=session["session"]["session_id"],
+                   dashboard_id=dashboard_id)
+        
+        return session
+        
+    except Exception as e:
+        logger.error("Builder session creation failed",
+                    dashboard_id=dashboard_id,
+                    user_id=user_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Builder session creation failed: {str(e)}")
+
+
+@router.post("/dashboard-builder/drag-operation")
+async def handle_drag_operation(operation: DragOperation) -> Dict[str, Any]:
+    """
+    Handle drag-and-drop operations for dashboard panels
+    
+    Processes panel move, resize, add, and remove operations with
+    collision detection and layout validation.
+    """
+    try:
+        logger.info("Processing drag operation",
+                   panel_id=operation.panel_id,
+                   operation_type=operation.operation_type,
+                   dashboard_id=operation.dashboard_id)
+        
+        result = dashboard_builder.handle_drag_operation(operation)
+        
+        if result["success"]:
+            logger.info("Drag operation completed successfully",
+                       panel_id=operation.panel_id,
+                       operation_type=operation.operation_type)
+        else:
+            logger.warning("Drag operation failed",
+                          panel_id=operation.panel_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Drag operation processing failed",
+                    panel_id=operation.panel_id,
+                    operation_type=operation.operation_type,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Drag operation failed: {str(e)}")
+
+
+@router.post("/dashboard-builder/resize-operation")
+async def handle_resize_operation(operation: ResizeOperation) -> Dict[str, Any]:
+    """
+    Handle panel resize operations with collision detection
+    
+    Processes panel resize operations with automatic collision
+    detection and resolution for overlapping panels.
+    """
+    try:
+        logger.info("Processing resize operation",
+                   panel_id=operation.panel_id,
+                   new_width=operation.new_width,
+                   new_height=operation.new_height,
+                   dashboard_id=operation.dashboard_id)
+        
+        result = dashboard_builder.handle_resize_operation(operation)
+        
+        if result["success"]:
+            logger.info("Resize operation completed successfully",
+                       panel_id=operation.panel_id,
+                       collisions_detected=result.get("collisions_detected", False))
+        else:
+            logger.warning("Resize operation failed",
+                          panel_id=operation.panel_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Resize operation processing failed",
+                    panel_id=operation.panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Resize operation failed: {str(e)}")
+
+
+@router.post("/dashboard-builder/panels/add")
+async def add_panel_to_dashboard(
+    dashboard_id: str,
+    panel_config: PanelConfiguration,
+    position: Optional[DashboardGridPosition] = None
+) -> Dict[str, Any]:
+    """
+    Add a new panel to the dashboard with automatic positioning
+    
+    Creates a new panel with the specified configuration and either
+    uses the provided position or calculates an optimal position.
+    """
+    try:
+        logger.info("Adding panel to dashboard",
+                   dashboard_id=dashboard_id,
+                   panel_type=panel_config.panel_type,
+                   panel_title=panel_config.title)
+        
+        result = dashboard_builder.add_panel_to_dashboard(
+            dashboard_id, panel_config, position
+        )
+        
+        if result["success"]:
+            logger.info("Panel added successfully",
+                       panel_id=result["panel"]["id"],
+                       dashboard_id=dashboard_id)
+        else:
+            logger.warning("Panel addition failed",
+                          dashboard_id=dashboard_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Panel addition failed",
+                    dashboard_id=dashboard_id,
+                    panel_type=panel_config.panel_type,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel addition failed: {str(e)}")
+
+
+@router.delete("/dashboard-builder/panels/{panel_id}")
+async def remove_panel_from_dashboard(
+    dashboard_id: str,
+    panel_id: str,
+    optimize_layout: bool = Query(True, description="Whether to optimize layout after removal")
+) -> Dict[str, Any]:
+    """
+    Remove a panel from the dashboard and optionally optimize layout
+    
+    Removes the specified panel and can automatically optimize the
+    remaining layout to fill empty spaces.
+    """
+    try:
+        logger.info("Removing panel from dashboard",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id,
+                   optimize_layout=optimize_layout)
+        
+        result = dashboard_builder.remove_panel_from_dashboard(
+            dashboard_id, panel_id, optimize_layout
+        )
+        
+        if result["success"]:
+            logger.info("Panel removed successfully",
+                       panel_id=panel_id,
+                       dashboard_id=dashboard_id,
+                       layout_optimized=result.get("layout_optimized", False))
+        else:
+            logger.warning("Panel removal failed",
+                          panel_id=panel_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Panel removal failed",
+                    dashboard_id=dashboard_id,
+                    panel_id=panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel removal failed: {str(e)}")
+
+
+@router.put("/dashboard-builder/panels/{panel_id}/config")
+async def update_panel_configuration(
+    dashboard_id: str,
+    panel_id: str,
+    config_updates: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Update panel configuration without changing layout
+    
+    Updates panel properties like title, styling, interactions,
+    and data sources without affecting the panel's position.
+    """
+    try:
+        logger.info("Updating panel configuration",
+                   dashboard_id=dashboard_id,
+                   panel_id=panel_id,
+                   update_fields=list(config_updates.keys()))
+        
+        result = dashboard_builder.update_panel_configuration(
+            dashboard_id, panel_id, config_updates
+        )
+        
+        if result["success"]:
+            logger.info("Panel configuration updated successfully",
+                       panel_id=panel_id,
+                       updates_applied=len(config_updates))
+        else:
+            logger.warning("Panel configuration update failed",
+                          panel_id=panel_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Panel configuration update failed",
+                    dashboard_id=dashboard_id,
+                    panel_id=panel_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel configuration update failed: {str(e)}")
+
+
+@router.post("/dashboard-builder/from-template")
+async def create_dashboard_from_template(
+    template_name: str,
+    dashboard_config: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Create a new dashboard based on a predefined template
+    
+    Creates a dashboard using a template with pre-configured
+    panels, layout, and styling options.
+    """
+    try:
+        logger.info("Creating dashboard from template",
+                   template_name=template_name,
+                   user_id=dashboard_config.get("user_id"))
+        
+        result = dashboard_builder.create_dashboard_from_template(
+            template_name, dashboard_config
+        )
+        
+        if result["success"]:
+            logger.info("Dashboard created from template successfully",
+                       dashboard_id=result["dashboard"]["id"],
+                       template_name=template_name)
+        else:
+            logger.warning("Dashboard creation from template failed",
+                          template_name=template_name,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Dashboard creation from template failed",
+                    template_name=template_name,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard creation from template failed: {str(e)}")
+
+
+@router.get("/dashboard-builder/collaboration/{dashboard_id}")
+async def get_collaboration_state(dashboard_id: str) -> Dict[str, Any]:
+    """
+    Get current collaboration state for a dashboard
+    
+    Returns information about active users, recent collaboration
+    events, and real-time editing state.
+    """
+    try:
+        logger.info("Retrieving collaboration state",
+                   dashboard_id=dashboard_id)
+        
+        collaboration_state = dashboard_builder.get_collaboration_state(dashboard_id)
+        
+        logger.info("Collaboration state retrieved",
+                   dashboard_id=dashboard_id,
+                   active_users=len(collaboration_state["active_users"]),
+                   recent_events=len(collaboration_state["recent_events"]))
+        
+        return collaboration_state
+        
+    except Exception as e:
+        logger.error("Collaboration state retrieval failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Collaboration state retrieval failed: {str(e)}")
+
+
+@router.post("/dashboard-builder/undo/{dashboard_id}")
+async def undo_last_operation(dashboard_id: str) -> Dict[str, Any]:
+    """
+    Undo the last operation on a dashboard
+    
+    Reverts the dashboard to its previous state and moves
+    the current state to the redo stack.
+    """
+    try:
+        logger.info("Undoing last operation",
+                   dashboard_id=dashboard_id)
+        
+        result = dashboard_builder.undo_last_operation(dashboard_id)
+        
+        if result["success"]:
+            logger.info("Undo operation completed successfully",
+                       dashboard_id=dashboard_id,
+                       can_redo=result.get("can_redo", False))
+        else:
+            logger.warning("Undo operation failed",
+                          dashboard_id=dashboard_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Undo operation failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Undo operation failed: {str(e)}")
+
+
+@router.post("/dashboard-builder/redo/{dashboard_id}")
+async def redo_last_operation(dashboard_id: str) -> Dict[str, Any]:
+    """
+    Redo the last undone operation on a dashboard
+    
+    Restores a previously undone state and moves the current
+    state back to the undo stack.
+    """
+    try:
+        logger.info("Redoing last operation",
+                   dashboard_id=dashboard_id)
+        
+        result = dashboard_builder.redo_last_operation(dashboard_id)
+        
+        if result["success"]:
+            logger.info("Redo operation completed successfully",
+                       dashboard_id=dashboard_id,
+                       can_undo=result.get("can_undo", False))
+        else:
+            logger.warning("Redo operation failed",
+                          dashboard_id=dashboard_id,
+                          error=result.get("error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error("Redo operation failed",
+                    dashboard_id=dashboard_id,
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Redo operation failed: {str(e)}")
+
+
+@router.get("/dashboard-builder/templates")
+async def get_dashboard_builder_templates() -> List[Dict[str, Any]]:
+    """
+    Get available dashboard builder templates
+    
+    Returns a list of predefined dashboard templates with
+    their configurations, panel layouts, and metadata.
+    """
+    try:
+        logger.info("Retrieving dashboard builder templates")
+        
+        # Mock templates - in production this would be loaded from storage
+        templates = [
+            {
+                "template_id": "executive_dashboard",
+                "name": "Executive Dashboard",
+                "description": "High-level KPI dashboard for executives",
+                "layout_type": "grid",
+                "default_panels": [
+                    {"type": "metric", "title": "Revenue", "position": {"x": 0, "y": 0, "width": 3, "height": 2}},
+                    {"type": "metric", "title": "Users", "position": {"x": 3, "y": 0, "width": 3, "height": 2}},
+                    {"type": "metric", "title": "Conversion", "position": {"x": 6, "y": 0, "width": 3, "height": 2}},
+                    {"type": "metric", "title": "Growth", "position": {"x": 9, "y": 0, "width": 3, "height": 2}},
+                    {"type": "chart", "title": "Revenue Trend", "chart_type": "line", "position": {"x": 0, "y": 2, "width": 8, "height": 4}},
+                    {"type": "chart", "title": "Top Products", "chart_type": "bar", "position": {"x": 8, "y": 2, "width": 4, "height": 4}}
+                ],
+                "category": "business",
+                "tags": ["executive", "kpi", "high-level"]
+            },
+            {
+                "template_id": "operational_dashboard",
+                "name": "Operational Dashboard",
+                "description": "Detailed operational metrics and monitoring",
+                "layout_type": "grid",
+                "default_panels": [
+                    {"type": "chart", "title": "System Load", "chart_type": "line", "position": {"x": 0, "y": 0, "width": 6, "height": 3}},
+                    {"type": "chart", "title": "Error Rate", "chart_type": "line", "position": {"x": 6, "y": 0, "width": 6, "height": 3}},
+                    {"type": "chart", "title": "Response Time", "chart_type": "histogram", "position": {"x": 0, "y": 3, "width": 4, "height": 3}},
+                    {"type": "metric", "title": "Uptime", "position": {"x": 4, "y": 3, "width": 2, "height": 3}},
+                    {"type": "metric", "title": "Alerts", "position": {"x": 6, "y": 3, "width": 2, "height": 3}},
+                    {"type": "table", "title": "Recent Events", "position": {"x": 8, "y": 3, "width": 4, "height": 3}}
+                ],
+                "category": "operations",
+                "tags": ["operational", "monitoring", "detailed"]
+            },
+            {
+                "template_id": "analytical_dashboard",
+                "name": "Analytical Dashboard",
+                "description": "Data analysis and exploration dashboard",
+                "layout_type": "grid",
+                "default_panels": [
+                    {"type": "chart", "title": "Correlation Matrix", "chart_type": "heatmap", "position": {"x": 0, "y": 0, "width": 6, "height": 4}},
+                    {"type": "chart", "title": "Distribution", "chart_type": "histogram", "position": {"x": 6, "y": 0, "width": 6, "height": 4}},
+                    {"type": "chart", "title": "Scatter Analysis", "chart_type": "scatter", "position": {"x": 0, "y": 4, "width": 8, "height": 4}},
+                    {"type": "table", "title": "Statistical Summary", "position": {"x": 8, "y": 4, "width": 4, "height": 4}}
+                ],
+                "category": "analytics",
+                "tags": ["analytical", "exploration", "statistical"]
+            }
+        ]
+        
+        logger.info("Dashboard builder templates retrieved",
+                   template_count=len(templates))
+        
+        return templates
+        
+    except Exception as e:
+        logger.error("Dashboard builder templates retrieval failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Dashboard builder templates retrieval failed: {str(e)}")
+
+
+@router.get("/dashboard-builder/panel-templates")
+async def get_panel_templates() -> List[Dict[str, Any]]:
+    """
+    Get available panel templates for dashboard builder
+    
+    Returns a list of predefined panel templates with their
+    configurations, default dimensions, and styling options.
+    """
+    try:
+        logger.info("Retrieving panel templates")
+        
+        # Panel templates with configurations
+        panel_templates = [
+            {
+                "template_id": "chart_line",
+                "name": "Line Chart",
+                "description": "Time series line chart for trend analysis",
+                "panel_type": "chart",
+                "chart_type": "line",
+                "default_dimensions": {"width": 8, "height": 4},
+                "default_config": {
+                    "styling": {"background": "white", "border": "1px solid #e0e0e0"},
+                    "interactions": {"zoom": True, "pan": True, "hover": True},
+                    "refresh_interval": 300
+                },
+                "category": "charts",
+                "tags": ["time_series", "trend", "analytics"]
+            },
+            {
+                "template_id": "chart_bar",
+                "name": "Bar Chart",
+                "description": "Categorical comparison bar chart",
+                "panel_type": "chart",
+                "chart_type": "bar",
+                "default_dimensions": {"width": 6, "height": 4},
+                "default_config": {
+                    "styling": {"background": "white", "border": "1px solid #e0e0e0"},
+                    "interactions": {"hover": True, "drill_down": True},
+                    "refresh_interval": 300
+                },
+                "category": "charts",
+                "tags": ["comparison", "categorical", "analytics"]
+            },
+            {
+                "template_id": "metric_kpi",
+                "name": "KPI Metric",
+                "description": "Single value KPI display with status indicator",
+                "panel_type": "metric",
+                "chart_type": "gauge",
+                "default_dimensions": {"width": 3, "height": 2},
+                "default_config": {
+                    "styling": {"background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", "color": "white", "textAlign": "center"},
+                    "interactions": {},
+                    "refresh_interval": 60
+                },
+                "category": "metrics",
+                "tags": ["kpi", "performance", "monitoring"]
+            },
+            {
+                "template_id": "table_data",
+                "name": "Data Table",
+                "description": "Detailed data table with sorting and pagination",
+                "panel_type": "table",
+                "chart_type": "table",
+                "default_dimensions": {"width": 12, "height": 6},
+                "default_config": {
+                    "styling": {"background": "white", "border": "1px solid #e0e0e0"},
+                    "interactions": {"sort": True, "filter": True, "pagination": True},
+                    "refresh_interval": 300
+                },
+                "category": "data",
+                "tags": ["table", "detailed", "raw_data"]
+            },
+            {
+                "template_id": "text_markdown",
+                "name": "Text Panel",
+                "description": "Markdown text panel for documentation and notes",
+                "panel_type": "text",
+                "chart_type": None,
+                "default_dimensions": {"width": 6, "height": 3},
+                "default_config": {
+                    "styling": {"background": "#f8f9fa", "border": "1px solid #e0e0e0", "padding": "15px"},
+                    "interactions": {},
+                    "refresh_interval": None
+                },
+                "category": "content",
+                "tags": ["text", "documentation", "notes"]
+            }
+        ]
+        
+        logger.info("Panel templates retrieved",
+                   template_count=len(panel_templates))
+        
+        return panel_templates
+        
+    except Exception as e:
+        logger.error("Panel templates retrieval failed",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Panel templates retrieval failed: {str(e)}")
