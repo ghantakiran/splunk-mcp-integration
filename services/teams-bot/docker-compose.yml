@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  teams-bot:
+    build: .
+    ports:
+      - "8005:8005"
+      - "9005:9005"  # Metrics port
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - MICROSOFT_APP_ID=${MICROSOFT_APP_ID}
+      - MICROSOFT_APP_PASSWORD=${MICROSOFT_APP_PASSWORD}
+      - MICROSOFT_APP_TENANT_ID=${MICROSOFT_APP_TENANT_ID}
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - NLP_ENGINE_URL=http://nlp-engine:8001
+      - VISUALIZATION_URL=http://visualization:8002
+      - ALERT_MANAGER_URL=http://alert-manager:8003
+      - DATABASE_URL=postgresql://teams_user:teams_pass@postgres:5432/teams_bot
+      - REDIS_URL=redis://redis:6379/4
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - teams-bot-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: teams_bot
+      POSTGRES_USER: teams_user
+      POSTGRES_PASSWORD: teams_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - teams-bot-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - teams-bot-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  teams-bot-network:
+    external: true
