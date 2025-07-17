@@ -3,7 +3,7 @@ Splunk MCP Integration - API Gateway
 Main FastAPI application entry point
 """
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.exceptions import RequestValidationError
@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from datetime import datetime
 import time
+import asyncio
 
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger, RequestLoggingMiddleware
@@ -39,6 +40,7 @@ from app.models.responses import (
 )
 from app.api.v1.api import api_router
 from app.db.session import init_db
+from app.websocket import websocket_endpoint, cleanup_idle_connections
 
 
 # Configure logging
@@ -66,7 +68,17 @@ async def lifespan(app: FastAPI):
     # Store startup time in app state
     app.state.startup_time = startup_time
     
+    # Start background tasks
+    cleanup_task = asyncio.create_task(cleanup_idle_connections())
+    
     yield
+    
+    # Cancel background tasks
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     
     # Shutdown
     logger.info("Shutting down Splunk MCP Integration API Gateway")
@@ -203,6 +215,17 @@ async def detailed_health_check():
         services=services,
         uptime_seconds=round(uptime, 2)
     )
+
+
+@app.websocket("/ws")
+async def websocket_chat(websocket: WebSocket, token: str = Query(...)):
+    """
+    WebSocket endpoint for real-time chat communication
+    
+    Provides real-time messaging, typing indicators, and connection management
+    for the chat interface. Requires JWT authentication via query parameter.
+    """
+    await websocket_endpoint(websocket, token)
 
 
 # Enhanced Exception handlers with comprehensive error handling

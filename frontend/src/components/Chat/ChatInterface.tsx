@@ -20,12 +20,20 @@ import {
   Mic as MicIcon,
   Stop as StopIcon,
   Clear as ClearIcon,
+  Wifi as WifiIcon,
+  WifiOff as WifiOffIcon,
 } from '@mui/icons-material';
 import { RootState, AppDispatch } from '../../store';
 import { sendMessage, fetchConversationHistory, createNewConversation } from '../../store/chatSlice';
 import MessageBubble from './MessageBubble';
 import ConversationList from './ConversationList';
 import { Message } from '../../types/chat';
+import { 
+  useWebSocketConnection, 
+  useTypingIndicator, 
+  useConversationSubscription,
+  useWebSocketStatus 
+} from '../../hooks/useWebSocket';
 
 const ChatInterface: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -42,6 +50,12 @@ const ChatInterface: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // WebSocket hooks
+  useWebSocketConnection();
+  const { connectionStatus, connectionColor } = useWebSocketStatus();
+  const { startTyping, stopTyping } = useTypingIndicator(currentConversation?.id || null);
+  useConversationSubscription(currentConversation?.id || null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -86,7 +100,20 @@ const ChatInterface: React.FC = () => {
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
+      stopTyping();
       handleSendMessage();
+    }
+  };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    setInputMessage(value);
+    
+    // Trigger typing indicator
+    if (value.trim() && !sendingMessage) {
+      startTyping();
+    } else {
+      stopTyping();
     }
   };
 
@@ -178,7 +205,16 @@ const ChatInterface: React.FC = () => {
               Ask questions about your Splunk data
             </Typography>
           </Box>
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tooltip title={`Connection: ${connectionStatus}`}>
+              <IconButton size="small">
+                {connectionStatus === 'connected' ? (
+                  <WifiIcon color="success" />
+                ) : (
+                  <WifiOffIcon color="error" />
+                )}
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Clear conversation">
               <IconButton onClick={handleClearChat}>
                 <ClearIcon />
@@ -250,7 +286,7 @@ const ChatInterface: React.FC = () => {
               maxRows={4}
               placeholder="Ask a question about your data..."
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               disabled={sendingMessage}
               variant="outlined"
