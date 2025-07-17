@@ -1,0 +1,219 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-sentinel-config
+  namespace: production
+  labels:
+    app: redis-sentinel
+    tier: database
+data:
+  sentinel.conf: |
+    # Redis Sentinel Configuration for High Availability
+    
+    # Network
+    bind 0.0.0.0
+    port 26379
+    protected-mode no
+    
+    # Sentinel
+    sentinel announce-ip $(hostname -i)
+    sentinel announce-port 26379
+    
+    # Monitor Redis master
+    sentinel monitor mymaster redis-master.production.svc.cluster.local 6379 2
+    sentinel auth-pass mymaster ${REDIS_PASSWORD}
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel parallel-syncs mymaster 1
+    sentinel failover-timeout mymaster 10000
+    
+    # Notification scripts
+    # sentinel notification-script mymaster /etc/redis/notify.sh
+    # sentinel client-reconfig-script mymaster /etc/redis/reconfig.sh
+    
+    # Logging
+    loglevel notice
+    logfile "/var/log/redis/sentinel.log"
+    
+    # Security
+    requirepass ${REDIS_PASSWORD}
+    
+    # Performance
+    sentinel resolve-hostnames yes
+    sentinel announce-hostnames yes
+    
+  notify.sh: |
+    #!/bin/bash
+    # Notification script for Redis Sentinel
+    
+    EVENT_TYPE=$1
+    EVENT_INSTANCE=$2
+    EVENT_IP=$3
+    EVENT_PORT=$4
+    
+    # Log the event
+    echo "$(date): Redis Sentinel Event: $EVENT_TYPE for $EVENT_INSTANCE ($EVENT_IP:$EVENT_PORT)" >> /var/log/redis/sentinel-events.log
+    
+    # Send notification via webhook (optional)
+    if [ -n "$WEBHOOK_URL" ]; then
+        curl -X POST -H "Content-Type: application/json" \
+             -d "{\"event\":\"$EVENT_TYPE\",\"instance\":\"$EVENT_INSTANCE\",\"ip\":\"$EVENT_IP\",\"port\":\"$EVENT_PORT\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" \
+             "$WEBHOOK_URL"
+    fi
+    
+  reconfig.sh: |
+    #!/bin/bash
+    # Reconfiguration script for Redis Sentinel
+    
+    MASTER_NAME=$1
+    ROLE=$2
+    STATE=$3
+    OLD_IP=$4
+    OLD_PORT=$5
+    NEW_IP=$6
+    NEW_PORT=$7
+    
+    # Log the reconfiguration
+    echo "$(date): Redis Sentinel Reconfig: $MASTER_NAME $ROLE $STATE $OLD_IP:$OLD_PORT -> $NEW_IP:$NEW_PORT" >> /var/log/redis/sentinel-reconfig.log
+    
+    # Update application configuration (optional)
+    # kubectl patch configmap app-config -p '{"data":{"redis-master":"'$NEW_IP':'$NEW_PORT'"}}'
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-sentinel
+  namespace: production
+  labels:
+    app: redis-sentinel
+    tier: database
+spec:
+  serviceName: redis-sentinel
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+        tier: database
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsNonRoot: true
+      containers:
+      - name: sentinel
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        - name: WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: webhook-url
+              optional: true
+        ports:
+        - containerPort: 26379
+          name: sentinel
+        volumeMounts:
+        - name: sentinel-config
+          mountPath: /etc/redis/sentinel.conf
+          subPath: sentinel.conf
+        - name: sentinel-config
+          mountPath: /etc/redis/notify.sh
+          subPath: notify.sh
+        - name: sentinel-config
+          mountPath: /etc/redis/reconfig.sh
+          subPath: reconfig.sh
+        - name: sentinel-logs
+          mountPath: /var/log/redis
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -p
+            - "26379"
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -p
+            - "26379"
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        command:
+        - redis-sentinel
+        - /etc/redis/sentinel.conf
+        - --announce-ip
+        - $(hostname -i)
+      volumes:
+      - name: sentinel-config
+        configMap:
+          name: redis-sentinel-config
+          defaultMode: 0755
+      - name: sentinel-logs
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: production
+  labels:
+    app: redis-sentinel
+    tier: database
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 26379
+    targetPort: 26379
+    name: sentinel
+  selector:
+    app: redis-sentinel
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel-access
+  namespace: production
+  labels:
+    app: redis-sentinel
+    tier: database
+    service-type: access
+spec:
+  type: ClusterIP
+  ports:
+  - port: 26379
+    targetPort: 26379
+    name: sentinel
+  selector:
+    app: redis-sentinel

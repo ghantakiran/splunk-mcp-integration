@@ -1,0 +1,614 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-backup-config
+  namespace: production
+  labels:
+    app: redis-backup
+    tier: backup
+data:
+  backup-script.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Redis Backup Script
+    # This script performs RDB and AOF backups of Redis cluster
+    
+    # Configuration
+    BACKUP_TYPE=${BACKUP_TYPE:-rdb}
+    BACKUP_DIR=${BACKUP_DIR:-/backups}
+    RETENTION_DAYS=${RETENTION_DAYS:-7}
+    S3_BUCKET=${S3_BUCKET:-splunk-mcp-backups}
+    LOG_FILE="/var/log/backup/redis-backup.log"
+    
+    # Redis connection parameters
+    REDIS_HOST=${REDIS_HOST:-redis-cluster-access.production.svc.cluster.local}
+    REDIS_PORT=${REDIS_PORT:-6379}
+    REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    
+    # Logging function
+    log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    }
+    
+    # Error handling
+    handle_error() {
+        log "ERROR: $1"
+        exit 1
+    }
+    
+    # Check prerequisites
+    check_prerequisites() {
+        log "Checking prerequisites..."
+        
+        # Check if Redis client is available
+        if ! command -v redis-cli &> /dev/null; then
+            handle_error "redis-cli not found"
+        fi
+        
+        # Check if backup directory exists
+        mkdir -p "$BACKUP_DIR"
+        mkdir -p "$(dirname "$LOG_FILE")"
+        
+        # Test Redis connection
+        if ! redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
+            handle_error "Cannot connect to Redis server"
+        fi
+        
+        log "Prerequisites check passed"
+    }
+    
+    # Get Redis cluster nodes
+    get_cluster_nodes() {
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                  cluster nodes | grep master | awk '{print $2}' | cut -d: -f1
+    }
+    
+    # Perform RDB backup
+    perform_rdb_backup() {
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_dir="$BACKUP_DIR/redis_rdb_backup_$timestamp"
+        local archive_file="$BACKUP_DIR/redis_rdb_backup_$timestamp.tar.gz"
+        
+        log "Starting RDB backup..."
+        
+        mkdir -p "$backup_dir"
+        
+        # Get cluster nodes
+        local nodes=$(get_cluster_nodes)
+        
+        if [ -z "$nodes" ]; then
+            # Single node backup
+            log "Performing single node RDB backup"
+            
+            # Trigger RDB save
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                      BGSAVE 2>> "$LOG_FILE"
+            
+            # Wait for backup to complete
+            while [ "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" LASTSAVE)" = "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" LASTSAVE)" ]; do
+                sleep 1
+            done
+            
+            # Copy RDB file
+            kubectl cp "redis-cluster-0:/data/dump.rdb" "$backup_dir/redis-cluster-0-dump.rdb" 2>> "$LOG_FILE"
+        else
+            # Cluster backup
+            log "Performing cluster RDB backup"
+            local node_count=0
+            
+            for node in $nodes; do
+                log "Backing up node: $node"
+                
+                # Trigger RDB save on node
+                redis-cli -h "$node" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                          BGSAVE 2>> "$LOG_FILE"
+                
+                # Wait for backup to complete
+                while [ "$(redis-cli -h "$node" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" LASTSAVE)" = "$(redis-cli -h "$node" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" LASTSAVE)" ]; do
+                    sleep 1
+                done
+                
+                # Copy RDB file
+                kubectl cp "redis-cluster-$node_count:/data/dump.rdb" "$backup_dir/redis-cluster-$node_count-dump.rdb" 2>> "$LOG_FILE"
+                
+                node_count=$((node_count + 1))
+            done
+        fi
+        
+        # Create cluster info backup
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                  cluster nodes > "$backup_dir/cluster-nodes.txt" 2>> "$LOG_FILE"
+        
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                  cluster info > "$backup_dir/cluster-info.txt" 2>> "$LOG_FILE"
+        
+        # Create metadata file
+        cat > "$backup_dir/backup-metadata.json" << EOF
+    {
+        "backup_type": "rdb",
+        "timestamp": "$timestamp",
+        "redis_version": "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" info server | grep redis_version | cut -d: -f2 | tr -d '\r')",
+        "cluster_enabled": "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" info cluster | grep cluster_enabled | cut -d: -f2 | tr -d '\r')",
+        "node_count": $node_count
+    }
+    EOF
+        
+        # Compress backup
+        tar -czf "$archive_file" -C "$BACKUP_DIR" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        # Upload to S3 if configured
+        if [ -n "$S3_BUCKET" ]; then
+            upload_to_s3 "$archive_file" "redis-backups/rdb/$(basename "$archive_file")"
+        fi
+        
+        log "RDB backup completed: $archive_file"
+    }
+    
+    # Perform AOF backup
+    perform_aof_backup() {
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_dir="$BACKUP_DIR/redis_aof_backup_$timestamp"
+        local archive_file="$BACKUP_DIR/redis_aof_backup_$timestamp.tar.gz"
+        
+        log "Starting AOF backup..."
+        
+        mkdir -p "$backup_dir"
+        
+        # Get cluster nodes
+        local nodes=$(get_cluster_nodes)
+        
+        if [ -z "$nodes" ]; then
+            # Single node backup
+            log "Performing single node AOF backup"
+            
+            # Trigger AOF rewrite
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                      BGREWRITEAOF 2>> "$LOG_FILE"
+            
+            # Wait for AOF rewrite to complete
+            while [ "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" info persistence | grep aof_rewrite_in_progress | cut -d: -f2 | tr -d '\r')" = "1" ]; do
+                sleep 1
+            done
+            
+            # Copy AOF file
+            kubectl cp "redis-cluster-0:/data/appendonly.aof" "$backup_dir/redis-cluster-0-appendonly.aof" 2>> "$LOG_FILE"
+        else
+            # Cluster backup
+            log "Performing cluster AOF backup"
+            local node_count=0
+            
+            for node in $nodes; do
+                log "Backing up AOF for node: $node"
+                
+                # Trigger AOF rewrite on node
+                redis-cli -h "$node" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                          BGREWRITEAOF 2>> "$LOG_FILE"
+                
+                # Wait for AOF rewrite to complete
+                while [ "$(redis-cli -h "$node" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" info persistence | grep aof_rewrite_in_progress | cut -d: -f2 | tr -d '\r')" = "1" ]; do
+                    sleep 1
+                done
+                
+                # Copy AOF file
+                kubectl cp "redis-cluster-$node_count:/data/appendonly.aof" "$backup_dir/redis-cluster-$node_count-appendonly.aof" 2>> "$LOG_FILE"
+                
+                node_count=$((node_count + 1))
+            done
+        fi
+        
+        # Create cluster info backup
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                  cluster nodes > "$backup_dir/cluster-nodes.txt" 2>> "$LOG_FILE"
+        
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" \
+                  cluster info > "$backup_dir/cluster-info.txt" 2>> "$LOG_FILE"
+        
+        # Create metadata file
+        cat > "$backup_dir/backup-metadata.json" << EOF
+    {
+        "backup_type": "aof",
+        "timestamp": "$timestamp",
+        "redis_version": "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" info server | grep redis_version | cut -d: -f2 | tr -d '\r')",
+        "cluster_enabled": "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" info cluster | grep cluster_enabled | cut -d: -f2 | tr -d '\r')",
+        "node_count": $node_count
+    }
+    EOF
+        
+        # Compress backup
+        tar -czf "$archive_file" -C "$BACKUP_DIR" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        # Upload to S3 if configured
+        if [ -n "$S3_BUCKET" ]; then
+            upload_to_s3 "$archive_file" "redis-backups/aof/$(basename "$archive_file")"
+        fi
+        
+        log "AOF backup completed: $archive_file"
+    }
+    
+    # Upload file to S3
+    upload_to_s3() {
+        local file_path="$1"
+        local s3_key="$2"
+        
+        log "Uploading to S3: s3://$S3_BUCKET/$s3_key"
+        
+        if command -v aws &> /dev/null; then
+            aws s3 cp "$file_path" "s3://$S3_BUCKET/$s3_key" \
+                --storage-class STANDARD_IA \
+                --server-side-encryption AES256 \
+                2>> "$LOG_FILE"
+            
+            if [ $? -eq 0 ]; then
+                log "S3 upload completed successfully"
+            else
+                log "WARNING: S3 upload failed"
+            fi
+        else
+            log "WARNING: AWS CLI not available, skipping S3 upload"
+        fi
+    }
+    
+    # Clean old backups
+    cleanup_old_backups() {
+        log "Cleaning up old backups (retention: $RETENTION_DAYS days)..."
+        
+        # Remove old local backups
+        find "$BACKUP_DIR" -name "redis_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+        
+        # Remove old S3 backups if configured
+        if [ -n "$S3_BUCKET" ] && command -v aws &> /dev/null; then
+            local cutoff_date=$(date -d "-$RETENTION_DAYS days" --iso-8601)
+            
+            aws s3 ls "s3://$S3_BUCKET/redis-backups/" --recursive | \
+                awk '$1 < "'$cutoff_date'" {print $4}' | \
+                xargs -I {} aws s3 rm "s3://$S3_BUCKET/{}" 2>> "$LOG_FILE"
+        fi
+        
+        log "Cleanup completed"
+    }
+    
+    # Main execution
+    main() {
+        log "Starting Redis backup process (type: $BACKUP_TYPE)"
+        
+        check_prerequisites
+        
+        case "$BACKUP_TYPE" in
+            rdb)
+                perform_rdb_backup
+                ;;
+            aof)
+                perform_aof_backup
+                ;;
+            *)
+                handle_error "Invalid backup type: $BACKUP_TYPE"
+                ;;
+        esac
+        
+        cleanup_old_backups
+        
+        log "Backup process completed successfully"
+    }
+    
+    # Run main function
+    main "$@"
+    
+  restore-script.sh: |
+    #!/bin/bash
+    set -e
+    
+    # Redis Restore Script
+    # This script restores Redis from backups
+    
+    # Configuration
+    RESTORE_TYPE=${RESTORE_TYPE:-rdb}
+    BACKUP_DIR=${BACKUP_DIR:-/backups}
+    BACKUP_FILE=${BACKUP_FILE:-}
+    S3_BUCKET=${S3_BUCKET:-splunk-mcp-backups}
+    LOG_FILE="/var/log/backup/redis-restore.log"
+    
+    # Redis connection parameters
+    REDIS_HOST=${REDIS_HOST:-redis-cluster-access.production.svc.cluster.local}
+    REDIS_PORT=${REDIS_PORT:-6379}
+    REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    
+    # Logging function
+    log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    }
+    
+    # Error handling
+    handle_error() {
+        log "ERROR: $1"
+        exit 1
+    }
+    
+    # Check prerequisites
+    check_prerequisites() {
+        log "Checking prerequisites..."
+        
+        # Check if Redis client is available
+        if ! command -v redis-cli &> /dev/null; then
+            handle_error "redis-cli not found"
+        fi
+        
+        # Check if backup file exists
+        if [ -z "$BACKUP_FILE" ]; then
+            handle_error "BACKUP_FILE not specified"
+        fi
+        
+        mkdir -p "$(dirname "$LOG_FILE")"
+        
+        log "Prerequisites check passed"
+    }
+    
+    # Download backup from S3
+    download_from_s3() {
+        local s3_key="$1"
+        local local_file="$2"
+        
+        log "Downloading from S3: s3://$S3_BUCKET/$s3_key"
+        
+        if command -v aws &> /dev/null; then
+            aws s3 cp "s3://$S3_BUCKET/$s3_key" "$local_file" 2>> "$LOG_FILE"
+            
+            if [ $? -eq 0 ]; then
+                log "S3 download completed successfully"
+            else
+                handle_error "S3 download failed"
+            fi
+        else
+            handle_error "AWS CLI not available"
+        fi
+    }
+    
+    # Restore from RDB backup
+    restore_rdb_backup() {
+        local backup_file="$1"
+        local temp_dir="/tmp/redis_restore_$$"
+        
+        log "Starting RDB restore from: $backup_file"
+        
+        # Extract backup
+        mkdir -p "$temp_dir"
+        tar -xzf "$backup_file" -C "$temp_dir"
+        
+        local backup_dir=$(find "$temp_dir" -type d -name "redis_rdb_backup_*" | head -1)
+        
+        if [ -z "$backup_dir" ]; then
+            handle_error "No backup directory found in archive"
+        fi
+        
+        # Read backup metadata
+        local metadata_file="$backup_dir/backup-metadata.json"
+        if [ -f "$metadata_file" ]; then
+            local node_count=$(cat "$metadata_file" | grep -o '"node_count": [0-9]*' | cut -d: -f2 | tr -d ' ')
+            log "Backup contains $node_count nodes"
+        fi
+        
+        log "WARNING: RDB restore requires stopping Redis cluster"
+        log "Please ensure Redis cluster is stopped before proceeding"
+        
+        # Copy RDB files to Redis data directories
+        for rdb_file in "$backup_dir"/*.rdb; do
+            if [ -f "$rdb_file" ]; then
+                local node_name=$(basename "$rdb_file" .rdb)
+                log "Restoring RDB file for $node_name"
+                
+                # This would typically involve:
+                # 1. Stopping Redis node
+                # 2. Copying RDB file to data directory
+                # 3. Starting Redis node
+                
+                log "RDB file ready for restore: $rdb_file"
+            fi
+        done
+        
+        # Restore cluster configuration
+        if [ -f "$backup_dir/cluster-nodes.txt" ]; then
+            log "Cluster nodes configuration available"
+            cat "$backup_dir/cluster-nodes.txt"
+        fi
+        
+        if [ -f "$backup_dir/cluster-info.txt" ]; then
+            log "Cluster info configuration available"
+            cat "$backup_dir/cluster-info.txt"
+        fi
+        
+        log "RDB restore preparation completed"
+        log "Manual intervention required to complete restore"
+        
+        # Cleanup
+        # rm -rf "$temp_dir"
+    }
+    
+    # Restore from AOF backup
+    restore_aof_backup() {
+        local backup_file="$1"
+        local temp_dir="/tmp/redis_restore_$$"
+        
+        log "Starting AOF restore from: $backup_file"
+        
+        # Extract backup
+        mkdir -p "$temp_dir"
+        tar -xzf "$backup_file" -C "$temp_dir"
+        
+        local backup_dir=$(find "$temp_dir" -type d -name "redis_aof_backup_*" | head -1)
+        
+        if [ -z "$backup_dir" ]; then
+            handle_error "No backup directory found in archive"
+        fi
+        
+        # Read backup metadata
+        local metadata_file="$backup_dir/backup-metadata.json"
+        if [ -f "$metadata_file" ]; then
+            local node_count=$(cat "$metadata_file" | grep -o '"node_count": [0-9]*' | cut -d: -f2 | tr -d ' ')
+            log "Backup contains $node_count nodes"
+        fi
+        
+        log "WARNING: AOF restore requires stopping Redis cluster"
+        log "Please ensure Redis cluster is stopped before proceeding"
+        
+        # Copy AOF files to Redis data directories
+        for aof_file in "$backup_dir"/*.aof; do
+            if [ -f "$aof_file" ]; then
+                local node_name=$(basename "$aof_file" .aof)
+                log "Restoring AOF file for $node_name"
+                
+                # This would typically involve:
+                # 1. Stopping Redis node
+                # 2. Copying AOF file to data directory
+                # 3. Starting Redis node
+                
+                log "AOF file ready for restore: $aof_file"
+            fi
+        done
+        
+        # Restore cluster configuration
+        if [ -f "$backup_dir/cluster-nodes.txt" ]; then
+            log "Cluster nodes configuration available"
+            cat "$backup_dir/cluster-nodes.txt"
+        fi
+        
+        if [ -f "$backup_dir/cluster-info.txt" ]; then
+            log "Cluster info configuration available"
+            cat "$backup_dir/cluster-info.txt"
+        fi
+        
+        log "AOF restore preparation completed"
+        log "Manual intervention required to complete restore"
+        
+        # Cleanup
+        # rm -rf "$temp_dir"
+    }
+    
+    # Main execution
+    main() {
+        log "Starting Redis restore process (type: $RESTORE_TYPE)"
+        
+        check_prerequisites
+        
+        # Download from S3 if backup file is an S3 key
+        if [[ "$BACKUP_FILE" =~ ^s3:// ]]; then
+            local s3_key="${BACKUP_FILE#s3://}"
+            local local_file="$BACKUP_DIR/$(basename "$s3_key")"
+            download_from_s3 "$s3_key" "$local_file"
+            BACKUP_FILE="$local_file"
+        fi
+        
+        # Verify backup file exists
+        if [ ! -f "$BACKUP_FILE" ]; then
+            handle_error "Backup file not found: $BACKUP_FILE"
+        fi
+        
+        case "$RESTORE_TYPE" in
+            rdb)
+                restore_rdb_backup "$BACKUP_FILE"
+                ;;
+            aof)
+                restore_aof_backup "$BACKUP_FILE"
+                ;;
+            *)
+                handle_error "Invalid restore type: $RESTORE_TYPE"
+                ;;
+        esac
+        
+        log "Restore process completed successfully"
+    }
+    
+    # Run main function
+    main "$@"
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup-rdb
+  namespace: production
+  labels:
+    app: redis-backup
+    backup-type: rdb
+spec:
+  schedule: "0 4 * * *"  # Daily at 4 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: redis-backup
+            image: redis:7-alpine
+            env:
+            - name: BACKUP_TYPE
+              value: "rdb"
+            - name: BACKUP_DIR
+              value: "/backups"
+            - name: RETENTION_DAYS
+              value: "7"
+            - name: S3_BUCKET
+              value: "splunk-mcp-backups"
+            - name: REDIS_HOST
+              value: "redis-cluster-access.production.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-backup-secret
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-backup-secret
+                  key: secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            - name: backup-config
+              mountPath: /scripts
+            - name: backup-logs
+              mountPath: /var/log/backup
+            command:
+            - /bin/bash
+            - /scripts/backup-script.sh
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: redis-backup-pvc
+          - name: backup-config
+            configMap:
+              name: redis-backup-config
+              defaultMode: 0755
+          - name: backup-logs
+            emptyDir: {}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-backup-pvc
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "standard"
+  resources:
+    requests:
+      storage: 50Gi

@@ -1,0 +1,325 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-failover-config
+  namespace: production
+  labels:
+    app: postgresql-failover
+    tier: database
+data:
+  patroni.yml: |
+    scope: postgres-cluster
+    name: '{hostname}'
+    
+    restapi:
+      listen: 0.0.0.0:8008
+      connect_address: '{hostname}:8008'
+    
+    etcd:
+      hosts: 'etcd-client.production.svc.cluster.local:2379'
+    
+    bootstrap:
+      dcs:
+        ttl: 30
+        loop_wait: 10
+        retry_timeout: 30
+        maximum_lag_on_failover: 1048576
+        master_start_timeout: 300
+        synchronous_mode: true
+        synchronous_mode_strict: false
+        synchronous_node_count: 1
+        postgresql:
+          use_pg_rewind: true
+          use_slots: true
+          parameters:
+            max_connections: 200
+            shared_buffers: 256MB
+            effective_cache_size: 1GB
+            work_mem: 4MB
+            maintenance_work_mem: 64MB
+            wal_level: replica
+            max_wal_senders: 10
+            max_replication_slots: 10
+            wal_keep_segments: 32
+            hot_standby: on
+            hot_standby_feedback: on
+            max_standby_streaming_delay: 30s
+            max_standby_archive_delay: 30s
+            archive_mode: on
+            archive_command: 'test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f'
+            archive_timeout: 60
+            logging_collector: on
+            log_directory: 'pg_log'
+            log_filename: 'postgresql-%Y-%m-%d_%H%M%S.log'
+            log_rotation_age: 1d
+            log_rotation_size: 100MB
+            log_min_duration_statement: 1000
+            log_line_prefix: '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+            log_checkpoints: on
+            log_connections: on
+            log_disconnections: on
+            log_lock_waits: on
+            log_statement: 'ddl'
+            ssl: on
+            ssl_cert_file: '/etc/ssl/certs/server.crt'
+            ssl_key_file: '/etc/ssl/private/server.key'
+            ssl_ca_file: '/etc/ssl/certs/ca.crt'
+            ssl_ciphers: 'HIGH:MEDIUM:+3DES:!aNULL'
+            ssl_prefer_server_ciphers: on
+            random_page_cost: 1.1
+            effective_io_concurrency: 200
+            bgwriter_delay: 200ms
+            bgwriter_lru_maxpages: 100
+            bgwriter_lru_multiplier: 2.0
+            autovacuum: on
+            autovacuum_max_workers: 3
+            autovacuum_naptime: 20s
+            autovacuum_vacuum_threshold: 50
+            autovacuum_analyze_threshold: 50
+          pg_hba:
+            - local all all peer
+            - host all all 127.0.0.1/32 md5
+            - host all all ::1/128 md5
+            - host replication replicator 0.0.0.0/0 md5
+            - host all splunk_user 10.0.0.0/8 md5
+            - host all splunk_user 172.16.0.0/12 md5
+            - host all splunk_user 192.168.0.0/16 md5
+            - host all postgres_exporter 10.0.0.0/8 md5
+            - host all all 0.0.0.0/0 reject
+      initdb:
+        - encoding: UTF8
+        - data-checksums
+      users:
+        admin:
+          password: '{env[POSTGRES_PASSWORD]}'
+          options:
+            - createrole
+            - createdb
+        replicator:
+          password: '{env[POSTGRES_REPLICATION_PASSWORD]}'
+          options:
+            - replication
+    
+    postgresql:
+      listen: 0.0.0.0:5432
+      connect_address: '{hostname}:5432'
+      data_dir: /var/lib/postgresql/data/pgdata
+      bin_dir: /usr/local/bin
+      pgpass: /tmp/pgpass
+      authentication:
+        replication:
+          username: replicator
+          password: '{env[POSTGRES_REPLICATION_PASSWORD]}'
+        superuser:
+          username: admin
+          password: '{env[POSTGRES_PASSWORD]}'
+      parameters:
+        unix_socket_directories: '/var/run/postgresql'
+    
+    tags:
+      nofailover: false
+      noloadbalance: false
+      clonefrom: false
+      nosync: false
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql-patroni
+  namespace: production
+  labels:
+    app: postgresql-patroni
+    tier: database
+spec:
+  serviceName: postgresql-patroni
+  replicas: 3
+  selector:
+    matchLabels:
+      app: postgresql-patroni
+  template:
+    metadata:
+      labels:
+        app: postgresql-patroni
+        tier: database
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsNonRoot: true
+      containers:
+      - name: postgresql-patroni
+        image: postgres:14-alpine
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: POSTGRES_DB
+          value: "splunk_mcp"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: password
+        - name: POSTGRES_REPLICATION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secret
+              key: replication-password
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        - name: PATRONI_CONFIGURATION
+          value: "/etc/patroni/patroni.yml"
+        ports:
+        - containerPort: 5432
+          name: postgresql
+        - containerPort: 8008
+          name: patroni-api
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgresql-config
+          mountPath: /etc/patroni/patroni.yml
+          subPath: patroni.yml
+        - name: postgresql-archive
+          mountPath: /var/lib/postgresql/archive
+        - name: ssl-certs
+          mountPath: /etc/ssl/certs
+          readOnly: true
+        - name: ssl-private
+          mountPath: /etc/ssl/private
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8008
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          httpGet:
+            path: /readiness
+            port: 8008
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - patronictl -c /etc/patroni/patroni.yml stop
+      volumes:
+      - name: postgresql-config
+        configMap:
+          name: postgresql-failover-config
+      - name: postgresql-archive
+        persistentVolumeClaim:
+          claimName: postgresql-archive-pvc
+      - name: ssl-certs
+        secret:
+          secretName: postgresql-ssl-certs
+      - name: ssl-private
+        secret:
+          secretName: postgresql-ssl-private
+  volumeClaimTemplates:
+  - metadata:
+      name: postgresql-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "fast-ssd"
+      resources:
+        requests:
+          storage: 100Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-patroni
+  namespace: production
+  labels:
+    app: postgresql-patroni
+    tier: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgresql
+  - port: 8008
+    targetPort: 8008
+    name: patroni-api
+  selector:
+    app: postgresql-patroni
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-master
+  namespace: production
+  labels:
+    app: postgresql-patroni
+    tier: database
+    service-type: master
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgresql
+  selector:
+    app: postgresql-patroni
+    role: master
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-replicas
+  namespace: production
+  labels:
+    app: postgresql-patroni
+    tier: database
+    service-type: replica
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgresql
+  selector:
+    app: postgresql-patroni
+    role: replica
+
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: postgresql-patroni-monitor
+  namespace: production
+  labels:
+    app: postgresql-patroni
+    tier: database
+spec:
+  selector:
+    matchLabels:
+      app: postgresql-patroni
+  endpoints:
+  - port: patroni-api
+    interval: 30s
+    path: /metrics

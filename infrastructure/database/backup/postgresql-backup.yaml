@@ -1,0 +1,608 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-backup-config
+  namespace: production
+  labels:
+    app: postgresql-backup
+    tier: backup
+data:
+  backup-script.sh: |
+    #!/bin/bash
+    set -e
+    
+    # PostgreSQL Backup Script
+    # This script performs full and incremental backups of PostgreSQL
+    
+    # Configuration
+    BACKUP_TYPE=${BACKUP_TYPE:-full}
+    BACKUP_DIR=${BACKUP_DIR:-/backups}
+    RETENTION_DAYS=${RETENTION_DAYS:-30}
+    S3_BUCKET=${S3_BUCKET:-splunk-mcp-backups}
+    LOG_FILE="/var/log/backup/postgresql-backup.log"
+    
+    # Database connection parameters
+    PGHOST=${PGHOST:-postgresql-primary.production.svc.cluster.local}
+    PGPORT=${PGPORT:-5432}
+    PGUSER=${PGUSER:-postgres}
+    PGDATABASE=${PGDATABASE:-splunk_mcp}
+    
+    # Logging function
+    log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    }
+    
+    # Error handling
+    handle_error() {
+        log "ERROR: $1"
+        exit 1
+    }
+    
+    # Check prerequisites
+    check_prerequisites() {
+        log "Checking prerequisites..."
+        
+        # Check if PostgreSQL client is available
+        if ! command -v pg_dump &> /dev/null; then
+            handle_error "pg_dump not found"
+        fi
+        
+        if ! command -v pg_basebackup &> /dev/null; then
+            handle_error "pg_basebackup not found"
+        fi
+        
+        # Check if backup directory exists
+        mkdir -p "$BACKUP_DIR"
+        mkdir -p "$(dirname "$LOG_FILE")"
+        
+        # Test database connection
+        if ! pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE"; then
+            handle_error "Cannot connect to PostgreSQL database"
+        fi
+        
+        log "Prerequisites check passed"
+    }
+    
+    # Perform full backup
+    perform_full_backup() {
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_file="$BACKUP_DIR/postgresql_full_backup_$timestamp.sql"
+        local archive_file="$BACKUP_DIR/postgresql_full_backup_$timestamp.tar.gz"
+        
+        log "Starting full backup..."
+        
+        # Create SQL dump
+        pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+                --verbose --clean --if-exists --create \
+                --format=plain --no-owner --no-privileges \
+                > "$backup_file" 2>> "$LOG_FILE"
+        
+        if [ $? -eq 0 ]; then
+            log "SQL dump completed successfully"
+            
+            # Compress backup
+            tar -czf "$archive_file" -C "$BACKUP_DIR" "$(basename "$backup_file")"
+            rm "$backup_file"
+            
+            # Upload to S3 if configured
+            if [ -n "$S3_BUCKET" ]; then
+                upload_to_s3 "$archive_file" "full-backups/$(basename "$archive_file")"
+            fi
+            
+            log "Full backup completed: $archive_file"
+        else
+            handle_error "Full backup failed"
+        fi
+    }
+    
+    # Perform incremental backup
+    perform_incremental_backup() {
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_dir="$BACKUP_DIR/postgresql_incremental_$timestamp"
+        local archive_file="$BACKUP_DIR/postgresql_incremental_$timestamp.tar.gz"
+        
+        log "Starting incremental backup..."
+        
+        # Create base backup
+        pg_basebackup -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+                      -D "$backup_dir" -v -P -W -R \
+                      --checkpoint=fast --write-recovery-conf \
+                      2>> "$LOG_FILE"
+        
+        if [ $? -eq 0 ]; then
+            log "Base backup completed successfully"
+            
+            # Compress backup
+            tar -czf "$archive_file" -C "$BACKUP_DIR" "$(basename "$backup_dir")"
+            rm -rf "$backup_dir"
+            
+            # Upload to S3 if configured
+            if [ -n "$S3_BUCKET" ]; then
+                upload_to_s3 "$archive_file" "incremental-backups/$(basename "$archive_file")"
+            fi
+            
+            log "Incremental backup completed: $archive_file"
+        else
+            handle_error "Incremental backup failed"
+        fi
+    }
+    
+    # Upload file to S3
+    upload_to_s3() {
+        local file_path="$1"
+        local s3_key="$2"
+        
+        log "Uploading to S3: s3://$S3_BUCKET/$s3_key"
+        
+        if command -v aws &> /dev/null; then
+            aws s3 cp "$file_path" "s3://$S3_BUCKET/$s3_key" \
+                --storage-class STANDARD_IA \
+                --server-side-encryption AES256 \
+                2>> "$LOG_FILE"
+            
+            if [ $? -eq 0 ]; then
+                log "S3 upload completed successfully"
+            else
+                log "WARNING: S3 upload failed"
+            fi
+        else
+            log "WARNING: AWS CLI not available, skipping S3 upload"
+        fi
+    }
+    
+    # Clean old backups
+    cleanup_old_backups() {
+        log "Cleaning up old backups (retention: $RETENTION_DAYS days)..."
+        
+        # Remove old local backups
+        find "$BACKUP_DIR" -name "postgresql_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+        
+        # Remove old S3 backups if configured
+        if [ -n "$S3_BUCKET" ] && command -v aws &> /dev/null; then
+            aws s3 ls "s3://$S3_BUCKET/full-backups/" --recursive | \
+                awk '{print $4}' | \
+                xargs -I {} aws s3 rm "s3://$S3_BUCKET/{}" \
+                --query "Contents[?LastModified<='$(date -d "-$RETENTION_DAYS days" --iso-8601)'].Key" \
+                --output text 2>> "$LOG_FILE"
+        fi
+        
+        log "Cleanup completed"
+    }
+    
+    # Validate backup
+    validate_backup() {
+        local backup_file="$1"
+        
+        log "Validating backup: $backup_file"
+        
+        if [ ! -f "$backup_file" ]; then
+            handle_error "Backup file not found: $backup_file"
+        fi
+        
+        # Check if backup file is not empty
+        if [ ! -s "$backup_file" ]; then
+            handle_error "Backup file is empty: $backup_file"
+        fi
+        
+        # Check if backup file can be extracted
+        if [[ "$backup_file" == *.tar.gz ]]; then
+            tar -tzf "$backup_file" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                handle_error "Backup file is corrupted: $backup_file"
+            fi
+        fi
+        
+        log "Backup validation passed"
+    }
+    
+    # Main execution
+    main() {
+        log "Starting PostgreSQL backup process (type: $BACKUP_TYPE)"
+        
+        check_prerequisites
+        
+        case "$BACKUP_TYPE" in
+            full)
+                perform_full_backup
+                ;;
+            incremental)
+                perform_incremental_backup
+                ;;
+            *)
+                handle_error "Invalid backup type: $BACKUP_TYPE"
+                ;;
+        esac
+        
+        cleanup_old_backups
+        
+        log "Backup process completed successfully"
+    }
+    
+    # Run main function
+    main "$@"
+    
+  restore-script.sh: |
+    #!/bin/bash
+    set -e
+    
+    # PostgreSQL Restore Script
+    # This script restores PostgreSQL from backups
+    
+    # Configuration
+    RESTORE_TYPE=${RESTORE_TYPE:-full}
+    BACKUP_DIR=${BACKUP_DIR:-/backups}
+    BACKUP_FILE=${BACKUP_FILE:-}
+    S3_BUCKET=${S3_BUCKET:-splunk-mcp-backups}
+    LOG_FILE="/var/log/backup/postgresql-restore.log"
+    
+    # Database connection parameters
+    PGHOST=${PGHOST:-postgresql-primary.production.svc.cluster.local}
+    PGPORT=${PGPORT:-5432}
+    PGUSER=${PGUSER:-postgres}
+    PGDATABASE=${PGDATABASE:-splunk_mcp}
+    
+    # Logging function
+    log() {
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    }
+    
+    # Error handling
+    handle_error() {
+        log "ERROR: $1"
+        exit 1
+    }
+    
+    # Check prerequisites
+    check_prerequisites() {
+        log "Checking prerequisites..."
+        
+        # Check if PostgreSQL client is available
+        if ! command -v psql &> /dev/null; then
+            handle_error "psql not found"
+        fi
+        
+        if ! command -v pg_restore &> /dev/null; then
+            handle_error "pg_restore not found"
+        fi
+        
+        # Check if backup file exists
+        if [ -z "$BACKUP_FILE" ]; then
+            handle_error "BACKUP_FILE not specified"
+        fi
+        
+        mkdir -p "$(dirname "$LOG_FILE")"
+        
+        log "Prerequisites check passed"
+    }
+    
+    # Download backup from S3
+    download_from_s3() {
+        local s3_key="$1"
+        local local_file="$2"
+        
+        log "Downloading from S3: s3://$S3_BUCKET/$s3_key"
+        
+        if command -v aws &> /dev/null; then
+            aws s3 cp "s3://$S3_BUCKET/$s3_key" "$local_file" 2>> "$LOG_FILE"
+            
+            if [ $? -eq 0 ]; then
+                log "S3 download completed successfully"
+            else
+                handle_error "S3 download failed"
+            fi
+        else
+            handle_error "AWS CLI not available"
+        fi
+    }
+    
+    # Restore from full backup
+    restore_full_backup() {
+        local backup_file="$1"
+        local temp_dir="/tmp/postgresql_restore_$$"
+        
+        log "Starting full restore from: $backup_file"
+        
+        # Extract backup if compressed
+        if [[ "$backup_file" == *.tar.gz ]]; then
+            mkdir -p "$temp_dir"
+            tar -xzf "$backup_file" -C "$temp_dir"
+            local sql_file=$(find "$temp_dir" -name "*.sql" | head -1)
+            
+            if [ -z "$sql_file" ]; then
+                handle_error "No SQL file found in backup archive"
+            fi
+        else
+            sql_file="$backup_file"
+        fi
+        
+        # Restore database
+        log "Restoring database from SQL file: $sql_file"
+        
+        # Drop existing database (if exists) and recreate
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
+             -c "DROP DATABASE IF EXISTS $PGDATABASE;" 2>> "$LOG_FILE"
+        
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres \
+             -c "CREATE DATABASE $PGDATABASE;" 2>> "$LOG_FILE"
+        
+        # Restore from SQL dump
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+             -f "$sql_file" 2>> "$LOG_FILE"
+        
+        if [ $? -eq 0 ]; then
+            log "Full restore completed successfully"
+        else
+            handle_error "Full restore failed"
+        fi
+        
+        # Cleanup
+        if [ -d "$temp_dir" ]; then
+            rm -rf "$temp_dir"
+        fi
+    }
+    
+    # Restore from incremental backup
+    restore_incremental_backup() {
+        local backup_file="$1"
+        local temp_dir="/tmp/postgresql_restore_$$"
+        
+        log "Starting incremental restore from: $backup_file"
+        
+        # Extract backup
+        mkdir -p "$temp_dir"
+        tar -xzf "$backup_file" -C "$temp_dir"
+        
+        local data_dir=$(find "$temp_dir" -type d -name "postgresql_incremental_*" | head -1)
+        
+        if [ -z "$data_dir" ]; then
+            handle_error "No data directory found in backup archive"
+        fi
+        
+        log "WARNING: Incremental restore requires stopping PostgreSQL service"
+        log "Please ensure PostgreSQL is stopped before proceeding"
+        
+        # This would typically involve:
+        # 1. Stopping PostgreSQL service
+        # 2. Replacing data directory with backup
+        # 3. Starting PostgreSQL service
+        # 4. Performing point-in-time recovery if needed
+        
+        log "Incremental restore requires manual intervention"
+        log "Data directory backup extracted to: $data_dir"
+        
+        # Cleanup
+        # rm -rf "$temp_dir"
+    }
+    
+    # Main execution
+    main() {
+        log "Starting PostgreSQL restore process (type: $RESTORE_TYPE)"
+        
+        check_prerequisites
+        
+        # Download from S3 if backup file is an S3 key
+        if [[ "$BACKUP_FILE" =~ ^s3:// ]]; then
+            local s3_key="${BACKUP_FILE#s3://}"
+            local local_file="$BACKUP_DIR/$(basename "$s3_key")"
+            download_from_s3 "$s3_key" "$local_file"
+            BACKUP_FILE="$local_file"
+        fi
+        
+        # Verify backup file exists
+        if [ ! -f "$BACKUP_FILE" ]; then
+            handle_error "Backup file not found: $BACKUP_FILE"
+        fi
+        
+        case "$RESTORE_TYPE" in
+            full)
+                restore_full_backup "$BACKUP_FILE"
+                ;;
+            incremental)
+                restore_incremental_backup "$BACKUP_FILE"
+                ;;
+            *)
+                handle_error "Invalid restore type: $RESTORE_TYPE"
+                ;;
+        esac
+        
+        log "Restore process completed successfully"
+    }
+    
+    # Run main function
+    main "$@"
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-backup-full
+  namespace: production
+  labels:
+    app: postgresql-backup
+    backup-type: full
+spec:
+  schedule: "0 2 * * 0"  # Weekly at 2 AM on Sunday
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: postgresql-backup
+            image: postgres:14-alpine
+            env:
+            - name: BACKUP_TYPE
+              value: "full"
+            - name: BACKUP_DIR
+              value: "/backups"
+            - name: RETENTION_DAYS
+              value: "30"
+            - name: S3_BUCKET
+              value: "splunk-mcp-backups"
+            - name: PGHOST
+              value: "postgresql-primary.production.svc.cluster.local"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: password
+            - name: PGDATABASE
+              value: "splunk_mcp"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-backup-secret
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-backup-secret
+                  key: secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            - name: backup-config
+              mountPath: /scripts
+            - name: backup-logs
+              mountPath: /var/log/backup
+            command:
+            - /bin/bash
+            - /scripts/backup-script.sh
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "1"
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: postgresql-backup-pvc
+          - name: backup-config
+            configMap:
+              name: postgresql-backup-config
+              defaultMode: 0755
+          - name: backup-logs
+            emptyDir: {}
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-backup-incremental
+  namespace: production
+  labels:
+    app: postgresql-backup
+    backup-type: incremental
+spec:
+  schedule: "0 6,12,18 * * *"  # Every 6 hours
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: postgresql-backup
+            image: postgres:14-alpine
+            env:
+            - name: BACKUP_TYPE
+              value: "incremental"
+            - name: BACKUP_DIR
+              value: "/backups"
+            - name: RETENTION_DAYS
+              value: "7"
+            - name: S3_BUCKET
+              value: "splunk-mcp-backups"
+            - name: PGHOST
+              value: "postgresql-primary.production.svc.cluster.local"
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: password
+            - name: PGDATABASE
+              value: "splunk_mcp"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-backup-secret
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-backup-secret
+                  key: secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            - name: backup-config
+              mountPath: /scripts
+            - name: backup-logs
+              mountPath: /var/log/backup
+            command:
+            - /bin/bash
+            - /scripts/backup-script.sh
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "1"
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: postgresql-backup-pvc
+          - name: backup-config
+            configMap:
+              name: postgresql-backup-config
+              defaultMode: 0755
+          - name: backup-logs
+            emptyDir: {}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-backup-pvc
+  namespace: production
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "standard"
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-backup-secret
+  namespace: production
+  labels:
+    app: postgresql-backup
+type: Opaque
+data:
+  # Base64 encoded AWS credentials
+  access-key-id: WU9VUl9BV1NfQUNDRVNTX0tFWV9JRA==  # YOUR_AWS_ACCESS_KEY_ID
+  secret-access-key: WU9VUl9BV1NfU0VDUkVUX0FDQ0VTU19LRVk=  # YOUR_AWS_SECRET_ACCESS_KEY
