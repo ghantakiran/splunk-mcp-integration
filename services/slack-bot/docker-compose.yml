@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  slack-bot:
+    build: .
+    ports:
+      - "8004:8004"
+      - "9004:9004"  # Metrics port
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - NLP_ENGINE_URL=http://nlp-engine:8001
+      - VISUALIZATION_URL=http://visualization:8002
+      - ALERT_MANAGER_URL=http://alert-manager:8003
+      - DATABASE_URL=postgresql://slack_user:slack_pass@postgres:5432/slack_bot
+      - REDIS_URL=redis://redis:6379/3
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - slack-bot-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: slack_bot
+      POSTGRES_USER: slack_user
+      POSTGRES_PASSWORD: slack_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - slack-bot-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - slack-bot-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  slack-bot-network:
+    external: true
