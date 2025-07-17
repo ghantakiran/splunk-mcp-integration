@@ -1,0 +1,80 @@
+# FastAPI and ASGI server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# Database and caching
+asyncpg==0.29.0
+redis==5.0.1
+sqlalchemy[asyncio]==2.0.23
+alembic==1.13.1
+
+# Email handling
+aiosmtplib==3.0.1
+email-validator==2.1.0
+jinja2==3.1.2
+html2text==2020.1.16
+premailer==3.10.0
+
+# HTTP client for API calls
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.6
+passlib[bcrypt]==1.7.4
+cryptography==41.0.7
+
+# Async task queue
+celery[redis]==5.3.4
+kombu==5.3.4
+
+# Monitoring and logging
+prometheus-client==0.19.0
+structlog==23.2.0
+python-json-logger==2.0.7
+
+# Configuration and environment
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Date and time handling
+python-dateutil==2.8.2
+pytz==2023.3
+
+# File handling and attachments
+aiofiles==23.2.1
+python-magic==0.4.27
+
+# Testing dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.2
+pytest-mock==3.12.0
+
+# Template rendering
+mistune==3.0.2
+markdown==3.5.1
+
+# Report generation
+reportlab==4.0.7
+weasyprint==60.2
+
+# Excel support
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+
+# CSV handling
+pandas==2.1.3
+
+# Image processing for charts
+pillow==10.1.0
+
+# Development tools
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+mypy==1.7.1
