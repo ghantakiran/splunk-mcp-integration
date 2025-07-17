@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  email-service:
+    build: .
+    ports:
+      - "8006:8006"
+      - "9006:9006"  # Metrics port
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      
+      # SMTP Configuration
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - FROM_NAME=${FROM_NAME:-Splunk MCP Assistant}
+      
+      # IMAP Configuration (optional)
+      - IMAP_HOST=${IMAP_HOST}
+      - IMAP_USERNAME=${IMAP_USERNAME}
+      - IMAP_PASSWORD=${IMAP_PASSWORD}
+      
+      # Backend Service URLs
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - NLP_ENGINE_URL=http://nlp-engine:8001
+      - VISUALIZATION_URL=http://visualization:8002
+      - ALERT_MANAGER_URL=http://alert-manager:8003
+      
+      # Database and Cache
+      - DATABASE_URL=postgresql://email_user:email_pass@postgres:5432/email_service
+      - REDIS_URL=redis://redis:6379/5
+      
+      # Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      
+      # Feature flags
+      - ENABLE_IMAP_PROCESSING=${ENABLE_IMAP_PROCESSING:-false}
+      - ENABLE_ATTACHMENTS=${ENABLE_ATTACHMENTS:-true}
+      - ENABLE_HTML_EMAILS=${ENABLE_HTML_EMAILS:-true}
+      
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./logs:/app/logs
+      - ./templates:/app/templates
+    networks:
+      - email-service-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: email_service
+      POSTGRES_USER: email_user
+      POSTGRES_PASSWORD: email_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - email-service-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - email-service-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  email-service-network:
+    external: true
