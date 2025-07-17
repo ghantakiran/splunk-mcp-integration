@@ -1,0 +1,125 @@
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app: cert-manager
+    environment: production
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@splunk-mcp.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+    - dns01:
+        route53:
+          region: us-east-1
+          hostedZoneID: Z1234567890ABC
+          accessKeyID: AKIAIOSFODNN7EXAMPLE
+          secretAccessKeySecretRef:
+            name: route53-secret
+            key: secret-access-key
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app: cert-manager
+    environment: staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ops@splunk-mcp.com
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+    - dns01:
+        route53:
+          region: us-east-1
+          hostedZoneID: Z1234567890ABC
+          accessKeyID: AKIAIOSFODNN7EXAMPLE
+          secretAccessKeySecretRef:
+            name: route53-secret
+            key: secret-access-key
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: splunk-mcp-tls
+  namespace: splunk-mcp-prod
+  labels:
+    app: splunk-mcp
+    environment: production
+spec:
+  secretName: splunk-mcp-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: splunk-mcp.com
+  dnsNames:
+  - splunk-mcp.com
+  - www.splunk-mcp.com
+  - api.splunk-mcp.com
+  - app.splunk-mcp.com
+  - dashboard.splunk-mcp.com
+  - admin.splunk-mcp.com
+  - monitoring.splunk-mcp.com
+  - grafana.splunk-mcp.com
+  - prometheus.splunk-mcp.com
+  - kibana.splunk-mcp.com
+  - elasticsearch.splunk-mcp.com
+  duration: 2160h # 90 days
+  renewBefore: 720h # 30 days
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+  - client auth
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: splunk-mcp-tls-dev
+  namespace: splunk-mcp-dev
+  labels:
+    app: splunk-mcp
+    environment: development
+spec:
+  secretName: splunk-mcp-tls-dev
+  issuerRef:
+    name: letsencrypt-staging
+    kind: ClusterIssuer
+  commonName: dev.splunk-mcp.com
+  dnsNames:
+  - dev.splunk-mcp.com
+  - dev-api.splunk-mcp.com
+  - dev-app.splunk-mcp.com
+  - dev-dashboard.splunk-mcp.com
+  - dev-admin.splunk-mcp.com
+  - dev-monitoring.splunk-mcp.com
+  duration: 2160h # 90 days
+  renewBefore: 720h # 30 days
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: route53-secret
+  namespace: cert-manager
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual values
+  # echo -n "your-secret-access-key" | base64
+  secret-access-key: eW91ci1zZWNyZXQtYWNjZXNzLWtleQ==

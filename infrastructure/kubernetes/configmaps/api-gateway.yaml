@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: api-gateway
+    component: backend
+    environment: production
+data:
+  log-level: "INFO"
+  rate-limit-enabled: "true"
+  rate-limit-requests-per-minute: "1000"
+  rate-limit-burst-size: "100"
+  cors-origins: "https://app.splunk-mcp.com,https://dashboard.splunk-mcp.com"
+  session-timeout: "3600"
+  jwt-expiration: "1800"
+  jwt-refresh-expiration: "86400"
+  max-concurrent-requests: "1000"
+  request-timeout: "30"
+  database-pool-size: "20"
+  database-max-overflow: "30"
+  redis-pool-size: "10"
+  redis-max-connections: "50"
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  audit-log-enabled: "true"
+  security-headers-enabled: "true"
+  csrf-protection-enabled: "true"
+  api-version: "v1"
+  environment: "production"
+  feature-flags: |
+    {
+      "advanced_auth": true,
+      "rate_limiting": true,
+      "audit_logging": true,
+      "metrics_collection": true,
+      "websocket_support": true,
+      "multi_tenant": false
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: splunk-mcp-dev
+  labels:
+    app: api-gateway
+    component: backend
+    environment: development
+data:
+  log-level: "DEBUG"
+  rate-limit-enabled: "false"
+  rate-limit-requests-per-minute: "10000"
+  rate-limit-burst-size: "1000"
+  cors-origins: "*"
+  session-timeout: "7200"
+  jwt-expiration: "3600"
+  jwt-refresh-expiration: "86400"
+  max-concurrent-requests: "100"
+  request-timeout: "60"
+  database-pool-size: "5"
+  database-max-overflow: "10"
+  redis-pool-size: "5"
+  redis-max-connections: "10"
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  audit-log-enabled: "true"
+  security-headers-enabled: "false"
+  csrf-protection-enabled: "false"
+  api-version: "v1"
+  environment: "development"
+  feature-flags: |
+    {
+      "advanced_auth": false,
+      "rate_limiting": false,
+      "audit_logging": true,
+      "metrics_collection": true,
+      "websocket_support": true,
+      "multi_tenant": false
+    }

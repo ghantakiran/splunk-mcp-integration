@@ -1,0 +1,86 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nlp-engine-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: nlp-engine
+    component: backend
+    environment: production
+data:
+  log-level: "INFO"
+  max-context-length: "8000"
+  query-timeout: "60"
+  cache-ttl: "1800"
+  batch-size: "10"
+  max-concurrent-requests: "50"
+  model-temperature: "0.1"
+  model-max-tokens: "2000"
+  retry-attempts: "3"
+  retry-delay: "2"
+  openai-model: "gpt-4-turbo-preview"
+  anthropic-model: "claude-3-sonnet-20240229"
+  fallback-model: "gpt-3.5-turbo"
+  context-window-size: "4000"
+  spl-validation-enabled: "true"
+  performance-optimization-enabled: "true"
+  query-explanation-enabled: "true"
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  environment: "production"
+  feature-flags: |
+    {
+      "advanced_spl_generation": true,
+      "context_management": true,
+      "query_optimization": true,
+      "performance_analysis": true,
+      "statistical_functions": true,
+      "regex_patterns": true,
+      "lookup_tables": true,
+      "subquery_support": true,
+      "time_range_optimization": true
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nlp-engine-config
+  namespace: splunk-mcp-dev
+  labels:
+    app: nlp-engine
+    component: backend
+    environment: development
+data:
+  log-level: "DEBUG"
+  max-context-length: "4000"
+  query-timeout: "30"
+  cache-ttl: "300"
+  batch-size: "5"
+  max-concurrent-requests: "20"
+  model-temperature: "0.2"
+  model-max-tokens: "1000"
+  retry-attempts: "2"
+  retry-delay: "1"
+  openai-model: "gpt-3.5-turbo"
+  anthropic-model: "claude-3-haiku-20240307"
+  fallback-model: "gpt-3.5-turbo"
+  context-window-size: "2000"
+  spl-validation-enabled: "false"
+  performance-optimization-enabled: "false"
+  query-explanation-enabled: "true"
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  environment: "development"
+  feature-flags: |
+    {
+      "advanced_spl_generation": true,
+      "context_management": true,
+      "query_optimization": false,
+      "performance_analysis": false,
+      "statistical_functions": true,
+      "regex_patterns": true,
+      "lookup_tables": false,
+      "subquery_support": true,
+      "time_range_optimization": false
+    }

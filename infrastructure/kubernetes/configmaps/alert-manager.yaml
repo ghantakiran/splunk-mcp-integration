@@ -1,0 +1,142 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-manager-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: alert-manager
+    component: backend
+    environment: production
+data:
+  log-level: "INFO"
+  alert-batch-size: "100"
+  escalation-timeout: "1800"
+  correlation-window: "300"
+  max-alert-queue-size: "10000"
+  notification-timeout: "30"
+  retry-attempts: "3"
+  retry-delay: "5"
+  email-rate-limit: "100"
+  slack-rate-limit: "50"
+  webhook-timeout: "15"
+  alert-retention-days: "30"
+  escalation-levels: "3"
+  notification-channels: "email,slack,webhook,sms"
+  severity-levels: "critical,high,medium,low,info"
+  default-severity: "medium"
+  auto-resolution-enabled: "true"
+  auto-resolution-timeout: "3600"
+  duplicate-suppression-enabled: "true"
+  duplicate-suppression-window: "300"
+  correlation-enabled: "true"
+  correlation-algorithms: "time_based,pattern_based,ml_based"
+  notification-templates: |
+    {
+      "email": {
+        "subject": "[{{.Severity}}] {{.Title}}",
+        "body": "Alert: {{.Title}}\nSeverity: {{.Severity}}\nDescription: {{.Description}}\nTime: {{.Timestamp}}\nSource: {{.Source}}"
+      },
+      "slack": {
+        "title": "{{.Title}}",
+        "color": "{{.Color}}",
+        "text": "{{.Description}}"
+      }
+    }
+  escalation-rules: |
+    {
+      "critical": {
+        "immediate": ["email", "slack", "sms"],
+        "after_15min": ["webhook"],
+        "after_1hour": ["email"]
+      },
+      "high": {
+        "immediate": ["email", "slack"],
+        "after_30min": ["webhook"]
+      },
+      "medium": {
+        "immediate": ["email"],
+        "after_1hour": ["slack"]
+      }
+    }
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  environment: "production"
+  feature-flags: |
+    {
+      "advanced_correlation": true,
+      "ml_based_analysis": true,
+      "auto_resolution": true,
+      "escalation_management": true,
+      "notification_routing": true,
+      "alert_analytics": true
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-manager-config
+  namespace: splunk-mcp-dev
+  labels:
+    app: alert-manager
+    component: backend
+    environment: development
+data:
+  log-level: "DEBUG"
+  alert-batch-size: "10"
+  escalation-timeout: "300"
+  correlation-window: "60"
+  max-alert-queue-size: "1000"
+  notification-timeout: "10"
+  retry-attempts: "2"
+  retry-delay: "2"
+  email-rate-limit: "10"
+  slack-rate-limit: "5"
+  webhook-timeout: "5"
+  alert-retention-days: "7"
+  escalation-levels: "2"
+  notification-channels: "email,slack"
+  severity-levels: "critical,high,medium,low"
+  default-severity: "medium"
+  auto-resolution-enabled: "false"
+  auto-resolution-timeout: "1800"
+  duplicate-suppression-enabled: "false"
+  duplicate-suppression-window: "60"
+  correlation-enabled: "false"
+  correlation-algorithms: "time_based"
+  notification-templates: |
+    {
+      "email": {
+        "subject": "[DEV][{{.Severity}}] {{.Title}}",
+        "body": "DEV Alert: {{.Title}}\nSeverity: {{.Severity}}\nDescription: {{.Description}}\nTime: {{.Timestamp}}"
+      },
+      "slack": {
+        "title": "[DEV] {{.Title}}",
+        "color": "{{.Color}}",
+        "text": "{{.Description}}"
+      }
+    }
+  escalation-rules: |
+    {
+      "critical": {
+        "immediate": ["email", "slack"]
+      },
+      "high": {
+        "immediate": ["email"]
+      },
+      "medium": {
+        "immediate": ["email"]
+      }
+    }
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  environment: "development"
+  feature-flags: |
+    {
+      "advanced_correlation": false,
+      "ml_based_analysis": false,
+      "auto_resolution": false,
+      "escalation_management": true,
+      "notification_routing": true,
+      "alert_analytics": false
+    }

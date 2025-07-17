@@ -1,0 +1,90 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-prod
+  labels:
+    app: security
+    policy-type: default-deny
+    environment: production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-dev
+  labels:
+    app: security
+    policy-type: default-deny
+    environment: development
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-monitoring-prod
+  labels:
+    app: security
+    policy-type: default-deny
+    environment: production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-monitoring-dev
+  labels:
+    app: security
+    policy-type: default-deny
+    environment: development
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-logging-prod
+  labels:
+    app: security
+    policy-type: default-deny
+    environment: production
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-logging-dev
+  labels:
+    app: security
+    policy-type: default-deny
+    environment: development
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

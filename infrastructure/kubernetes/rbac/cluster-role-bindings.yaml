@@ -1,0 +1,77 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: splunk-mcp-monitoring-cluster-rolebinding
+  labels:
+    app: monitoring
+    component: observability
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: monitoring-sa
+  namespace: splunk-mcp-monitoring-prod
+- kind: ServiceAccount
+  name: monitoring-sa
+  namespace: splunk-mcp-monitoring-dev
+roleRef:
+  kind: ClusterRole
+  name: splunk-mcp-monitoring-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: splunk-mcp-logging-cluster-rolebinding
+  labels:
+    app: logging
+    component: observability
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: logging-sa
+  namespace: splunk-mcp-logging-prod
+- kind: ServiceAccount
+  name: logging-sa
+  namespace: splunk-mcp-logging-dev
+roleRef:
+  kind: ClusterRole
+  name: splunk-mcp-logging-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: splunk-mcp-backup-cluster-rolebinding
+  labels:
+    app: backup
+    component: disaster-recovery
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: backup-sa
+  namespace: splunk-mcp-prod
+- kind: ServiceAccount
+  name: backup-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: ClusterRole
+  name: splunk-mcp-backup-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: splunk-mcp-security-cluster-rolebinding
+  labels:
+    app: security
+    component: security
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: security-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: ClusterRole
+  name: splunk-mcp-security-cluster-role
+  apiGroup: rbac.authorization.k8s.io

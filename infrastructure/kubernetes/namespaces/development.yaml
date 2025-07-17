@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-dev
+  labels:
+    name: splunk-mcp-dev
+    environment: development
+    project: splunk-mcp
+    managed-by: kubernetes
+  annotations:
+    description: "Development environment for Splunk MCP Integration"
+    contact: "dev-team@splunk-mcp.com"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-monitoring-dev
+  labels:
+    name: splunk-mcp-monitoring-dev
+    environment: development
+    project: splunk-mcp
+    purpose: monitoring
+    managed-by: kubernetes
+  annotations:
+    description: "Monitoring namespace for development environment"
+    contact: "dev-team@splunk-mcp.com"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-logging-dev
+  labels:
+    name: splunk-mcp-logging-dev
+    environment: development
+    project: splunk-mcp
+    purpose: logging
+    managed-by: kubernetes
+  annotations:
+    description: "Logging namespace for development environment"
+    contact: "dev-team@splunk-mcp.com"

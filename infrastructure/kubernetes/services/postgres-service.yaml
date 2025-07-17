@@ -1,0 +1,80 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: splunk-mcp-prod
+  labels:
+    app: postgres
+    environment: production
+    service-type: headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: postgres
+    environment: production
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: splunk-mcp-prod
+  labels:
+    app: postgres
+    environment: production
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+    environment: production
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless-dev
+  namespace: splunk-mcp-dev
+  labels:
+    app: postgres
+    environment: development
+    service-type: headless
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: postgres
+    environment: development
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-dev
+  namespace: splunk-mcp-dev
+  labels:
+    app: postgres
+    environment: development
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+    environment: development
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: postgres
+    protocol: TCP

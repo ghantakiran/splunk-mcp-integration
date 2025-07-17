@@ -1,0 +1,125 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: visualization-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: visualization
+    component: backend
+    environment: production
+data:
+  log-level: "INFO"
+  chart-cache-ttl: "3600"
+  dashboard-cache-ttl: "7200"
+  max-chart-size: "50"
+  max-dashboard-panels: "20"
+  export-timeout: "120"
+  max-export-size: "100"
+  chart-render-timeout: "60"
+  dashboard-render-timeout: "180"
+  max-concurrent-renders: "10"
+  image-quality: "high"
+  default-chart-theme: "light"
+  supported-formats: "png,pdf,svg,html,json"
+  plotly-config: |
+    {
+      "displayModeBar": true,
+      "responsive": true,
+      "toImageButtonOptions": {
+        "format": "png",
+        "filename": "chart",
+        "height": 500,
+        "width": 700,
+        "scale": 1
+      }
+    }
+  color-schemes: |
+    {
+      "default": ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"],
+      "dark": ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3"],
+      "corporate": ["#2E5BBA", "#8BB8E8", "#FFC857", "#E84855", "#5E8B7E"]
+    }
+  chart-defaults: |
+    {
+      "line": {"mode": "lines+markers", "line": {"width": 2}},
+      "bar": {"textposition": "auto"},
+      "scatter": {"mode": "markers", "marker": {"size": 6}},
+      "pie": {"textinfo": "label+percent"},
+      "histogram": {"opacity": 0.7},
+      "heatmap": {"colorscale": "Blues"},
+      "area": {"fill": "tonexty"},
+      "bubble": {"mode": "markers", "marker": {"sizemode": "area"}}
+    }
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  environment: "production"
+  feature-flags: |
+    {
+      "advanced_charts": true,
+      "interactive_features": true,
+      "dashboard_builder": true,
+      "export_functionality": true,
+      "real_time_updates": true,
+      "collaborative_editing": false
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: visualization-config
+  namespace: splunk-mcp-dev
+  labels:
+    app: visualization
+    component: backend
+    environment: development
+data:
+  log-level: "DEBUG"
+  chart-cache-ttl: "300"
+  dashboard-cache-ttl: "600"
+  max-chart-size: "10"
+  max-dashboard-panels: "10"
+  export-timeout: "30"
+  max-export-size: "20"
+  chart-render-timeout: "30"
+  dashboard-render-timeout: "60"
+  max-concurrent-renders: "5"
+  image-quality: "medium"
+  default-chart-theme: "light"
+  supported-formats: "png,svg,json"
+  plotly-config: |
+    {
+      "displayModeBar": true,
+      "responsive": true,
+      "toImageButtonOptions": {
+        "format": "png",
+        "filename": "chart",
+        "height": 400,
+        "width": 600,
+        "scale": 1
+      }
+    }
+  color-schemes: |
+    {
+      "default": ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"],
+      "dark": ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3"]
+    }
+  chart-defaults: |
+    {
+      "line": {"mode": "lines+markers", "line": {"width": 2}},
+      "bar": {"textposition": "auto"},
+      "scatter": {"mode": "markers", "marker": {"size": 6}},
+      "pie": {"textinfo": "label+percent"}
+    }
+  metrics-enabled: "true"
+  health-check-interval: "30"
+  environment: "development"
+  feature-flags: |
+    {
+      "advanced_charts": false,
+      "interactive_features": true,
+      "dashboard_builder": true,
+      "export_functionality": true,
+      "real_time_updates": false,
+      "collaborative_editing": false
+    }

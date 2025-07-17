@@ -1,0 +1,134 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: frontend
+    component: frontend
+    environment: production
+data:
+  api-url: "https://api.splunk-mcp.com"
+  ws-url: "wss://api.splunk-mcp.com/ws"
+  app-version: "1.0.0"
+  app-name: "Splunk MCP Integration"
+  app-description: "Natural language interface for Splunk Enterprise"
+  company-name: "Splunk MCP"
+  support-email: "support@splunk-mcp.com"
+  documentation-url: "https://docs.splunk-mcp.com"
+  gtm-id: "GTM-XXXXXXX"
+  session-timeout: "3600"
+  auto-save-interval: "30"
+  max-file-size: "10485760"
+  supported-file-types: "json,csv,txt,log"
+  theme: "light"
+  default-language: "en"
+  supported-languages: "en,es,fr,de,ja"
+  feature-flags: |
+    {
+      "chat_interface": true,
+      "dashboard_builder": true,
+      "real_time_updates": true,
+      "export_functionality": true,
+      "collaboration_features": true,
+      "advanced_visualizations": true,
+      "mobile_support": true,
+      "offline_mode": false,
+      "dark_mode": true,
+      "notifications": true
+    }
+  ui-config: |
+    {
+      "sidebar_width": 280,
+      "header_height": 64,
+      "max_chat_history": 100,
+      "auto_refresh_interval": 30,
+      "chart_animation_duration": 300,
+      "toast_duration": 5000,
+      "loading_timeout": 30000
+    }
+  chart-config: |
+    {
+      "default_width": 800,
+      "default_height": 400,
+      "max_data_points": 10000,
+      "animation_enabled": true,
+      "interactive_enabled": true,
+      "export_enabled": true
+    }
+  security-config: |
+    {
+      "content_security_policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+      "x_frame_options": "DENY",
+      "x_content_type_options": "nosniff",
+      "referrer_policy": "strict-origin-when-cross-origin"
+    }
+  environment: "production"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: splunk-mcp-dev
+  labels:
+    app: frontend
+    component: frontend
+    environment: development
+data:
+  api-url: "http://api-gateway-dev.splunk-mcp-dev.svc.cluster.local:8000"
+  ws-url: "ws://api-gateway-dev.splunk-mcp-dev.svc.cluster.local:8000/ws"
+  app-version: "dev"
+  app-name: "Splunk MCP Integration (Dev)"
+  app-description: "Development environment for Splunk MCP Integration"
+  company-name: "Splunk MCP"
+  support-email: "dev@splunk-mcp.com"
+  documentation-url: "https://dev-docs.splunk-mcp.com"
+  session-timeout: "7200"
+  auto-save-interval: "10"
+  max-file-size: "5242880"
+  supported-file-types: "json,csv,txt,log"
+  theme: "light"
+  default-language: "en"
+  supported-languages: "en"
+  feature-flags: |
+    {
+      "chat_interface": true,
+      "dashboard_builder": true,
+      "real_time_updates": false,
+      "export_functionality": true,
+      "collaboration_features": false,
+      "advanced_visualizations": true,
+      "mobile_support": false,
+      "offline_mode": false,
+      "dark_mode": true,
+      "notifications": true,
+      "debug_mode": true
+    }
+  ui-config: |
+    {
+      "sidebar_width": 280,
+      "header_height": 64,
+      "max_chat_history": 50,
+      "auto_refresh_interval": 60,
+      "chart_animation_duration": 100,
+      "toast_duration": 10000,
+      "loading_timeout": 60000
+    }
+  chart-config: |
+    {
+      "default_width": 600,
+      "default_height": 300,
+      "max_data_points": 1000,
+      "animation_enabled": false,
+      "interactive_enabled": true,
+      "export_enabled": true
+    }
+  security-config: |
+    {
+      "content_security_policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "x_frame_options": "SAMEORIGIN",
+      "x_content_type_options": "nosniff",
+      "referrer_policy": "no-referrer-when-downgrade"
+    }
+  environment: "development"

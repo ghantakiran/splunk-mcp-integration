@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-prod
+  labels:
+    name: splunk-mcp-prod
+    environment: production
+    project: splunk-mcp
+    managed-by: kubernetes
+  annotations:
+    description: "Production environment for Splunk MCP Integration"
+    contact: "ops-team@splunk-mcp.com"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-monitoring-prod
+  labels:
+    name: splunk-mcp-monitoring-prod
+    environment: production
+    project: splunk-mcp
+    purpose: monitoring
+    managed-by: kubernetes
+  annotations:
+    description: "Monitoring namespace for production environment"
+    contact: "ops-team@splunk-mcp.com"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-logging-prod
+  labels:
+    name: splunk-mcp-logging-prod
+    environment: production
+    project: splunk-mcp
+    purpose: logging
+    managed-by: kubernetes
+  annotations:
+    description: "Logging namespace for production environment"
+    contact: "ops-team@splunk-mcp.com"

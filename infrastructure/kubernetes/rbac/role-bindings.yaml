@@ -1,0 +1,216 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-gateway-rolebinding
+  namespace: splunk-mcp-prod
+  labels:
+    app: api-gateway
+    component: backend
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: api-gateway-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: api-gateway-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-gateway-rolebinding
+  namespace: splunk-mcp-dev
+  labels:
+    app: api-gateway
+    component: backend
+    environment: development
+subjects:
+- kind: ServiceAccount
+  name: api-gateway-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: Role
+  name: api-gateway-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nlp-engine-rolebinding
+  namespace: splunk-mcp-prod
+  labels:
+    app: nlp-engine
+    component: backend
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: nlp-engine-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: nlp-engine-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nlp-engine-rolebinding
+  namespace: splunk-mcp-dev
+  labels:
+    app: nlp-engine
+    component: backend
+    environment: development
+subjects:
+- kind: ServiceAccount
+  name: nlp-engine-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: Role
+  name: nlp-engine-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: visualization-rolebinding
+  namespace: splunk-mcp-prod
+  labels:
+    app: visualization
+    component: backend
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: visualization-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: visualization-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: visualization-rolebinding
+  namespace: splunk-mcp-dev
+  labels:
+    app: visualization
+    component: backend
+    environment: development
+subjects:
+- kind: ServiceAccount
+  name: visualization-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: Role
+  name: visualization-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alert-manager-rolebinding
+  namespace: splunk-mcp-prod
+  labels:
+    app: alert-manager
+    component: backend
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: alert-manager-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: alert-manager-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alert-manager-rolebinding
+  namespace: splunk-mcp-dev
+  labels:
+    app: alert-manager
+    component: backend
+    environment: development
+subjects:
+- kind: ServiceAccount
+  name: alert-manager-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: Role
+  name: alert-manager-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-rolebinding
+  namespace: splunk-mcp-prod
+  labels:
+    app: postgres
+    component: database
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: postgres-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: database-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-rolebinding
+  namespace: splunk-mcp-dev
+  labels:
+    app: postgres
+    component: database
+    environment: development
+subjects:
+- kind: ServiceAccount
+  name: postgres-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: Role
+  name: database-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-rolebinding
+  namespace: splunk-mcp-prod
+  labels:
+    app: redis
+    component: cache
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: redis-sa
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: database-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-rolebinding
+  namespace: splunk-mcp-dev
+  labels:
+    app: redis
+    component: cache
+    environment: development
+subjects:
+- kind: ServiceAccount
+  name: redis-sa
+  namespace: splunk-mcp-dev
+roleRef:
+  kind: Role
+  name: database-role
+  apiGroup: rbac.authorization.k8s.io

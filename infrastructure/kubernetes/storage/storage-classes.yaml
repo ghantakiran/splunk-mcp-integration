@@ -1,0 +1,69 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+  labels:
+    app: storage
+    environment: production
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+  kmsKeyId: alias/ebs-encryption-key
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard
+  labels:
+    app: storage
+    environment: development
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp2
+  encrypted: "false"
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: high-performance
+  labels:
+    app: storage
+    environment: production
+    tier: high-performance
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: io2
+  iops: "10000"
+  throughput: "1000"
+  encrypted: "true"
+  kmsKeyId: alias/ebs-encryption-key
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: backup-storage
+  labels:
+    app: storage
+    environment: production
+    tier: backup
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: sc1
+  encrypted: "true"
+  kmsKeyId: alias/ebs-encryption-key
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer

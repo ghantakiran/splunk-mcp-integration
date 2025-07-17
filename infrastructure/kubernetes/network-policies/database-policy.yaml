@@ -1,0 +1,202 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  namespace: splunk-mcp-prod
+  labels:
+    app: postgres
+    policy-type: database-specific
+    environment: production
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: alert-manager
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: backup
+    ports:
+    - protocol: TCP
+      port: 5432
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: splunk-mcp-monitoring-prod
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  namespace: splunk-mcp-dev
+  labels:
+    app: postgres
+    policy-type: database-specific
+    environment: development
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+      environment: development
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: alert-manager
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: backup
+    ports:
+    - protocol: TCP
+      port: 5432
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: splunk-mcp-monitoring-dev
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: splunk-mcp-prod
+  labels:
+    app: redis
+    policy-type: cache-specific
+    environment: production
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: nlp-engine
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: visualization
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: alert-manager
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 6379
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: splunk-mcp-monitoring-prod
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: splunk-mcp-dev
+  labels:
+    app: redis
+    policy-type: cache-specific
+    environment: development
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+      environment: development
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: nlp-engine
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: visualization
+          component: backend
+    - podSelector:
+        matchLabels:
+          app: alert-manager
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 6379
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: splunk-mcp-monitoring-dev
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53

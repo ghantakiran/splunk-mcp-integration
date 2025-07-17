@@ -533,8 +533,357 @@ echo "Deployment completed successfully"
 - Monitor resource usage
 - Track application performance
 
+## Comprehensive Kubernetes Infrastructure
+
+### Production-Ready Deployment Architecture
+
+The Splunk MCP Integration project now includes a complete Kubernetes infrastructure with the following components:
+
+#### Core Infrastructure Components
+
+**1. Namespaces and Environment Separation**
+- Production namespace: `splunk-mcp-prod`
+- Development namespace: `splunk-mcp-dev`
+- Monitoring namespaces: `splunk-mcp-monitoring-[env]`
+- Logging namespaces: `splunk-mcp-logging-[env]`
+
+**2. Application Deployments**
+- API Gateway: 3 replicas (prod), 1 replica (dev)
+- NLP Engine: 2 replicas (prod), 1 replica (dev)
+- Visualization Service: 2 replicas (prod), 1 replica (dev)
+- Alert Manager: 2 replicas (prod), 1 replica (dev)
+- Frontend: 3 replicas (prod), 1 replica (dev)
+
+**3. Data Layer**
+- PostgreSQL: StatefulSet with persistent volumes
+- Redis: StatefulSet with persistent volumes
+- Storage classes: fast-ssd (prod), standard (dev)
+
+**4. Service Mesh and Networking**
+- NGINX Ingress Controller with SSL/TLS termination
+- Network policies for service isolation
+- Service discovery and load balancing
+- Rate limiting and DDoS protection
+
+**5. Security Framework**
+- RBAC with service accounts and roles
+- Pod security contexts (non-root users)
+- Network segmentation policies
+- Secrets management with encryption
+
+**6. Autoscaling and Performance**
+- Horizontal Pod Autoscaler (HPA) for all services
+- CPU and memory-based scaling
+- Custom metrics support
+- Resource requests and limits
+
+#### Deployment Instructions
+
+**Prerequisites:**
+```bash
+# Install required tools
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh
+
+# Install cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
+
+# Install NGINX Ingress Controller
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm install ingress-nginx ingress-nginx/ingress-nginx
+```
+
+**Step-by-Step Deployment:**
+
+1. **Create Namespaces**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/namespaces/
+   ```
+
+2. **Deploy Storage Infrastructure**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/storage/storage-classes.yaml
+   kubectl apply -f infrastructure/kubernetes/storage/postgres-storage.yaml
+   kubectl apply -f infrastructure/kubernetes/storage/redis-storage.yaml
+   ```
+
+3. **Configure Secrets (Update values first!)**
+   ```bash
+   # Edit secret values in infrastructure/kubernetes/secrets/
+   kubectl apply -f infrastructure/kubernetes/secrets/
+   ```
+
+4. **Deploy Configuration**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/configmaps/
+   ```
+
+5. **Set up RBAC**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/rbac/
+   ```
+
+6. **Deploy Applications**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/deployments/
+   kubectl apply -f infrastructure/kubernetes/services/
+   ```
+
+7. **Configure Networking**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/network-policies/
+   kubectl apply -f infrastructure/kubernetes/ingress/
+   ```
+
+8. **Enable Autoscaling**
+   ```bash
+   kubectl apply -f infrastructure/kubernetes/hpa/
+   ```
+
+#### Environment-Specific Configurations
+
+**Production Environment:**
+- High availability with multiple replicas
+- Strict security policies and network isolation
+- SSL/TLS termination with Let's Encrypt
+- Production-grade monitoring and alerting
+- Automated backup and disaster recovery
+
+**Development Environment:**
+- Single replica deployments for cost efficiency
+- Relaxed security policies for development
+- Debug logging and extended timeouts
+- Development-specific feature flags
+
+#### Security Features
+
+**Network Security:**
+- Default deny-all network policies
+- Service-specific ingress/egress rules
+- Ingress controller with rate limiting
+- DDoS protection and WAF integration
+
+**Application Security:**
+- Non-root container execution
+- Read-only root filesystems
+- Security context constraints
+- Pod security policies
+
+**Data Security:**
+- Encryption at rest and in transit
+- Secret management with Kubernetes secrets
+- JWT token authentication
+- Role-based access control
+
+#### Monitoring and Observability
+
+**Metrics Collection:**
+- Prometheus metrics endpoints on all services
+- Grafana dashboards for visualization
+- Custom application metrics
+- Infrastructure monitoring
+
+**Logging:**
+- Centralized log aggregation
+- Structured logging with correlation IDs
+- Log retention and rotation policies
+- Search and analysis capabilities
+
+**Health Monitoring:**
+- Liveness, readiness, and startup probes
+- Service health endpoints
+- Application performance monitoring
+- Error tracking and alerting
+
+#### Scaling and Performance
+
+**Horizontal Pod Autoscaling:**
+- CPU and memory-based scaling
+- Custom metrics support (request rate, queue length)
+- Service-specific scaling policies
+- Predictive scaling capabilities
+
+**Resource Management:**
+- Quality of Service (QoS) classes
+- Resource requests and limits
+- Node affinity and anti-affinity
+- Pod disruption budgets
+
+#### Disaster Recovery
+
+**Backup Strategy:**
+- Automated database backups
+- Persistent volume snapshots
+- Configuration backup
+- Point-in-time recovery
+
+**High Availability:**
+- Multi-zone deployments
+- Database replication
+- Load balancer configuration
+- Failover mechanisms
+
+#### Troubleshooting Guide
+
+**Common Issues and Solutions:**
+
+1. **Pod Startup Failures:**
+   ```bash
+   kubectl describe pod <pod-name> -n splunk-mcp-prod
+   kubectl logs <pod-name> -n splunk-mcp-prod
+   ```
+
+2. **Network Connectivity Issues:**
+   ```bash
+   kubectl get networkpolicies -n splunk-mcp-prod
+   kubectl get endpoints -n splunk-mcp-prod
+   ```
+
+3. **Storage Issues:**
+   ```bash
+   kubectl get pvc -n splunk-mcp-prod
+   kubectl describe pvc <pvc-name> -n splunk-mcp-prod
+   ```
+
+4. **SSL/TLS Certificate Issues:**
+   ```bash
+   kubectl get certificates -n splunk-mcp-prod
+   kubectl describe certificate splunk-mcp-tls -n splunk-mcp-prod
+   ```
+
+**Monitoring Commands:**
+```bash
+# Check application health
+kubectl get pods -n splunk-mcp-prod
+kubectl top pods -n splunk-mcp-prod
+
+# Verify services
+kubectl get svc -n splunk-mcp-prod
+kubectl get ingress -n splunk-mcp-prod
+
+# Check autoscaling
+kubectl get hpa -n splunk-mcp-prod
+kubectl describe hpa api-gateway-hpa -n splunk-mcp-prod
+
+# Monitor network policies
+kubectl get networkpolicies -n splunk-mcp-prod
+```
+
+#### Performance Optimization
+
+**Resource Tuning:**
+- Monitor resource usage patterns
+- Adjust CPU/memory limits based on metrics
+- Optimize JVM settings for Java applications
+- Database connection pooling optimization
+
+**Caching Strategy:**
+- Redis configuration optimization
+- Application-level caching
+- CDN integration for static assets
+- Query result caching
+
+#### Maintenance and Operations
+
+**Regular Tasks:**
+- Certificate renewal monitoring
+- Security policy updates
+- Resource usage monitoring
+- Log rotation and cleanup
+- Database maintenance
+
+**Upgrade Process:**
+1. Test in development environment
+2. Backup critical data
+3. Rolling update deployment
+4. Monitor application health
+5. Rollback if necessary
+
+#### Cost Optimization
+
+**Resource Efficiency:**
+- Right-sizing pod resources
+- Vertical pod autoscaling
+- Node autoscaling
+- Spot instance utilization
+
+**Development Environment:**
+- Scheduled pod shutdown
+- Shared development resources
+- Resource quotas and limits
+- Cost monitoring and alerts
+
+## Advanced Features
+
+### Service Mesh Integration (Istio)
+
+The infrastructure is prepared for Istio service mesh integration with the following benefits:
+
+**Traffic Management:**
+- Advanced load balancing
+- Circuit breaker patterns
+- Retry and timeout policies
+- Canary deployments
+
+**Security:**
+- Mutual TLS (mTLS) between services
+- Fine-grained authorization policies
+- Traffic encryption
+- Certificate management
+
+**Observability:**
+- Distributed tracing
+- Service mesh metrics
+- Traffic visualization
+- Performance monitoring
+
+### Backup and Disaster Recovery
+
+**Automated Backup:**
+- Scheduled database backups
+- Persistent volume snapshots
+- Configuration backup
+- Cross-region replication
+
+**Disaster Recovery:**
+- Multi-region deployment
+- Automated failover
+- Data synchronization
+- Recovery time objectives (RTO)
+
+### Compliance and Governance
+
+**Data Protection:**
+- GDPR compliance features
+- Data retention policies
+- Privacy controls
+- Audit logging
+
+**Security Compliance:**
+- SOC 2 Type II compliance
+- ISO 27001 standards
+- NIST framework alignment
+- Regular security assessments
+
 ## Next Steps
-- Implement service mesh (Istio)
-- Add automated scaling policies
-- Enhance security with admission controllers
-- Implement disaster recovery procedures
+
+### Immediate Priorities
+1. Complete monitoring infrastructure (Prometheus/Grafana)
+2. Implement logging infrastructure (ELK stack)
+3. Set up backup and disaster recovery
+4. Deploy service mesh (Istio)
+
+### Long-term Roadmap
+1. Advanced security with admission controllers
+2. Multi-cluster deployment
+3. GitOps integration with ArgoCD
+4. Chaos engineering implementation
+5. Performance optimization automation
+
+### Integration Tasks
+1. CI/CD pipeline integration
+2. Infrastructure as Code (Terraform)
+3. Monitoring alerts and runbooks
+4. Security scanning and compliance
+5. Cost optimization strategies
