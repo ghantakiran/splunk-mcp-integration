@@ -17,9 +17,13 @@ from ...ai import (
 )
 from ...core.config import settings
 from ...core.logging import get_logger, LogContext
+from .ai_endpoints import router as ai_router
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+# Include AI endpoints
+router.include_router(ai_router, prefix="/ai", tags=["AI Features"])
 
 
 # Request/Response Models
