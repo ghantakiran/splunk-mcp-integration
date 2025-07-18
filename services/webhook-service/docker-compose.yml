@@ -1,0 +1,172 @@
+version: '3.8'
+
+services:
+  webhook-service:
+    build: .
+    ports:
+      - "8007:8007"
+      - "9007:9007"  # Metrics port
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=8007
+      - METRICS_PORT=9007
+      
+      # Database configuration
+      - DATABASE_URL=postgresql+asyncpg://webhook:webhook123@postgres:5432/webhook_db
+      - DATABASE_POOL_SIZE=20
+      - DATABASE_MAX_OVERFLOW=30
+      
+      # Redis configuration
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_TIMEOUT=5
+      
+      # Service URLs (update these to match your environment)
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - NLP_ENGINE_URL=http://nlp-engine:8001
+      - VISUALIZATION_URL=http://visualization:8002
+      - ALERT_MANAGER_URL=http://alert-manager:8003
+      - EMAIL_SERVICE_URL=http://email-service:8006
+      
+      # JWT configuration
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_HOURS=24
+      
+      # Webhook settings
+      - MAX_WEBHOOK_PAYLOAD_SIZE=10485760  # 10MB
+      - MAX_WEBHOOKS_PER_USER=50
+      - WEBHOOK_RETRY_ATTEMPTS=3
+      - WEBHOOK_RETRY_DELAY=300
+      - WEBHOOK_DELIVERY_TIMEOUT=30
+      
+      # Event processing
+      - MAX_EVENTS_PER_MINUTE=1000
+      - EVENT_BATCH_SIZE=100
+      - EVENT_PROCESSING_INTERVAL=10
+      - EVENT_RETENTION_DAYS=30
+      
+      # Delivery settings
+      - MAX_CONCURRENT_DELIVERIES=50
+      - DELIVERY_RETRY_EXPONENTIAL_BASE=2.0
+      - DELIVERY_RETRY_MAX_DELAY=3600
+      - DELIVERY_QUEUE_SIZE=10000
+      
+      # Rate limiting
+      - RATE_LIMIT_PER_USER=1000
+      - RATE_LIMIT_PER_ENDPOINT=500
+      - RATE_LIMIT_WINDOW=3600
+      - RATE_LIMIT_BURST=10
+      
+      # Feature flags
+      - ENABLE_SIGNATURE_VERIFICATION=true
+      - ENABLE_PAYLOAD_COMPRESSION=false
+      - ENABLE_DELIVERY_TRACKING=true
+      - ENABLE_EVENT_FILTERING=true
+      - ENABLE_ANALYTICS=true
+      
+      # HTTP client settings
+      - HTTP_CLIENT_TIMEOUT=30
+      - HTTP_CLIENT_MAX_CONNECTIONS=100
+      - HTTP_CLIENT_MAX_KEEPALIVE=20
+      - HTTP_CLIENT_KEEPALIVE_EXPIRY=5
+      
+      # Background tasks
+      - BACKGROUND_TASK_INTERVAL=60
+      - CLEANUP_TASK_INTERVAL=3600
+      - METRICS_COLLECTION_INTERVAL=300
+      
+      # Supported event types
+      - SUPPORTED_EVENT_TYPES=query.completed,alert.triggered,dashboard.created,report.generated,error.occurred,system.status_changed,user.action,data.updated
+      
+      # Webhook URL schemes
+      - WEBHOOK_URL_SCHEMES=http,https
+      
+      # Logging
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - webhook-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=webhook_db
+      - POSTGRES_USER=webhook
+      - POSTGRES_PASSWORD=webhook123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5438:5432"  # Different port to avoid conflicts
+    restart: unless-stopped
+    networks:
+      - webhook-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webhook -d webhook_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"  # Different port to avoid conflicts
+    restart: unless-stopped
+    networks:
+      - webhook-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Optional: Redis Commander for development
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    hostname: redis-commander
+    ports:
+      - "8082:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - webhook-network
+    profiles:
+      - dev
+
+  # Optional: pgAdmin for development
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@webhook.local
+      - PGADMIN_DEFAULT_PASSWORD=admin123
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "8083:80"
+    depends_on:
+      - postgres
+    networks:
+      - webhook-network
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  webhook-network:
+    driver: bridge
