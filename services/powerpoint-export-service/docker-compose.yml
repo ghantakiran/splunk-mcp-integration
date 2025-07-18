@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  powerpoint-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8011:8011"
+      - "9011:9011"
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql://pptservice:pptservice@postgres:5432/pptservice
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./app:/app/app
+      - ppt_exports:/tmp/ppt-exports
+      - ppt_templates:/app/templates
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pptservice
+      POSTGRES_USER: pptservice
+      POSTGRES_PASSWORD: pptservice
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pptservice -d pptservice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - tools
+
+  # Optional: pgAdmin for PostgreSQL management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  ppt_exports:
+    driver: local
+  ppt_templates:
+    driver: local
+
+networks:
+  default:
+    name: ppt-export-network
+    driver: bridge
