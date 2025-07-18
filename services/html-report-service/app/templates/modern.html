@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>{{ metadata.title }}</title>
+    <meta name="description" content="{{ metadata.description }}">
+    <meta name="author" content="{{ metadata.author }}">
+    <meta name="keywords" content="{{ metadata.keywords | join(', ') }}">
+    
+    <!-- Bootstrap CSS -->
+    {% if enable_bootstrap %}
+    {% if cdn_base_url.startswith('http') %}
+    <link href="{{ cdn_base_url }}/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    {% else %}
+    <link href="{{ cdn_base_url }}/bootstrap.min.css" rel="stylesheet">
+    {% endif %}
+    {% endif %}
+    
+    <!-- Plotly.js -->
+    {% if enable_plotly %}
+    {% if cdn_base_url.startswith('http') %}
+    <script src="{{ cdn_base_url }}/plotly.js/2.26.0/plotly.min.js"></script>
+    {% else %}
+    <script src="{{ cdn_base_url }}/plotly.min.js"></script>
+    {% endif %}
+    {% endif %}
+    
+    <!-- DataTables -->
+    {% if enable_datatables %}
+    {% if cdn_base_url.startswith('http') %}
+    <link href="{{ cdn_base_url }}/datatables/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <script src="{{ cdn_base_url }}/jquery/3.7.0/jquery.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables-buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables-buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables-buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables-buttons/2.4.1/js/buttons.print.min.js"></script>
+    <script src="{{ cdn_base_url }}/jszip/3.10.1/jszip.min.js"></script>
+    <script src="{{ cdn_base_url }}/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="{{ cdn_base_url }}/pdfmake/0.2.7/vfs_fonts.js"></script>
+    {% else %}
+    <link href="{{ cdn_base_url }}/datatables.min.css" rel="stylesheet">
+    <script src="{{ cdn_base_url }}/jquery.min.js"></script>
+    <script src="{{ cdn_base_url }}/datatables.min.js"></script>
+    {% endif %}
+    {% endif %}
+    
+    <!-- Custom CSS -->
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --info-color: #17a2b8;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --white: #ffffff;
+            --body-bg: #f8f9fa;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+        }
+        
+        {% if enable_dark_mode %}
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --body-bg: #1a1a1a;
+                --text-color: #e9ecef;
+                --border-color: #495057;
+                --white: #2d3748;
+                --light-color: #343a40;
+                --dark-color: #f8f9fa;
+            }
+        }
+        {% endif %}
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .report-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .report-title {
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+        }
+        
+        .report-description {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .report-meta {
+            background: var(--white);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .section-container {
+            margin-bottom: 2rem;
+        }
+        
+        .section-container h3 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .chart-container {
+            background: var(--white);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            min-height: 400px;
+        }
+        
+        .table-container {
+            background: var(--white);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        
+        .table-container table {
+            width: 100%;
+            margin-bottom: 0;
+        }
+        
+        .content-section {
+            background: var(--white);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .report-footer {
+            background: var(--light-color);
+            border-top: 1px solid var(--border-color);
+            padding: 2rem 0;
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+        }
+        
+        .branding {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .branding img {
+            max-height: 40px;
+        }
+        
+        /* Interactive elements */
+        .interactive-controls {
+            background: var(--light-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group label {
+            font-weight: 600;
+            margin-bottom: 0;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.375rem 0.75rem;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .report-title {
+                font-size: 2rem;
+            }
+            
+            .chart-container {
+                padding: 0.5rem;
+                min-height: 300px;
+            }
+            
+            .table-container {
+                padding: 0.5rem;
+            }
+            
+            .filter-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+        
+        /* Print styles */
+        {% if enable_print_css %}
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            
+            body {
+                background: white !important;
+                color: black !important;
+            }
+            
+            .report-header {
+                background: white !important;
+                color: black !important;
+                box-shadow: none !important;
+                border-bottom: 2px solid #000;
+            }
+            
+            .chart-container,
+            .table-container,
+            .content-section {
+                box-shadow: none !important;
+                border: 1px solid #ccc !important;
+                break-inside: avoid;
+            }
+            
+            .section-container {
+                break-inside: avoid;
+            }
+            
+            h1, h2, h3, h4, h5, h6 {
+                break-after: avoid;
+            }
+        }
+        {% endif %}
+        
+        /* Custom branding styles */
+        {% if custom_branding %}
+        {% for property, value in custom_branding.items() %}
+        .custom-{{ property }} {
+            {{ property }}: {{ value }};
+        }
+        {% endfor %}
+        {% endif %}
+        
+        /* Layout-specific styles */
+        {{ layout.custom_css | safe }}
+    </style>
+</head>
+<body style="{% if layout.background_color %}background-color: {{ layout.background_color }};{% endif %}">
+    <!-- Report Header -->
+    <header class="report-header">
+        <div class="container{% if layout.container_fluid %}-fluid{% endif %}">
+            <div class="row">
+                <div class="col-12">
+                    {% if custom_branding.logo %}
+                    <div class="branding mb-3">
+                        <img src="{{ custom_branding.logo }}" alt="Logo">
+                        <div>
+                            <h1 class="report-title mb-0">{{ metadata.title }}</h1>
+                            {% if metadata.description %}
+                            <p class="report-description mb-0">{{ metadata.description }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <h1 class="report-title">{{ metadata.title }}</h1>
+                    {% if metadata.description %}
+                    <p class="report-description">{{ metadata.description }}</p>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Report Content -->
+    <main class="container{% if layout.container_fluid %}-fluid{% endif %}">
+        <!-- Report Metadata -->
+        <div class="report-meta">
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>Author:</strong> {{ metadata.author or 'Unknown' }}<br>
+                    <strong>Category:</strong> {{ metadata.category or 'General' }}<br>
+                    {% if metadata.keywords %}
+                    <strong>Keywords:</strong> {{ metadata.keywords | join(', ') }}
+                    {% endif %}
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <strong>Generated:</strong> {{ generated_at[:19] | replace('T', ' ') }}<br>
+                    <strong>Job ID:</strong> {{ job_id }}<br>
+                    <strong>Format:</strong> Interactive HTML
+                </div>
+            </div>
+        </div>
+        
+        <!-- Interactive Controls -->
+        {% if enable_interactive_charts or enable_data_filtering %}
+        <div class="interactive-controls no-print">
+            <div class="filter-group">
+                <label>View Options:</label>
+                <select id="theme-selector" class="form-select form-select-sm" style="width: auto;">
+                    <option value="light">Light Theme</option>
+                    {% if enable_dark_mode %}
+                    <option value="dark">Dark Theme</option>
+                    {% endif %}
+                </select>
+                
+                {% if charts %}
+                <label>Chart Type:</label>
+                <select id="chart-type-selector" class="form-select form-select-sm" style="width: auto;">
+                    <option value="all">All Charts</option>
+                    {% for chart in charts %}
+                    <option value="{{ chart.id }}">{{ chart.config.title or 'Chart ' + loop.index|string }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
+                
+                <button id="fullscreen-btn" class="btn btn-sm btn-outline-primary">
+                    Toggle Fullscreen
+                </button>
+                
+                <button id="export-btn" class="btn btn-sm btn-outline-success">
+                    Export Data
+                </button>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Report Sections -->
+        <div class="row">
+            {% for section in sections %}
+            {{ section | safe }}
+            {% endfor %}
+        </div>
+    </main>
+    
+    <!-- Report Footer -->
+    <footer class="report-footer">
+        <div class="container{% if layout.container_fluid %}-fluid{% endif %}">
+            <div class="row">
+                <div class="col-12">
+                    <p class="mb-0">
+                        Generated by Splunk MCP HTML Report Service
+                        {% if custom_branding.company %}
+                        | {{ custom_branding.company }}
+                        {% endif %}
+                    </p>
+                    <small class="text-muted">
+                        Report ID: {{ job_id }} | Generated: {{ generated_at[:19] | replace('T', ' ') }} UTC
+                    </small>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Bootstrap JS -->
+    {% if enable_bootstrap %}
+    {% if cdn_base_url.startswith('http') %}
+    <script src="{{ cdn_base_url }}/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    {% else %}
+    <script src="{{ cdn_base_url }}/bootstrap.bundle.min.js"></script>
+    {% endif %}
+    {% endif %}
+    
+    <!-- Interactive Features JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Theme switcher
+            const themeSelector = document.getElementById('theme-selector');
+            if (themeSelector) {
+                themeSelector.addEventListener('change', function() {
+                    const theme = this.value;
+                    document.body.setAttribute('data-theme', theme);
+                    
+                    // Update chart themes
+                    if (typeof Plotly !== 'undefined') {
+                        const chartElements = document.querySelectorAll('[id^="chart-"]');
+                        chartElements.forEach(function(element) {
+                            const layout = {
+                                paper_bgcolor: theme === 'dark' ? '#2d3748' : '#ffffff',
+                                plot_bgcolor: theme === 'dark' ? '#1a202c' : '#ffffff',
+                                font: { color: theme === 'dark' ? '#e2e8f0' : '#2d3748' }
+                            };
+                            Plotly.relayout(element, layout);
+                        });
+                    }
+                });
+            }
+            
+            // Chart type filter
+            const chartTypeSelector = document.getElementById('chart-type-selector');
+            if (chartTypeSelector) {
+                chartTypeSelector.addEventListener('change', function() {
+                    const selectedChart = this.value;
+                    const chartElements = document.querySelectorAll('[id^="chart-"]');
+                    
+                    chartElements.forEach(function(element) {
+                        const chartId = element.id.replace('chart-', '');
+                        if (selectedChart === 'all' || selectedChart === chartId) {
+                            element.style.display = 'block';
+                        } else {
+                            element.style.display = 'none';
+                        }
+                    });
+                });
+            }
+            
+            // Fullscreen toggle
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', function() {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                });
+            }
+            
+            // Export functionality
+            const exportBtn = document.getElementById('export-btn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    // Create downloadable data
+                    const data = {
+                        metadata: {{ metadata | tojson }},
+                        generated_at: '{{ generated_at }}',
+                        job_id: {{ job_id }},
+                        charts: {{ charts | length }},
+                        tables: {{ tables | length }}
+                    };
+                    
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+                    const downloadAnchorNode = document.createElement('a');
+                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute("download", "report_{{ job_id }}_data.json");
+                    document.body.appendChild(downloadAnchorNode);
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                });
+            }
+            
+            // Responsive charts
+            if (typeof Plotly !== 'undefined') {
+                window.addEventListener('resize', function() {
+                    const chartElements = document.querySelectorAll('[id^="chart-"]');
+                    chartElements.forEach(function(element) {
+                        Plotly.Plots.resize(element);
+                    });
+                });
+            }
+            
+            // Cross-filtering for tables and charts
+            if (typeof $ !== 'undefined' && $.fn.DataTable) {
+                // Enable cross-filtering between DataTables
+                $('table[id^="datatable-"]').on('draw.dt', function() {
+                    // Custom cross-filtering logic would go here
+                    console.log('Table redrawn, update cross-filters');
+                });
+            }
+            
+            // Add smooth scrolling for navigation
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+        });
+        
+        // Global utility functions for custom interactions
+        window.ReportUtils = {
+            highlightChart: function(chartId) {
+                const element = document.getElementById('chart-' + chartId);
+                if (element) {
+                    element.style.border = '3px solid var(--primary-color)';
+                    element.scrollIntoView({ behavior: 'smooth' });
+                    setTimeout(() => {
+                        element.style.border = '';
+                    }, 3000);
+                }
+            },
+            
+            filterTable: function(tableId, column, value) {
+                if (typeof $ !== 'undefined' && $.fn.DataTable) {
+                    const table = $('#datatable-' + tableId).DataTable();
+                    table.column(column).search(value).draw();
+                }
+            },
+            
+            exportChart: function(chartId) {
+                if (typeof Plotly !== 'undefined') {
+                    const element = document.getElementById('chart-' + chartId);
+                    if (element) {
+                        Plotly.downloadImage(element, {
+                            format: 'png',
+                            width: 1200,
+                            height: 800,
+                            filename: 'chart_' + chartId
+                        });
+                    }
+                }
+            }
+        };
+    </script>
+</body>
+</html>

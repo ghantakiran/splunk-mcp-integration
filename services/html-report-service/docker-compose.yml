@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  html-report-service:
+    build: .
+    ports:
+      - "8012:8012"
+      - "9012:9012"  # Metrics port
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql://htmlservice:htmlservice@postgres:5432/htmlservice
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - HTML_OUTPUT_DIR=/app/tmp/html-reports
+      - HTML_TEMPLATE_DIR=/app/app/templates
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+    volumes:
+      - ./app:/app/app
+      - ./tmp:/app/tmp
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - html-report-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=htmlservice
+      - POSTGRES_USER=htmlservice
+      - POSTGRES_PASSWORD=htmlservice
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+    networks:
+      - html-report-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U htmlservice -d htmlservice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # Use different port to avoid conflicts
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - html-report-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Development tools
+  adminer:
+    image: adminer:4.8.1
+    ports:
+      - "8080:8080"
+    networks:
+      - html-report-network
+    restart: unless-stopped
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  html-report-network:
+    driver: bridge
