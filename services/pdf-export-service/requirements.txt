@@ -1,0 +1,70 @@
+# Core Framework
+fastapi[all]==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# Database & Caching
+asyncpg==0.29.0
+redis==5.0.1
+sqlalchemy==2.0.23
+
+# PDF Generation
+weasyprint==61.2
+jinja2==3.1.2
+reportlab==4.0.7
+xhtml2pdf==0.2.13
+
+# Image Processing
+pillow==10.1.0
+pdf2image==1.16.3
+
+# HTTP Client
+httpx==0.25.2
+aiohttp==3.9.0
+requests==2.31.0
+
+# Authentication & Security
+pyjwt==2.8.0
+cryptography==41.0.7
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Logging & Monitoring
+structlog==23.2.0
+prometheus-client==0.19.0
+python-json-logger==2.0.7
+
+# Environment & Configuration
+python-dotenv==1.0.0
+python-multipart==0.0.6
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.2
+
+# Development Tools
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+mypy==1.7.1
+
+# Additional dependencies for PDF generation
+cffi==1.16.0
+pycparser==2.21
+cairocffi==1.6.1
+cairosvg==2.7.1
+cssselect2==0.7.0
+fonttools==4.44.3
+html5lib==1.1
+pyphen==0.14.0
+tinycss2==1.2.1
+webencodings==0.5.1
+
+# Font support
+google-fonts-downloader==0.1.0
+
+# Email support (if needed)
+aiosmtplib==3.0.1
+email-validator==2.1.0
