@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  bi-integration-service:
+    build: .
+    container_name: bi-integration-service
+    ports:
+      - "8008:8008"
+      - "9008:9008"  # Metrics port
+    environment:
+      - DEBUG=true
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://biservice:biservice@postgres:5432/biservice
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=your-secret-key-here
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+    networks:
+      - bi-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    container_name: bi-postgres
+    environment:
+      - POSTGRES_DB=biservice
+      - POSTGRES_USER=biservice
+      - POSTGRES_PASSWORD=biservice
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - bi-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: bi-redis
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - bi-network
+    restart: unless-stopped
+    command: redis-server --save 20 1 --loglevel warning
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: bi-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8083:8081"
+    depends_on:
+      - redis
+    networks:
+      - bi-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  bi-network:
+    driver: bridge
