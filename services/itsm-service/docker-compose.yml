@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  itsm-service:
+    build: .
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://itsm_user:itsm_password@postgres:5432/itsm_db
+      - REDIS_URL=redis://redis:6379/3
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      - JWT_SECRET_KEY=your-secret-key-here
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_SECONDS=3600
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./app:/app/app
+    networks:
+      - itsm-network
+
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=itsm_db
+      - POSTGRES_USER=itsm_user
+      - POSTGRES_PASSWORD=itsm_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5435:5432"
+    networks:
+      - itsm-network
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - itsm-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  itsm-network:
+    driver: bridge
