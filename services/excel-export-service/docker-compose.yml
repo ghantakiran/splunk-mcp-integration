@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  excel-export-service:
+    build: .
+    ports:
+      - "8010:8010"
+      - "9010:9010"
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql://excelservice:excelservice@postgres:5432/excelservice
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=your-secret-key-change-this-in-production
+      - EXCEL_OUTPUT_DIR=/tmp/excel-exports
+      - CHART_SERVICE_URL=http://visualization-service:8002
+    volumes:
+      - excel_exports:/tmp/excel-exports
+      - ./app:/app/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - excel-net
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=excelservice
+      - POSTGRES_USER=excelservice
+      - POSTGRES_PASSWORD=excelservice
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - excel-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - excel-net
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8085:8081"
+    depends_on:
+      - redis
+    networks:
+      - excel-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  excel_exports:
+
+networks:
+  excel-net:
+    driver: bridge
