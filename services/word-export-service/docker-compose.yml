@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  word-export-service:
+    build:
+      context: .
+      target: development
+    ports:
+      - "8013:8013"
+      - "9013:9013"  # Metrics port
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql://wordservice:wordservice@postgres:5432/wordservice
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - WORD_OUTPUT_DIR=/tmp/word-exports
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+      - word_exports:/tmp/word-exports
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - word-export-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=wordservice
+      - POSTGRES_USER=wordservice
+      - POSTGRES_PASSWORD=wordservice
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - word-export-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wordservice"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # Different port to avoid conflicts
+    volumes:
+      - redis_data:/data
+    networks:
+      - word-export-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: redis-server --appendonly yes
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8082:8081"
+    depends_on:
+      - redis
+    networks:
+      - word-export-network
+    profiles:
+      - tools
+
+  # Optional: pgAdmin for PostgreSQL management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@wordservice.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5051:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - word-export-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  word_exports:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  word-export-network:
+    driver: bridge
