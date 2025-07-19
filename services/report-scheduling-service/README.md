@@ -11,6 +11,8 @@ A comprehensive microservice for automated report scheduling, generation, and de
 - **Report Generation**: Integration with export services for PDF, Excel, PowerPoint, Word, CSV, JSON, XML, and HTML formats
 - **Background Processing**: Asynchronous job processing with Redis-based queuing
 - **Analytics & Insights**: Comprehensive analytics for usage patterns, performance metrics, and trends
+- **Version Control**: Complete version management with history tracking, comparison, and rollback capabilities
+- **History Tracking**: Comprehensive audit trail for all schedule and execution events
 
 ### Enterprise Features
 - **JWT Authentication**: Secure API access with role-based permissions
@@ -54,6 +56,9 @@ A comprehensive microservice for automated report scheduling, generation, and de
 - **delivery_attempts**: Delivery tracking and retry logic
 - **schedule_analytics**: Performance metrics and usage analytics
 - **system_metrics**: System health and performance indicators
+- **schedule_versions**: Version control with configuration snapshots
+- **schedule_history**: Comprehensive audit trail and event tracking
+- **version_metrics**: Version activity analytics and statistics
 
 ## 🛠️ Installation & Setup
 
@@ -176,6 +181,16 @@ docker-compose exec postgres psql -U postgres -d report_scheduling -f /docker-en
 - `GET /api/v1/analytics/trends` - Get trend analysis
 - `GET /api/v1/analytics/health` - Get system health metrics
 - `POST /api/v1/analytics/reports` - Generate analytics report
+
+### Version Management
+- `POST /api/v1/versions/` - Create a new version snapshot
+- `GET /api/v1/versions/schedule/{id}` - Get all versions for a schedule
+- `GET /api/v1/versions/{id}` - Get specific version details
+- `POST /api/v1/versions/compare` - Compare two versions
+- `POST /api/v1/versions/restore` - Restore to a previous version
+- `DELETE /api/v1/versions/{id}` - Archive a version
+- `GET /api/v1/versions/schedule/{id}/stats` - Get version statistics
+- `GET /api/v1/versions/history` - Get history events with filtering
 
 ### Health & Monitoring
 - `GET /health` - Basic health check

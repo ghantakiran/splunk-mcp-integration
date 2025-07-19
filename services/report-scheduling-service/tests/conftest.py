@@ -19,6 +19,9 @@ from app.core.config import settings
 from app.models.schedule_models import (
     ScheduleStatus, ExecutionStatus, DeliveryMethod, ReportFormat, Priority
 )
+from app.models.versioning_models import (
+    VersionAction, ChangeType, HistoryEventType
+)
 
 
 # Test database URL
@@ -293,6 +296,118 @@ async def created_execution(db_session: AsyncSession, created_schedule, sample_e
     await db_session.refresh(execution)
     
     return execution
+
+
+@pytest_asyncio.fixture
+async def created_version(db_session: AsyncSession, mock_user: dict, created_schedule):
+    """Create a test version in the database."""
+    from app.core.database import ScheduleVersion
+    import json
+    import hashlib
+    
+    # Create configuration snapshot
+    config_snapshot = {
+        "name": created_schedule.name,
+        "description": created_schedule.description,
+        "cron_expression": created_schedule.cron_expression,
+        "query": created_schedule.query,
+        "report_format": created_schedule.report_format.value
+    }
+    
+    config_json = json.dumps(config_snapshot, sort_keys=True)
+    checksum = hashlib.sha256(config_json.encode()).hexdigest()
+    
+    version = ScheduleVersion(
+        schedule_id=created_schedule.schedule_id,
+        version_number=1,
+        version_name="Test Version",
+        description="A test version",
+        action=VersionAction.CREATED,
+        changes=[ChangeType.SCHEDULE_CONFIG.value],
+        change_notes="Initial test version",
+        tags=["test"],
+        schedule_config=config_snapshot,
+        is_current=True,
+        checksum=checksum,
+        size_bytes=len(config_json),
+        created_by=mock_user["user_id"]
+    )
+    
+    db_session.add(version)
+    await db_session.commit()
+    await db_session.refresh(version)
+    
+    return version
+
+
+@pytest_asyncio.fixture
+async def another_version(db_session: AsyncSession, mock_user: dict, created_schedule):
+    """Create another test version for comparison."""
+    from app.core.database import ScheduleVersion
+    import json
+    import hashlib
+    
+    # Create slightly different configuration
+    config_snapshot = {
+        "name": f"{created_schedule.name} - Updated",
+        "description": f"{created_schedule.description} - Modified",
+        "cron_expression": created_schedule.cron_expression,
+        "query": "search index=main | head 50",  # Different query
+        "report_format": created_schedule.report_format.value
+    }
+    
+    config_json = json.dumps(config_snapshot, sort_keys=True)
+    checksum = hashlib.sha256(config_json.encode()).hexdigest()
+    
+    version = ScheduleVersion(
+        schedule_id=created_schedule.schedule_id,
+        version_number=2,
+        version_name="Updated Test Version",
+        description="An updated test version",
+        action=VersionAction.UPDATED,
+        changes=[ChangeType.QUERY.value, ChangeType.METADATA.value],
+        change_notes="Updated query and metadata",
+        tags=["test", "update"],
+        schedule_config=config_snapshot,
+        is_current=False,
+        checksum=checksum,
+        size_bytes=len(config_json),
+        created_by=mock_user["user_id"]
+    )
+    
+    db_session.add(version)
+    await db_session.commit()
+    await db_session.refresh(version)
+    
+    return version
+
+
+@pytest_asyncio.fixture
+async def created_history_event(db_session: AsyncSession, mock_user: dict, created_schedule, created_version):
+    """Create a test history event in the database."""
+    from app.core.database import ScheduleHistory
+    
+    event = ScheduleHistory(
+        schedule_id=created_schedule.schedule_id,
+        event_type=HistoryEventType.VERSION_CHANGE,
+        event_title="Version created",
+        event_description="Test version creation",
+        user_id=mock_user["user_id"],
+        correlation_id="test-correlation-123",
+        version_id=created_version.version_id,
+        event_data={
+            "action": VersionAction.CREATED.value,
+            "version_number": created_version.version_number,
+            "changes": created_version.changes
+        },
+        metadata={"test": True}
+    )
+    
+    db_session.add(event)
+    await db_session.commit()
+    await db_session.refresh(event)
+    
+    return event
 
 
 @pytest.fixture(scope="session")

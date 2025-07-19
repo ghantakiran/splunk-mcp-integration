@@ -23,6 +23,9 @@ from app.models.schedule_models import (
     ScheduleStatus, DeliveryMethod, ReportFormat,
     Priority, ExecutionStatus
 )
+from app.models.versioning_models import (
+    VersionAction, ChangeType, HistoryEventType
+)
 
 # Database setup
 engine = create_async_engine(
@@ -306,6 +309,127 @@ async def create_tables():
     """Create all database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+class ScheduleVersion(Base):
+    """Schedule version database model for version control."""
+    __tablename__ = "schedule_versions"
+
+    version_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    schedule_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("report_schedules.schedule_id"), nullable=False, index=True)
+    version_number = Column(Integer, nullable=False)
+    version_name = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    
+    # Version metadata
+    action = Column(SQLEnum(VersionAction), nullable=False, default=VersionAction.CREATED)
+    changes = Column(JSON, nullable=False)  # List of ChangeType values
+    change_notes = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=True)  # List of tags
+    
+    # Configuration snapshot
+    schedule_config = Column(JSON, nullable=False)  # Complete schedule configuration at this version
+    
+    # Version tracking
+    is_current = Column(Boolean, nullable=False, default=False, index=True)
+    parent_version_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("schedule_versions.version_id"), nullable=True)
+    checksum = Column(String(64), nullable=False)  # SHA-256 hash of configuration
+    size_bytes = Column(Integer, nullable=False, default=0)
+    
+    # User context
+    created_by = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    
+    # Relationships
+    parent_version = relationship("ScheduleVersion", remote_side=[version_id])
+    
+    # Indexes and constraints
+    __table_args__ = (
+        UniqueConstraint("schedule_id", "version_number", name="unique_schedule_version_number"),
+        Index("idx_version_schedule_current", "schedule_id", "is_current"),
+        Index("idx_version_created_by", "created_by"),
+        Index("idx_version_action", "action"),
+        Index("idx_version_created_at", "created_at"),
+    )
+
+
+class ScheduleHistory(Base):
+    """Schedule history database model for tracking all events."""
+    __tablename__ = "schedule_history"
+
+    event_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    schedule_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("report_schedules.schedule_id"), nullable=False, index=True)
+    event_type = Column(SQLEnum(HistoryEventType), nullable=False, index=True)
+    event_title = Column(String(255), nullable=False)
+    event_description = Column(Text, nullable=True)
+    
+    # Event context
+    user_id = Column(String(255), nullable=True, index=True)
+    session_id = Column(String(255), nullable=True)
+    correlation_id = Column(String(255), nullable=True, index=True)
+    
+    # Event data
+    event_data = Column(JSON, nullable=False)
+    metadata = Column(JSON, nullable=True)
+    
+    # Relationships to other entities
+    version_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("schedule_versions.version_id"), nullable=True, index=True)
+    execution_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("schedule_executions.execution_id"), nullable=True, index=True)
+    
+    # Timing
+    occurred_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_history_schedule_type", "schedule_id", "event_type"),
+        Index("idx_history_user_occurred", "user_id", "occurred_at"),
+        Index("idx_history_correlation", "correlation_id"),
+        Index("idx_history_occurred_at", "occurred_at"),
+        Index("idx_history_event_type_occurred", "event_type", "occurred_at"),
+    )
+
+
+class VersionMetrics(Base):
+    """Version metrics database model for analytics."""
+    __tablename__ = "version_metrics"
+
+    metric_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    schedule_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("report_schedules.schedule_id"), nullable=False, index=True)
+    
+    # Time period
+    date = Column(DateTime(timezone=True), nullable=False, index=True)
+    period_type = Column(String(20), nullable=False)  # day, week, month
+    
+    # Version activity metrics
+    versions_created = Column(Integer, nullable=False, default=0)
+    versions_updated = Column(Integer, nullable=False, default=0)
+    versions_restored = Column(Integer, nullable=False, default=0)
+    versions_archived = Column(Integer, nullable=False, default=0)
+    
+    # User activity
+    unique_users = Column(Integer, nullable=False, default=0)
+    most_active_user = Column(String(255), nullable=True)
+    user_activity = Column(JSON, nullable=True)  # User ID -> activity count
+    
+    # Size metrics
+    total_size_bytes = Column(Integer, nullable=False, default=0)
+    average_size_bytes = Column(Float, nullable=True)
+    largest_version_size = Column(Integer, nullable=False, default=0)
+    
+    # Change metrics
+    changes_by_type = Column(JSON, nullable=True)  # ChangeType -> count
+    most_common_change = Column(String(50), nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint("schedule_id", "date", "period_type", name="unique_schedule_date_period_metrics"),
+        Index("idx_version_metrics_date_period", "date", "period_type"),
+    )
 
 
 async def drop_tables():

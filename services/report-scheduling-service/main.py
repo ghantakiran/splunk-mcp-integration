@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1.endpoints import schedules, subscriptions, reports, analytics
+from app.api.v1.endpoints import schedules, subscriptions, reports, analytics, versions
 from app.core.config import settings
 from app.core.database import engine, get_database
 from app.core.redis_client import get_redis_client
@@ -170,6 +170,12 @@ app.include_router(
     analytics.router,
     prefix="/api/v1/analytics",
     tags=["Analytics & Metrics"]
+)
+
+app.include_router(
+    versions.router,
+    prefix="/api/v1/versions",
+    tags=["Version Management"]
 )
 
 
