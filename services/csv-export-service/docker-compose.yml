@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  csv-export-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8014:8014"
+      - "9014:9014"
+    environment:
+      - DEBUG=false
+      - DATABASE_URL=postgresql://csvservice:csvservice@postgres:5432/csvservice
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=your-production-secret-key-here
+      - CSV_OUTPUT_DIR=/app/exports
+      - LOG_LEVEL=INFO
+    volumes:
+      - csv_exports:/app/exports
+      - csv_logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=csvservice
+      - POSTGRES_USER=csvservice
+      - POSTGRES_PASSWORD=csvservice
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csvservice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  csv_exports:
+    driver: local
+  csv_logs:
+    driver: local
+
+networks:
+  default:
+    name: csv-export-network
