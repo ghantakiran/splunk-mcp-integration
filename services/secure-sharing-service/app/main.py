@@ -12,7 +12,7 @@ import uuid
 
 from app.core.config import settings
 from app.core.database import create_tables, drop_tables
-from app.api.v1.endpoints import shares, role_permissions
+from app.api.v1.endpoints import shares, role_permissions, analytics
 from app.utils.rate_limiter import rate_limiter, cleanup_expired_rate_limits
 import structlog
 
@@ -55,12 +55,27 @@ async def lifespan(app: FastAPI):
     # Initialize background tasks if enabled
     if settings.BACKGROUND_TASKS_ENABLED:
         logger.info("Background tasks enabled")
-        # In a real implementation, you would start background tasks here
+        try:
+            from app.services.metrics_collector import metrics_collector
+            # Start background task for metrics collection
+            asyncio.create_task(metrics_collector.start_collection())
+            logger.info("Metrics collection started successfully")
+        except Exception as e:
+            logger.warning("Failed to start metrics collection", error=str(e))
     
     yield
     
     # Shutdown
     logger.info("Shutting down Secure Sharing Service")
+    
+    # Stop background tasks
+    if settings.BACKGROUND_TASKS_ENABLED:
+        try:
+            from app.services.metrics_collector import metrics_collector
+            await metrics_collector.stop_collection()
+            logger.info("Metrics collection stopped successfully")
+        except Exception as e:
+            logger.warning("Failed to stop metrics collection", error=str(e))
     
     # Close rate limiter connection
     try:
@@ -214,6 +229,12 @@ app.include_router(
     role_permissions.router,
     prefix=f"{settings.API_V1_STR}/permissions",
     tags=["role-permissions"]
+)
+
+app.include_router(
+    analytics.router,
+    prefix=f"{settings.API_V1_STR}/analytics",
+    tags=["analytics"]
 )
 
 
