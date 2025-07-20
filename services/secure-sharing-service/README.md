@@ -12,6 +12,14 @@ A comprehensive microservice for secure resource sharing with expiration, access
 - **Password Protection**: Optional password protection for sensitive shares
 - **Domain & User Restrictions**: Restrict access to specific domains or user email addresses
 
+### Analytics & Insights
+- **Comprehensive Analytics**: Detailed sharing analytics with breakdowns by type, permissions, and access methods
+- **Real-time Metrics**: Live metrics collection and tracking for immediate insights
+- **Usage Statistics**: View counts, download metrics, unique viewer tracking, and engagement analysis
+- **Access Logs**: Detailed access logs with IP tracking, user agents, and session information
+- **Performance Metrics**: Session duration, bounce rates, conversion rates, and geographic distribution
+- **Dashboard Analytics**: Ready-to-use dashboard data with KPIs, trends, and top-performing shares
+
 ### Security Features
 - **JWT Authentication**: Secure API access with role-based permissions
 - **Public & Authenticated Sharing**: Support for both public (anonymous) and authenticated access modes
@@ -144,6 +152,14 @@ docker-compose up -d
 - `POST /api/v1/shares/access` - Access shared resource (public endpoint)
 - `POST /api/v1/shares/access/authenticated` - Access shared resource with authentication (enhanced tracking)
 - `GET /api/v1/shares/{id}/expiration` - Check expiration status
+
+### Analytics & Insights
+- `GET /api/v1/analytics/overview` - Get comprehensive sharing analytics overview
+- `GET /api/v1/analytics/shares/{id}/stats` - Get detailed statistics for a specific share
+- `GET /api/v1/analytics/shares/{id}/access-logs` - Get access logs for a specific share
+- `GET /api/v1/analytics/metrics/summary` - Get analytics metrics summary
+- `GET /api/v1/analytics/dashboard` - Get analytics dashboard data
+- `POST /api/v1/analytics/metrics/generate` - Generate metrics aggregation (admin only)
 
 ### Health & Monitoring
 - `GET /health` - Basic health check
@@ -344,6 +360,30 @@ curl -X POST "http://localhost:8016/api/v1/shares/access/authenticated" \
   -d '{
     "share_token": "your-share-token"
   }'
+```
+
+#### Analytics & Insights
+
+```bash
+# Get analytics overview
+curl -X GET "http://localhost:8016/api/v1/analytics/overview" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Get detailed share statistics
+curl -X GET "http://localhost:8016/api/v1/analytics/shares/your-share-id/stats?period_days=30" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Get access logs for a share
+curl -X GET "http://localhost:8016/api/v1/analytics/shares/your-share-id/access-logs?limit=100" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Get analytics dashboard data
+curl -X GET "http://localhost:8016/api/v1/analytics/dashboard" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Generate metrics aggregation (admin only)
+curl -X POST "http://localhost:8016/api/v1/analytics/metrics/generate?period_type=day" \
+  -H "Authorization: Bearer your-admin-jwt-token"
 ```
 
 ## 📊 Monitoring & Observability

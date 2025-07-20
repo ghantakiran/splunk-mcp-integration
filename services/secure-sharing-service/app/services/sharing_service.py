@@ -222,6 +222,24 @@ class SharingService:
         # Update share metrics
         await self._update_share_metrics(share, request.user_email, db)
 
+        # Collect real-time metrics for analytics
+        try:
+            from app.services.metrics_collector import metrics_collector
+            await metrics_collector.collect_share_interaction_metrics(
+                share_id=str(share.share_id),
+                action="view",
+                user_email=request.user_email,
+                ip_address=request.ip_address,
+                user_agent=request.user_agent
+            )
+        except Exception as e:
+            # Don't fail the main operation if metrics collection fails
+            logger.warning(
+                "Failed to collect interaction metrics",
+                share_id=str(share.share_id),
+                error=str(e)
+            )
+
         # Get resource data (this would integrate with other services)
         resource_data = await self._get_resource_data(share)
 
