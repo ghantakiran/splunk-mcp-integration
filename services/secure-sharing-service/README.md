@@ -14,6 +14,7 @@ A comprehensive microservice for secure resource sharing with expiration, access
 
 ### Security Features
 - **JWT Authentication**: Secure API access with role-based permissions
+- **Public & Authenticated Sharing**: Support for both public (anonymous) and authenticated access modes
 - **Rate Limiting**: Redis-based sliding window rate limiting to prevent abuse
 - **Access Logging**: Comprehensive audit trail for all share access attempts
 - **Security Validation**: Multi-layer security checks including domain validation and user allowlists
@@ -141,6 +142,7 @@ docker-compose up -d
 
 ### Share Access
 - `POST /api/v1/shares/access` - Access shared resource (public endpoint)
+- `POST /api/v1/shares/access/authenticated` - Access shared resource with authentication (enhanced tracking)
 - `GET /api/v1/shares/{id}/expiration` - Check expiration status
 
 ### Health & Monitoring
@@ -148,31 +150,106 @@ docker-compose up -d
 - `GET /ready` - Kubernetes readiness probe
 - `GET /metrics` - Prometheus metrics endpoint
 
+## 🔧 Sharing Modes
+
+### Public Sharing (requires_authentication: false)
+- **Anonymous Access**: No user email or authentication required
+- **Broader Reach**: Ideal for public dashboards, marketing reports, or external stakeholder access
+- **Security Options**: Can still use password protection, domain restrictions, or expiration policies
+- **Metrics**: Basic access tracking with IP addresses and user agents
+- **Use Cases**: Public dashboards, external reports, marketing materials, customer-facing analytics
+
+### Authenticated Sharing (requires_authentication: true)
+- **Email Required**: User must provide a valid email address for access
+- **Enhanced Security**: User identity verification and better audit trails
+- **Advanced Features**: Domain allowlists, user-specific permissions, and detailed analytics
+- **Comprehensive Tracking**: User-level access patterns and behavior analysis
+- **Use Cases**: Internal reports, sensitive data, compliance-required sharing, team collaboration
+
+### Hybrid Access Options
+- **Public with Optional Auth**: Use `/access` endpoint for public access, `/access/authenticated` for enhanced tracking
+- **Progressive Security**: Start with public access, upgrade to authenticated for sensitive features
+- **Flexible Permissions**: Different permission levels for public vs authenticated users
+
 ## 🔧 Configuration
 
-### Share Creation Example
+### Share Creation Examples
+
+#### Authenticated Share (Default)
 ```json
 {
   "resource_type": "report",
   "resource_id": "123e4567-e89b-12d3-a456-426614174000",
   "resource_name": "Weekly Sales Report",
   "permissions": ["view", "download"],
+  "requires_authentication": true,
   "expiration_policy": "after_time",
   "expires_at": "2024-08-01T00:00:00Z",
   "password_protected": true,
   "password": "secure123!",
   "allowed_domains": ["company.com"],
-  "description": "Weekly sales performance report",
+  "description": "Weekly sales performance report for authenticated users",
   "notify_on_access": true
 }
 ```
 
-### Share Access Example
+#### Public Share (No Authentication Required)
+```json
+{
+  "resource_type": "dashboard",
+  "resource_id": "456e7890-e12b-34d5-a678-901234567890",
+  "resource_name": "Public Dashboard",
+  "permissions": ["view"],
+  "requires_authentication": false,
+  "expiration_policy": "after_views",
+  "max_views": 1000,
+  "password_protected": false,
+  "description": "Publicly accessible dashboard for external stakeholders",
+  "branding_enabled": true
+}
+```
+
+#### Public Share with Password Protection
+```json
+{
+  "resource_type": "chart",
+  "resource_id": "789e0123-e45b-67d8-a901-234567890123",
+  "resource_name": "Public Chart with Password",
+  "permissions": ["view", "download"],
+  "requires_authentication": false,
+  "expiration_policy": "after_time",
+  "expires_at": "2024-12-31T23:59:59Z",
+  "password_protected": true,
+  "password": "public123!",
+  "description": "Public chart protected by password only"
+}
+```
+
+### Share Access Examples
+
+#### Authenticated Share Access
 ```json
 {
   "share_token": "abc123xyz789...",
   "password": "secure123!",
   "user_email": "user@company.com"
+}
+```
+
+#### Public Share Access (No Authentication)
+```json
+{
+  "share_token": "def456uvw012...",
+  "user_email": null
+}
+```
+
+#### Public Share with Password Access
+```json
+{
+  "share_token": "ghi789rst345...",
+  "password": "public123!",
+  "user_email": null
 }
 ```
 
@@ -209,26 +286,63 @@ pytest tests/ --cov=app --cov-report=html
 ```
 
 ### API Testing with cURL
+
+#### Create Shares
+
 ```bash
-# Create a share
+# Create an authenticated share (default)
 curl -X POST "http://localhost:8016/api/v1/shares/" \
   -H "Authorization: Bearer your-jwt-token" \
   -H "Content-Type: application/json" \
   -d '{
     "resource_type": "report",
     "resource_id": "123e4567-e89b-12d3-a456-426614174000",
-    "resource_name": "Test Report",
+    "resource_name": "Authenticated Test Report",
     "permissions": ["view"],
+    "requires_authentication": true,
     "expiration_policy": "after_time",
     "expires_at": "2024-12-31T23:59:59Z"
   }'
 
-# Access a share
+# Create a public share (no authentication required)
+curl -X POST "http://localhost:8016/api/v1/shares/" \
+  -H "Authorization: Bearer your-jwt-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resource_type": "dashboard",
+    "resource_id": "456e7890-e12b-34d5-a678-901234567890",
+    "resource_name": "Public Test Dashboard",
+    "permissions": ["view"],
+    "requires_authentication": false,
+    "expiration_policy": "after_views",
+    "max_views": 100
+  }'
+```
+
+#### Access Shares
+
+```bash
+# Access an authenticated share
 curl -X POST "http://localhost:8016/api/v1/shares/access" \
   -H "Content-Type: application/json" \
   -d '{
-    "share_token": "your-share-token",
+    "share_token": "your-auth-share-token",
     "user_email": "user@example.com"
+  }'
+
+# Access a public share (no email required)
+curl -X POST "http://localhost:8016/api/v1/shares/access" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "share_token": "your-public-share-token"
+  }'
+
+# Access a share with full authentication (enhanced tracking)
+curl -X POST "http://localhost:8016/api/v1/shares/access/authenticated" \
+  -H "Authorization: Bearer your-jwt-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "share_token": "your-share-token"
   }'
 ```
 

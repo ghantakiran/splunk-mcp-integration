@@ -665,6 +665,29 @@ class SharingService:
                 error_message=f"Share is {share.status.value}"
             )
 
+        # Check authentication requirements
+        if share.requires_authentication:
+            if not request.user_email:
+                return ShareSecurityValidation(
+                    is_valid=False,
+                    has_access=False,
+                    error_message="Authentication required - user email must be provided"
+                )
+            
+            # Validate email format for authenticated access
+            import re
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, request.user_email):
+                return ShareSecurityValidation(
+                    is_valid=False,
+                    has_access=False,
+                    error_message="Invalid email format for authenticated access"
+                )
+        elif not share.requires_authentication:
+            # For public shares, add warning if user tries to provide credentials
+            if request.user_email:
+                warnings.append("Email provided but not required for public share")
+
         # Check password protection
         requires_password = share.password_protected
         if requires_password:

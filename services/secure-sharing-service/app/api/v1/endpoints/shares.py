@@ -351,6 +351,9 @@ async def access_share(
     
     This endpoint is public (no authentication required) but may require
     additional security validation based on the share configuration.
+    
+    For shares with requires_authentication=True: user_email is mandatory
+    For shares with requires_authentication=False: user_email is optional (public access)
     """
     try:
         # Enhance request with additional context from HTTP request
@@ -515,4 +518,110 @@ async def revoke_share(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to revoke share"
+        )
+
+
+@router.post(
+    "/access/authenticated",
+    response_model=ShareAccessResponse,
+    summary="Access a shared resource with authentication"
+)
+async def access_share_authenticated(
+    request: AccessShareRequest,
+    http_request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_database),
+    _: None = Depends(rate_limit("share_access_auth", max_requests=200, window_seconds=60))
+):
+    """
+    Access a shared resource with full authentication for enhanced tracking and features.
+    
+    This endpoint requires authentication and provides:
+    - Enhanced activity tracking with user context
+    - Access to authenticated-only features
+    - Better security logging
+    - User-specific share analytics
+    """
+    try:
+        # Get authenticated user info
+        user_id = current_user.get("sub") or current_user.get("user_id")
+        user_email = current_user.get("email") or request.user_email
+        
+        if not user_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User email not available from authentication context"
+            )
+
+        # Override request user_email with authenticated user's email
+        request.user_email = user_email
+        
+        # Enhance request with additional context from HTTP request
+        if not request.ip_address:
+            request.ip_address = http_request.client.host if http_request.client else None
+        
+        if not request.user_agent:
+            request.user_agent = http_request.headers.get("user-agent")
+        
+        if not request.referrer:
+            request.referrer = http_request.headers.get("referer")
+
+        access_response = await sharing_service.access_share(request, db)
+        
+        logger.info(
+            "Share accessed with authentication",
+            share_id=str(access_response.share_id),
+            user_id=user_id,
+            user_email=user_email,
+            ip_address=request.ip_address
+        )
+        
+        return access_response
+
+    except ShareNotFoundError:
+        logger.warning(
+            "Authenticated share access failed - not found",
+            share_token=request.share_token[:8] + "..." if len(request.share_token) > 8 else request.share_token,
+            user_id=current_user.get("sub"),
+            ip_address=request.ip_address
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Share not found or invalid token"
+        )
+    except ShareExpirationError as e:
+        logger.warning(
+            "Authenticated share access failed - expired",
+            share_token=request.share_token[:8] + "..." if len(request.share_token) > 8 else request.share_token,
+            user_id=current_user.get("sub"),
+            error=str(e),
+            ip_address=request.ip_address
+        )
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=str(e)
+        )
+    except ShareSecurityError as e:
+        logger.warning(
+            "Authenticated share access failed - security",
+            share_token=request.share_token[:8] + "..." if len(request.share_token) > 8 else request.share_token,
+            user_id=current_user.get("sub"),
+            error=str(e),
+            ip_address=request.ip_address
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(
+            "Authenticated share access failed - server error",
+            share_token=request.share_token[:8] + "..." if len(request.share_token) > 8 else request.share_token,
+            user_id=current_user.get("sub"),
+            error=str(e),
+            ip_address=request.ip_address
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to access share"
         )
