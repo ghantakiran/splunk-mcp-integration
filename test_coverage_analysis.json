@@ -1,0 +1,663 @@
+{
+  "alert-manager": {
+    "test_files": 6,
+    "source_files": 17,
+    "test_loc": 1878,
+    "source_loc": 2764,
+    "test_to_source_ratio": 0.68,
+    "test_files_list": [
+      "test_escalation_service.py",
+      "test_correlation_engine.py",
+      "test_alert_engine.py",
+      "test_notification_service.py",
+      "test_main.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 2,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 1,
+      "other_tests": 2
+    },
+    "has_conftest": true,
+    "has_pytest_ini": true,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": false,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "EXCELLENT",
+    "timestamp": "2025-07-20T17:32:34.417857"
+  },
+  "api-gateway": {
+    "test_files": 7,
+    "source_files": 48,
+    "test_loc": 2746,
+    "source_loc": 7921,
+    "test_to_source_ratio": 0.35,
+    "test_files_list": [
+      "test_rate_limiting.py",
+      "test_auth.py",
+      "test_exceptions.py",
+      "test_profile.py",
+      "test_api_docs.py",
+      "test_rate_limiting_middleware.py",
+      "test_rate_limiting_performance.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 1,
+      "main_tests": 0,
+      "other_tests": 5
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "GOOD",
+    "timestamp": "2025-07-20T17:32:34.417860"
+  },
+  "bi-integration-service": {
+    "test_files": 6,
+    "source_files": 31,
+    "test_loc": 2163,
+    "source_loc": 3720,
+    "test_to_source_ratio": 0.58,
+    "test_files_list": [
+      "test_integration_service.py",
+      "test_powerbi_manager.py",
+      "test_models.py",
+      "test_tableau_manager.py",
+      "test_main.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 3,
+      "model_tests": 1,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 1,
+      "other_tests": 0
+    },
+    "has_conftest": true,
+    "has_pytest_ini": true,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "EXCELLENT",
+    "timestamp": "2025-07-20T17:32:34.417861"
+  },
+  "csv-export-service": {
+    "test_files": 2,
+    "source_files": 16,
+    "test_loc": 502,
+    "source_loc": 3421,
+    "test_to_source_ratio": 0.15,
+    "test_files_list": [
+      "test_csv_generator.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "FAIR",
+    "timestamp": "2025-07-20T17:32:34.417862"
+  },
+  "email-service": {
+    "test_files": 6,
+    "source_files": 24,
+    "test_loc": 2114,
+    "source_loc": 2696,
+    "test_to_source_ratio": 0.78,
+    "test_files_list": [
+      "test_utils.py",
+      "test_report_generator.py",
+      "test_email_processor.py",
+      "test_models.py",
+      "test_main.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 0,
+      "model_tests": 1,
+      "integration_tests": 0,
+      "utility_tests": 1,
+      "main_tests": 1,
+      "other_tests": 2
+    },
+    "has_conftest": true,
+    "has_pytest_ini": true,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "EXCELLENT",
+    "timestamp": "2025-07-20T17:32:34.417863"
+  },
+  "excel-export-service": {
+    "test_files": 2,
+    "source_files": 19,
+    "test_loc": 655,
+    "source_loc": 1686,
+    "test_to_source_ratio": 0.39,
+    "test_files_list": [
+      "test_excel_generator.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "FAIR",
+    "timestamp": "2025-07-20T17:32:34.417864"
+  },
+  "html-report-service": {
+    "test_files": 0,
+    "source_files": 13,
+    "test_loc": 0,
+    "source_loc": 2365,
+    "test_to_source_ratio": 0.0,
+    "test_files_list": [],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 0
+    },
+    "has_conftest": false,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "MINIMAL",
+    "timestamp": "2025-07-20T17:32:34.417865"
+  },
+  "itsm-service": {
+    "test_files": 6,
+    "source_files": 17,
+    "test_loc": 2063,
+    "source_loc": 4373,
+    "test_to_source_ratio": 0.47,
+    "test_files_list": [
+      "test_utils.py",
+      "test_servicenow_manager.py",
+      "test_workflow_engine.py",
+      "test_sync_manager.py",
+      "test_jira_manager.py",
+      "test_main.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 3,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 1,
+      "main_tests": 1,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "GOOD",
+    "timestamp": "2025-07-20T17:32:34.417866"
+  },
+  "json-xml-export-service": {
+    "test_files": 2,
+    "source_files": 18,
+    "test_loc": 676,
+    "source_loc": 1558,
+    "test_to_source_ratio": 0.43,
+    "test_files_list": [
+      "test_json_xml_generator.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "FAIR",
+    "timestamp": "2025-07-20T17:32:34.417867"
+  },
+  "nlp-engine": {
+    "test_files": 3,
+    "source_files": 26,
+    "test_loc": 1070,
+    "source_loc": 14488,
+    "test_to_source_ratio": 0.07,
+    "test_files_list": [
+      "test_ai_features.py",
+      "test_time_range_optimization_integration.py",
+      "test_spl_mapping.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 1,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 2
+    },
+    "has_conftest": false,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "POOR",
+    "timestamp": "2025-07-20T17:32:34.417868"
+  },
+  "pdf-export-service": {
+    "test_files": 3,
+    "source_files": 22,
+    "test_loc": 1167,
+    "source_loc": 3773,
+    "test_to_source_ratio": 0.31,
+    "test_files_list": [
+      "test_template_service.py",
+      "test_pdf_generator.py",
+      "test_api_endpoints.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 1,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "FAIR",
+    "timestamp": "2025-07-20T17:32:34.417869"
+  },
+  "powerpoint-export-service": {
+    "test_files": 2,
+    "source_files": 20,
+    "test_loc": 482,
+    "source_loc": 2483,
+    "test_to_source_ratio": 0.19,
+    "test_files_list": [
+      "test_basic.py",
+      "test_powerpoint_generator.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 2
+    },
+    "has_conftest": false,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "POOR",
+    "timestamp": "2025-07-20T17:32:34.417870"
+  },
+  "report-scheduling-service": {
+    "test_files": 2,
+    "source_files": 17,
+    "test_loc": 543,
+    "source_loc": 4945,
+    "test_to_source_ratio": 0.11,
+    "test_files_list": [
+      "test_schedules.py",
+      "test_versioning.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 2
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "POOR",
+    "timestamp": "2025-07-20T17:32:34.417871"
+  },
+  "secure-sharing-service": {
+    "test_files": 7,
+    "source_files": 17,
+    "test_loc": 2705,
+    "source_loc": 7889,
+    "test_to_source_ratio": 0.34,
+    "test_files_list": [
+      "test_sharing_service_permissions.py",
+      "test_role_permissions.py",
+      "test_analytics.py",
+      "test_workflow_approvals.py",
+      "test_public_sharing.py",
+      "test_audit_trail.py",
+      "test_role_permissions_api.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 1,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 5
+    },
+    "has_conftest": false,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "FAIR",
+    "timestamp": "2025-07-20T17:32:34.417872"
+  },
+  "slack-bot": {
+    "test_files": 5,
+    "source_files": 17,
+    "test_loc": 1183,
+    "source_loc": 2033,
+    "test_to_source_ratio": 0.58,
+    "test_files_list": [
+      "test_utils.py",
+      "test_auth.py",
+      "test_services.py",
+      "test_main.py",
+      "test_slack_handler.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 1,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 2,
+      "main_tests": 1,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": false,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "GOOD",
+    "timestamp": "2025-07-20T17:32:34.417873"
+  },
+  "teams-bot": {
+    "test_files": 5,
+    "source_files": 18,
+    "test_loc": 1304,
+    "source_loc": 2718,
+    "test_to_source_ratio": 0.48,
+    "test_files_list": [
+      "test_utils.py",
+      "test_auth.py",
+      "test_teams_handler.py",
+      "test_adaptive_cards.py",
+      "test_main.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 2,
+      "main_tests": 1,
+      "other_tests": 2
+    },
+    "has_conftest": true,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": false,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "FAIR",
+    "timestamp": "2025-07-20T17:32:34.417874"
+  },
+  "visualization": {
+    "test_files": 2,
+    "source_files": 18,
+    "test_loc": 840,
+    "source_loc": 6858,
+    "test_to_source_ratio": 0.12,
+    "test_files_list": [
+      "test_export_endpoints.py",
+      "test_chart_export.py"
+    ],
+    "test_types": {
+      "api_tests": 1,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 1
+    },
+    "has_conftest": false,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": false,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "POOR",
+    "timestamp": "2025-07-20T17:32:34.417875"
+  },
+  "webhook-service": {
+    "test_files": 6,
+    "source_files": 17,
+    "test_loc": 3238,
+    "source_loc": 3415,
+    "test_to_source_ratio": 0.95,
+    "test_files_list": [
+      "test_utils.py",
+      "test_webhook_manager.py",
+      "test_delivery_service.py",
+      "test_event_processor.py",
+      "test_models.py",
+      "test_main.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 2,
+      "model_tests": 1,
+      "integration_tests": 0,
+      "utility_tests": 1,
+      "main_tests": 1,
+      "other_tests": 1
+    },
+    "has_conftest": true,
+    "has_pytest_ini": true,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": true,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "EXCELLENT",
+    "timestamp": "2025-07-20T17:32:34.417876"
+  },
+  "word-export-service": {
+    "test_files": 1,
+    "source_files": 12,
+    "test_loc": 239,
+    "source_loc": 2681,
+    "test_to_source_ratio": 0.09,
+    "test_files_list": [
+      "test_word_generator.py"
+    ],
+    "test_types": {
+      "api_tests": 0,
+      "service_tests": 0,
+      "model_tests": 0,
+      "integration_tests": 0,
+      "utility_tests": 0,
+      "main_tests": 0,
+      "other_tests": 1
+    },
+    "has_conftest": false,
+    "has_pytest_ini": false,
+    "testing_dependencies": {
+      "pytest": true,
+      "pytest-asyncio": true,
+      "pytest-cov": true,
+      "pytest-mock": false,
+      "coverage": false,
+      "httpx": true,
+      "requests-mock": false
+    },
+    "coverage_quality": "POOR",
+    "timestamp": "2025-07-20T17:32:34.417876"
+  }
+}
