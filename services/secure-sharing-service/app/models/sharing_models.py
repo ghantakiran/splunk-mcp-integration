@@ -765,3 +765,347 @@ class AuditTrailExportRequest(BaseModel):
     columns: Optional[List[str]] = None
     custom_title: Optional[str] = None
     include_summary: bool = True
+
+
+# Workflow Approval Models
+
+class WorkflowStatus(str, Enum):
+    """Status of approval workflows."""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class ApprovalLevel(str, Enum):
+    """Levels of approval required."""
+    NONE = "none"
+    SINGLE = "single"
+    MULTI_LEVEL = "multi_level"
+    UNANIMOUS = "unanimous"
+    MAJORITY = "majority"
+
+
+class ApprovalAction(str, Enum):
+    """Actions that can be taken on approval requests."""
+    APPROVE = "approve"
+    REJECT = "reject"
+    REQUEST_CHANGES = "request_changes"
+    DELEGATE = "delegate"
+    WITHDRAW = "withdraw"
+
+
+class ApprovalTrigger(str, Enum):
+    """Triggers that require approval."""
+    SENSITIVE_DATA = "sensitive_data"
+    EXTERNAL_SHARING = "external_sharing"
+    HIGH_RISK_RESOURCE = "high_risk_resource"
+    MANAGER_APPROVAL = "manager_approval"
+    COMPLIANCE_REVIEW = "compliance_review"
+    SECURITY_REVIEW = "security_review"
+    CUSTOM_RULE = "custom_rule"
+
+
+class CreateApprovalWorkflowRequest(BaseModel):
+    """Request model for creating approval workflows."""
+    model_config = ConfigDict(str_strip_whitespace=True, validate_assignment=True)
+    
+    # Workflow configuration
+    name: str = Field(..., max_length=255, description="Workflow name")
+    description: Optional[str] = Field(None, max_length=1000, description="Workflow description")
+    is_active: bool = Field(True, description="Whether workflow is active")
+    
+    # Trigger configuration
+    triggers: List[ApprovalTrigger] = Field(..., description="Approval triggers")
+    trigger_conditions: Optional[Dict[str, Any]] = Field(None, description="Conditions for triggers")
+    
+    # Approval configuration
+    approval_level: ApprovalLevel = Field(ApprovalLevel.SINGLE, description="Level of approval required")
+    required_approvers: List[str] = Field(..., description="Required approver user IDs")
+    optional_approvers: Optional[List[str]] = Field(None, description="Optional approver user IDs")
+    approval_threshold: Optional[int] = Field(None, ge=1, description="Number of approvals required")
+    
+    # Timing configuration
+    auto_approve_after: Optional[int] = Field(None, ge=1, le=168, description="Auto-approve after hours")
+    expires_after: Optional[int] = Field(None, ge=1, le=720, description="Expire after hours")
+    reminder_intervals: Optional[List[int]] = Field(None, description="Reminder intervals in hours")
+    
+    # Escalation configuration
+    escalation_enabled: bool = Field(False, description="Enable escalation")
+    escalation_after: Optional[int] = Field(None, ge=1, le=72, description="Escalate after hours")
+    escalation_approvers: Optional[List[str]] = Field(None, description="Escalation approver user IDs")
+    
+    # Advanced settings
+    allow_self_approval: bool = Field(False, description="Allow creator to approve their own request")
+    require_reason: bool = Field(True, description="Require approval/rejection reason")
+    parallel_approval: bool = Field(True, description="Allow parallel approvals")
+    
+    # Notification settings
+    notify_requester: bool = Field(True, description="Notify requester of status changes")
+    notify_approvers: bool = Field(True, description="Notify approvers of new requests")
+    notification_channels: Optional[List[str]] = Field(None, description="Notification channels")
+    
+    # Metadata
+    tags: Optional[List[str]] = Field(None, description="Workflow tags")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class CreateApprovalRequestRequest(BaseModel):
+    """Request model for creating approval requests."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    # Share context
+    share_request: CreateShareRequest = Field(..., description="Original share request")
+    workflow_id: UUID = Field(..., description="Workflow to use for approval")
+    
+    # Request details
+    justification: str = Field(..., max_length=2000, description="Justification for the share")
+    priority: str = Field("normal", pattern="^(low|normal|high|urgent)$", description="Request priority")
+    
+    # Additional context
+    business_case: Optional[str] = Field(None, max_length=1000, description="Business case")
+    risk_assessment: Optional[str] = Field(None, max_length=1000, description="Risk assessment")
+    compliance_notes: Optional[str] = Field(None, max_length=1000, description="Compliance notes")
+    
+    # Timing
+    requested_approval_by: Optional[datetime] = Field(None, description="When approval is needed by")
+    
+    # Attachments and references
+    attachments: Optional[List[str]] = Field(None, description="Attachment file URLs")
+    references: Optional[List[str]] = Field(None, description="Reference links or documents")
+    
+    # Metadata
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ApprovalActionRequest(BaseModel):
+    """Request model for taking action on approval requests."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    action: ApprovalAction = Field(..., description="Action to take")
+    reason: str = Field(..., max_length=1000, description="Reason for the action")
+    
+    # Optional fields
+    delegate_to: Optional[str] = Field(None, description="User ID to delegate to")
+    conditions: Optional[List[str]] = Field(None, description="Conditions for approval")
+    notes: Optional[str] = Field(None, max_length=2000, description="Additional notes")
+    
+    # Metadata
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class ApprovalWorkflowResponse(BaseModel):
+    """Response model for approval workflows."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    workflow_id: UUID
+    name: str
+    description: Optional[str]
+    is_active: bool
+    
+    # Trigger configuration
+    triggers: List[ApprovalTrigger]
+    trigger_conditions: Optional[Dict[str, Any]]
+    
+    # Approval configuration
+    approval_level: ApprovalLevel
+    required_approvers: List[str]
+    optional_approvers: Optional[List[str]]
+    approval_threshold: Optional[int]
+    
+    # Timing configuration
+    auto_approve_after: Optional[int]
+    expires_after: Optional[int]
+    reminder_intervals: Optional[List[int]]
+    
+    # Escalation configuration
+    escalation_enabled: bool
+    escalation_after: Optional[int]
+    escalation_approvers: Optional[List[str]]
+    
+    # Advanced settings
+    allow_self_approval: bool
+    require_reason: bool
+    parallel_approval: bool
+    
+    # Statistics
+    total_requests: int = 0
+    approved_requests: int = 0
+    rejected_requests: int = 0
+    pending_requests: int = 0
+    average_approval_time: Optional[float] = None
+    
+    # Tracking
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    
+    # Metadata
+    tags: Optional[List[str]]
+    metadata: Optional[Dict[str, Any]]
+
+
+class ApprovalRequestResponse(BaseModel):
+    """Response model for approval requests."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    request_id: UUID
+    workflow_id: UUID
+    share_id: Optional[UUID]  # Set after share is created
+    
+    # Request details
+    share_request: Dict[str, Any]  # Serialized CreateShareRequest
+    justification: str
+    priority: str
+    status: WorkflowStatus
+    
+    # Context
+    business_case: Optional[str]
+    risk_assessment: Optional[str]
+    compliance_notes: Optional[str]
+    
+    # Timing
+    requested_approval_by: Optional[datetime]
+    auto_approve_at: Optional[datetime]
+    expires_at: Optional[datetime]
+    
+    # Progress tracking
+    current_approvers: List[str]
+    completed_approvals: List[Dict[str, Any]]
+    pending_approvals: List[str]
+    escalated: bool = False
+    escalated_at: Optional[datetime]
+    
+    # Final resolution
+    final_action: Optional[ApprovalAction]
+    final_reason: Optional[str]
+    approved_by: Optional[str]
+    approved_at: Optional[datetime]
+    rejected_by: Optional[str]
+    rejected_at: Optional[datetime]
+    
+    # Tracking
+    requested_by: str
+    created_at: datetime
+    updated_at: datetime
+    
+    # Attachments and references
+    attachments: Optional[List[str]]
+    references: Optional[List[str]]
+    
+    # Metadata
+    metadata: Optional[Dict[str, Any]]
+
+
+class ApprovalActionResponse(BaseModel):
+    """Response model for approval actions."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    action_id: UUID
+    request_id: UUID
+    approver_id: str
+    
+    action: ApprovalAction
+    reason: str
+    status: str  # completed, pending, cancelled
+    
+    # Action details
+    delegate_to: Optional[str]
+    conditions: Optional[List[str]]
+    notes: Optional[str]
+    
+    # Timing
+    taken_at: datetime
+    
+    # Metadata
+    metadata: Optional[Dict[str, Any]]
+
+
+class ApprovalWorkflowListRequest(BaseModel):
+    """Request model for listing approval workflows."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    # Filtering
+    is_active: Optional[bool] = None
+    triggers: Optional[List[ApprovalTrigger]] = None
+    created_by: Optional[str] = None
+    tags: Optional[List[str]] = None
+    
+    # Search
+    search: Optional[str] = None
+    
+    # Pagination
+    limit: int = Field(50, ge=1, le=200)
+    offset: int = Field(0, ge=0)
+    
+    # Sorting
+    sort_by: str = Field("created_at", pattern="^(name|created_at|updated_at)$")
+    sort_order: str = Field("desc", pattern="^(asc|desc)$")
+
+
+class ApprovalRequestListRequest(BaseModel):
+    """Request model for listing approval requests."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    # Filtering
+    workflow_id: Optional[UUID] = None
+    status: Optional[WorkflowStatus] = None
+    priority: Optional[str] = None
+    requested_by: Optional[str] = None
+    assigned_to: Optional[str] = None  # Current approver
+    
+    # Time filtering
+    created_after: Optional[datetime] = None
+    created_before: Optional[datetime] = None
+    due_after: Optional[datetime] = None
+    due_before: Optional[datetime] = None
+    
+    # Search
+    search: Optional[str] = None
+    
+    # Pagination
+    limit: int = Field(50, ge=1, le=200)
+    offset: int = Field(0, ge=0)
+    
+    # Sorting
+    sort_by: str = Field("created_at", pattern="^(created_at|updated_at|priority|status)$")
+    sort_order: str = Field("desc", pattern="^(asc|desc)$")
+
+
+class ApprovalStatistics(BaseModel):
+    """Statistics for approval workflows."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    # Overall statistics
+    total_workflows: int
+    active_workflows: int
+    total_requests: int
+    pending_requests: int
+    approved_requests: int
+    rejected_requests: int
+    expired_requests: int
+    
+    # Performance metrics
+    average_approval_time_hours: Optional[float]
+    median_approval_time_hours: Optional[float]
+    approval_rate_percentage: float
+    
+    # Workflow effectiveness
+    workflows_by_trigger: Dict[ApprovalTrigger, int]
+    requests_by_priority: Dict[str, int]
+    requests_by_status: Dict[WorkflowStatus, int]
+    
+    # User activity
+    top_requesters: List[Dict[str, Any]]
+    top_approvers: List[Dict[str, Any]]
+    most_active_workflows: List[Dict[str, Any]]
+    
+    # Time-based analysis
+    requests_by_day: List[Dict[str, Any]]
+    approval_time_trends: List[Dict[str, Any]]
+    
+    # Risk and compliance
+    high_risk_requests: int
+    compliance_review_requests: int
+    escalated_requests: int

@@ -20,7 +20,8 @@ from app.core.config import settings
 from app.models.sharing_models import (
     ShareType, SharePermission, ShareStatus, AccessMethod,
     ExpirationPolicy, ShareRole, ShareOperation, PermissionScope,
-    AuditEventType, AuditEventSeverity, AuditEventCategory
+    AuditEventType, AuditEventSeverity, AuditEventCategory,
+    WorkflowStatus, ApprovalLevel, ApprovalAction, ApprovalTrigger
 )
 
 # Database setup
@@ -498,6 +499,225 @@ class ShareAuditTrail(Base):
         Index("idx_audit_retention_date", "retention_date"),
         Index("idx_audit_compound_security", "event_type", "severity", "authorization_granted", "timestamp"),
         Index("idx_audit_compound_activity", "user_id", "share_id", "timestamp"),
+    )
+
+
+class ShareApprovalWorkflow(Base):
+    """Approval workflow configuration database model."""
+    __tablename__ = "share_approval_workflows"
+
+    workflow_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    
+    # Trigger configuration
+    triggers = Column(JSON, nullable=False)  # List of ApprovalTrigger values
+    trigger_conditions = Column(JSON, nullable=True)  # Conditions for triggers
+    
+    # Approval configuration
+    approval_level = Column(SQLEnum(ApprovalLevel), nullable=False, default=ApprovalLevel.SINGLE)
+    required_approvers = Column(JSON, nullable=False)  # List of user IDs
+    optional_approvers = Column(JSON, nullable=True)  # List of user IDs
+    approval_threshold = Column(Integer, nullable=True)  # Number of approvals required
+    
+    # Timing configuration
+    auto_approve_after = Column(Integer, nullable=True)  # Hours
+    expires_after = Column(Integer, nullable=True)  # Hours
+    reminder_intervals = Column(JSON, nullable=True)  # List of hours
+    
+    # Escalation configuration
+    escalation_enabled = Column(Boolean, nullable=False, default=False)
+    escalation_after = Column(Integer, nullable=True)  # Hours
+    escalation_approvers = Column(JSON, nullable=True)  # List of user IDs
+    
+    # Advanced settings
+    allow_self_approval = Column(Boolean, nullable=False, default=False)
+    require_reason = Column(Boolean, nullable=False, default=True)
+    parallel_approval = Column(Boolean, nullable=False, default=True)
+    
+    # Notification settings
+    notify_requester = Column(Boolean, nullable=False, default=True)
+    notify_approvers = Column(Boolean, nullable=False, default=True)
+    notification_channels = Column(JSON, nullable=True)  # List of channels
+    
+    # Statistics
+    total_requests = Column(Integer, nullable=False, default=0)
+    approved_requests = Column(Integer, nullable=False, default=0)
+    rejected_requests = Column(Integer, nullable=False, default=0)
+    pending_requests = Column(Integer, nullable=False, default=0)
+    average_approval_time = Column(Float, nullable=True)  # Hours
+    
+    # Tracking
+    created_by = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # Metadata
+    tags = Column(JSON, nullable=True)  # List of tags
+    metadata = Column(JSON, nullable=True)  # Additional metadata
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_workflow_name", "name"),
+        Index("idx_workflow_active", "is_active"),
+        Index("idx_workflow_created_by", "created_by"),
+        Index("idx_workflow_created_at", "created_at"),
+        Index("idx_workflow_compound", "is_active", "created_by", "created_at"),
+    )
+
+
+class ShareApprovalRequest(Base):
+    """Approval request database model."""
+    __tablename__ = "share_approval_requests"
+
+    request_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    workflow_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("share_approval_workflows.workflow_id"), nullable=False, index=True)
+    share_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("shared_resources.share_id"), nullable=True, index=True)  # Set after approval
+    
+    # Request details
+    share_request = Column(JSON, nullable=False)  # Serialized CreateShareRequest
+    justification = Column(Text, nullable=False)
+    priority = Column(String(20), nullable=False, default="normal", index=True)
+    status = Column(SQLEnum(WorkflowStatus), nullable=False, default=WorkflowStatus.PENDING, index=True)
+    
+    # Context
+    business_case = Column(Text, nullable=True)
+    risk_assessment = Column(Text, nullable=True)
+    compliance_notes = Column(Text, nullable=True)
+    
+    # Timing
+    requested_approval_by = Column(DateTime(timezone=True), nullable=True, index=True)
+    auto_approve_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    
+    # Progress tracking
+    current_approvers = Column(JSON, nullable=False, default=list)  # List of current approver user IDs
+    completed_approvals = Column(JSON, nullable=False, default=list)  # List of completed approval actions
+    pending_approvals = Column(JSON, nullable=False, default=list)  # List of pending approver user IDs
+    escalated = Column(Boolean, nullable=False, default=False, index=True)
+    escalated_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Final resolution
+    final_action = Column(SQLEnum(ApprovalAction), nullable=True, index=True)
+    final_reason = Column(Text, nullable=True)
+    approved_by = Column(String(255), nullable=True, index=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    rejected_by = Column(String(255), nullable=True, index=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    
+    # Tracking
+    requested_by = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # Attachments and references
+    attachments = Column(JSON, nullable=True)  # List of attachment URLs
+    references = Column(JSON, nullable=True)  # List of reference links
+    
+    # Metadata
+    metadata = Column(JSON, nullable=True)  # Additional metadata
+    
+    # Relationships
+    workflow = relationship("ShareApprovalWorkflow")
+    share = relationship("SharedResource")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_request_workflow_status", "workflow_id", "status"),
+        Index("idx_request_requester_status", "requested_by", "status"),
+        Index("idx_request_priority_status", "priority", "status"),
+        Index("idx_request_created_at", "created_at"),
+        Index("idx_request_approval_by", "requested_approval_by"),
+        Index("idx_request_expires_at", "expires_at"),
+        Index("idx_request_auto_approve", "auto_approve_at"),
+        Index("idx_request_escalated", "escalated", "escalated_at"),
+        Index("idx_request_final_action", "final_action", "approved_at", "rejected_at"),
+        Index("idx_request_compound_pending", "status", "current_approvers", "requested_approval_by"),
+        Index("idx_request_compound_activity", "requested_by", "workflow_id", "status", "created_at"),
+    )
+
+
+class ShareApprovalAction(Base):
+    """Approval action database model."""
+    __tablename__ = "share_approval_actions"
+
+    action_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    request_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("share_approval_requests.request_id"), nullable=False, index=True)
+    approver_id = Column(String(255), nullable=False, index=True)
+    
+    action = Column(SQLEnum(ApprovalAction), nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="completed", index=True)  # completed, pending, cancelled
+    
+    # Action details
+    delegate_to = Column(String(255), nullable=True, index=True)
+    conditions = Column(JSON, nullable=True)  # List of conditions
+    notes = Column(Text, nullable=True)
+    
+    # Timing
+    taken_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), index=True)
+    
+    # Metadata
+    metadata = Column(JSON, nullable=True)  # Additional metadata
+    
+    # Relationships
+    request = relationship("ShareApprovalRequest")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_action_request_approver", "request_id", "approver_id"),
+        Index("idx_action_approver_action", "approver_id", "action"),
+        Index("idx_action_taken_at", "taken_at"),
+        Index("idx_action_status", "status"),
+        Index("idx_action_delegate", "delegate_to"),
+        Index("idx_action_compound", "request_id", "action", "taken_at"),
+    )
+
+
+class ShareApprovalNotification(Base):
+    """Approval notification tracking database model."""
+    __tablename__ = "share_approval_notifications"
+
+    notification_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    request_id = Column(PostgreSQLUUID(as_uuid=True), ForeignKey("share_approval_requests.request_id"), nullable=False, index=True)
+    recipient_id = Column(String(255), nullable=False, index=True)
+    
+    notification_type = Column(String(50), nullable=False, index=True)  # request_created, approval_needed, approved, rejected, escalated, reminder
+    channel = Column(String(50), nullable=False, index=True)  # email, slack, teams, sms, webhook
+    
+    # Content
+    subject = Column(String(255), nullable=True)
+    message = Column(Text, nullable=False)
+    
+    # Delivery tracking
+    sent_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)  # pending, sent, delivered, failed, read
+    
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0)
+    max_retries = Column(Integer, nullable=False, default=3)
+    
+    # Scheduling
+    scheduled_for = Column(DateTime(timezone=True), nullable=True, index=True)
+    
+    # Metadata
+    metadata = Column(JSON, nullable=True)  # Channel-specific metadata
+    
+    # Relationships
+    request = relationship("ShareApprovalRequest")
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_notification_request", "request_id", "notification_type"),
+        Index("idx_notification_recipient", "recipient_id", "status"),
+        Index("idx_notification_channel", "channel", "status"),
+        Index("idx_notification_scheduled", "scheduled_for", "status"),
+        Index("idx_notification_delivery", "sent_at", "delivered_at", "status"),
+        Index("idx_notification_compound", "request_id", "recipient_id", "notification_type", "status"),
     )
 
 
