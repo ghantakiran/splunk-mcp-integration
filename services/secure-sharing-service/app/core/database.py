@@ -19,7 +19,7 @@ from sqlalchemy.sql import func
 from app.core.config import settings
 from app.models.sharing_models import (
     ShareType, SharePermission, ShareStatus, AccessMethod,
-    ExpirationPolicy
+    ExpirationPolicy, ShareRole, ShareOperation, PermissionScope
 )
 
 # Database setup
@@ -300,6 +300,125 @@ class ShareConfiguration(Base):
     __table_args__ = (
         UniqueConstraint("scope", "scope_id", name="unique_scope_configuration"),
         Index("idx_config_scope", "scope", "scope_id"),
+    )
+
+
+class ShareRolePermissions(Base):
+    """Share role permissions database model."""
+    __tablename__ = "share_role_permissions"
+
+    permission_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(String(255), nullable=False, index=True)
+    
+    # Role and scope information
+    role = Column(SQLEnum(ShareRole), nullable=False, index=True)
+    scope = Column(SQLEnum(PermissionScope), nullable=False, index=True)
+    scope_id = Column(String(255), nullable=True, index=True)  # resource_type, resource_id, or share_id
+    
+    # Specific resource types for resource_type scope
+    resource_types = Column(JSON, nullable=True)  # List of ShareType values
+    
+    # Permission details
+    operations = Column(JSON, nullable=False)  # List of ShareOperation values
+    conditions = Column(JSON, nullable=True)  # Additional conditions
+    
+    # Status and expiration
+    active = Column(Boolean, nullable=False, default=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    
+    # Tracking
+    created_by = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # Metadata
+    metadata = Column(JSON, nullable=True)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_user_role_scope", "user_id", "role", "scope"),
+        Index("idx_user_active_expires", "user_id", "active", "expires_at"),
+        Index("idx_scope_scope_id", "scope", "scope_id"),
+        UniqueConstraint("user_id", "role", "scope", "scope_id", name="unique_user_role_scope"),
+    )
+
+
+class SharePermissionAuditLog(Base):
+    """Share permission audit log database model."""
+    __tablename__ = "share_permission_audit_logs"
+
+    log_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id = Column(String(255), nullable=False, index=True)
+    
+    # Operation details
+    operation = Column(SQLEnum(ShareOperation), nullable=False, index=True)
+    scope = Column(SQLEnum(PermissionScope), nullable=False, index=True)
+    scope_id = Column(String(255), nullable=True, index=True)
+    resource_type = Column(SQLEnum(ShareType), nullable=True, index=True)
+    share_id = Column(PostgreSQLUUID(as_uuid=True), nullable=True, index=True)
+    
+    # Permission results
+    permission_granted = Column(Boolean, nullable=False, index=True)
+    granted_by_role = Column(SQLEnum(ShareRole), nullable=True, index=True)
+    granted_by_permission_id = Column(PostgreSQLUUID(as_uuid=True), nullable=True, index=True)
+    reason = Column(Text, nullable=True)
+    
+    # Request context
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=func.now(), index=True)
+    ip_address = Column(String(45), nullable=True, index=True)  # Support IPv6
+    user_agent = Column(Text, nullable=True)
+    request_id = Column(String(255), nullable=True, index=True)  # Correlation ID
+    
+    # Additional context
+    metadata = Column(JSON, nullable=True)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_user_operation_timestamp", "user_id", "operation", "timestamp"),
+        Index("idx_operation_granted_timestamp", "operation", "permission_granted", "timestamp"),
+        Index("idx_share_operation_timestamp", "share_id", "operation", "timestamp"),
+        Index("idx_timestamp_granted", "timestamp", "permission_granted"),
+    )
+
+
+class ShareRoleDefinitions(Base):
+    """Share role definitions database model for customizable roles."""
+    __tablename__ = "share_role_definitions"
+
+    definition_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    role = Column(SQLEnum(ShareRole), nullable=False, unique=True, index=True)
+    
+    # Role configuration
+    display_name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    default_operations = Column(JSON, nullable=False)  # List of ShareOperation values
+    allowed_scopes = Column(JSON, nullable=False)  # List of PermissionScope values
+    
+    # Role hierarchy and inheritance
+    inherits_from = Column(SQLEnum(ShareRole), nullable=True)
+    priority = Column(Integer, nullable=False, default=0)  # Higher number = higher priority
+    
+    # Configuration
+    is_system_role = Column(Boolean, nullable=False, default=True)
+    is_assignable = Column(Boolean, nullable=False, default=True)
+    max_assignments = Column(Integer, nullable=True)  # Max number of users with this role
+    
+    # Conditions and restrictions
+    assignment_conditions = Column(JSON, nullable=True)
+    operation_conditions = Column(JSON, nullable=True)
+    
+    # Tracking
+    created_by = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # Metadata
+    metadata = Column(JSON, nullable=True)
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_role_assignable_system", "role", "is_assignable", "is_system_role"),
+        Index("idx_priority_assignable", "priority", "is_assignable"),
     )
 
 

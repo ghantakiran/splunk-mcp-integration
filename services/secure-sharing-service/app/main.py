@@ -12,7 +12,7 @@ import uuid
 
 from app.core.config import settings
 from app.core.database import create_tables, drop_tables
-from app.api.v1.endpoints import shares
+from app.api.v1.endpoints import shares, role_permissions
 from app.utils.rate_limiter import rate_limiter, cleanup_expired_rate_limits
 import structlog
 
@@ -208,6 +208,12 @@ app.include_router(
     shares.router,
     prefix=f"{settings.API_V1_STR}/shares",
     tags=["shares"]
+)
+
+app.include_router(
+    role_permissions.router,
+    prefix=f"{settings.API_V1_STR}/permissions",
+    tags=["role-permissions"]
 )
 
 

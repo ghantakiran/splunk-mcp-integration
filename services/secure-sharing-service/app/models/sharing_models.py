@@ -54,6 +54,35 @@ class ExpirationPolicy(str, Enum):
     COMBINED = "combined"
 
 
+class ShareRole(str, Enum):
+    """Roles for sharing operations."""
+    ADMIN = "admin"
+    MANAGER = "manager"
+    CREATOR = "creator"
+    MEMBER = "member"
+    VIEWER = "viewer"
+
+
+class ShareOperation(str, Enum):
+    """Operations that can be performed on shares."""
+    CREATE = "create"
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    SHARE = "share"
+    REVOKE = "revoke"
+    MANAGE_PERMISSIONS = "manage_permissions"
+    VIEW_ANALYTICS = "view_analytics"
+
+
+class PermissionScope(str, Enum):
+    """Scope of permissions for sharing."""
+    GLOBAL = "global"
+    RESOURCE_TYPE = "resource_type"
+    RESOURCE = "resource"
+    SHARE = "share"
+
+
 # Request Models
 class CreateShareRequest(BaseModel):
     """Request model for creating a share."""
@@ -354,6 +383,150 @@ class BulkShareOperation(BaseModel):
     operation: str  # create, update, delete, revoke
     share_ids: List[UUID]
     parameters: Optional[Dict[str, Any]]
+    
+    # Results
+    successful_operations: int
+    failed_operations: int
+    errors: List[Dict[str, Any]]
+
+
+# Role-Based Permission Models
+class ShareRolePermission(BaseModel):
+    """Model for role-based permissions."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    role: ShareRole
+    operations: List[ShareOperation]
+    scope: PermissionScope
+    scope_id: Optional[str] = None  # resource_type, resource_id, or share_id
+    conditions: Optional[Dict[str, Any]] = None  # Additional conditions
+    
+    @validator('operations')
+    def validate_operations(cls, v, values):
+        role = values.get('role')
+        if role == ShareRole.VIEWER and any(op in [ShareOperation.CREATE, ShareOperation.UPDATE, ShareOperation.DELETE] for op in v):
+            raise ValueError("Viewer role cannot have create, update, or delete operations")
+        return v
+
+
+class CreateRolePermissionRequest(BaseModel):
+    """Request model for creating role permissions."""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True
+    )
+    
+    user_id: str = Field(..., description="User ID to assign role")
+    role: ShareRole = Field(..., description="Role to assign")
+    scope: PermissionScope = Field(..., description="Scope of the permission")
+    scope_id: Optional[str] = Field(None, description="ID for resource/share specific permissions")
+    resource_types: Optional[List[ShareType]] = Field(None, description="Specific resource types for resource_type scope")
+    expires_at: Optional[datetime] = Field(None, description="When the role assignment expires")
+    conditions: Optional[Dict[str, Any]] = Field(None, description="Additional conditions for the role")
+
+
+class UpdateRolePermissionRequest(BaseModel):
+    """Request model for updating role permissions."""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True
+    )
+    
+    role: Optional[ShareRole] = Field(None, description="New role")
+    expires_at: Optional[datetime] = Field(None, description="New expiration time")
+    conditions: Optional[Dict[str, Any]] = Field(None, description="New conditions")
+    active: Optional[bool] = Field(None, description="Whether the permission is active")
+
+
+class RolePermissionResponse(BaseModel):
+    """Response model for role permissions."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    permission_id: UUID
+    user_id: str
+    role: ShareRole
+    scope: PermissionScope
+    scope_id: Optional[str]
+    resource_types: Optional[List[ShareType]]
+    operations: List[ShareOperation]
+    conditions: Optional[Dict[str, Any]]
+    active: bool
+    expires_at: Optional[datetime]
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserRolePermissionsResponse(BaseModel):
+    """Response model for user's role permissions."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    user_id: str
+    permissions: List[RolePermissionResponse]
+    effective_operations: Dict[str, List[ShareOperation]]  # scope -> operations
+    can_create_shares: bool
+    can_manage_permissions: bool
+    can_view_analytics: bool
+
+
+class RolePermissionCheck(BaseModel):
+    """Model for checking role permissions."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    user_id: str
+    operation: ShareOperation
+    scope: PermissionScope
+    scope_id: Optional[str] = None
+    resource_type: Optional[ShareType] = None
+    share_id: Optional[UUID] = None
+    
+    # Results
+    has_permission: bool
+    granted_by_role: Optional[ShareRole] = None
+    granted_by_permission_id: Optional[UUID] = None
+    reason: Optional[str] = None
+
+
+class PermissionAuditLog(BaseModel):
+    """Model for permission audit logging."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    log_id: UUID
+    user_id: str
+    operation: ShareOperation
+    scope: PermissionScope
+    scope_id: Optional[str]
+    resource_type: Optional[ShareType]
+    share_id: Optional[UUID]
+    permission_granted: bool
+    granted_by_role: Optional[ShareRole]
+    granted_by_permission_id: Optional[UUID]
+    timestamp: datetime
+    ip_address: Optional[str]
+    user_agent: Optional[str]
+    metadata: Optional[Dict[str, Any]]
+
+
+class SharePermissionMatrix(BaseModel):
+    """Model for permission matrix display."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    role: ShareRole
+    permissions: Dict[ShareOperation, Dict[PermissionScope, bool]]
+    description: str
+    typical_use_cases: List[str]
+
+
+class BulkRoleOperation(BaseModel):
+    """Model for bulk role operations."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    operation: str  # assign, update, revoke
+    user_ids: List[str]
+    role: ShareRole
+    scope: PermissionScope
+    scope_id: Optional[str] = None
+    expires_at: Optional[datetime] = None
     
     # Results
     successful_operations: int

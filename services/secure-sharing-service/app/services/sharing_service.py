@@ -19,7 +19,7 @@ from app.models.sharing_models import (
     CreateShareRequest, UpdateShareRequest, AccessShareRequest, ShareListRequest,
     ShareResponse, ShareAccessResponse, ShareStatsResponse, ExpirationCheckResult,
     ShareSecurityValidation, ShareType, ShareStatus, SharePermission, ExpirationPolicy,
-    AccessMethod
+    AccessMethod, ShareOperation, PermissionScope
 )
 from app.core.config import settings
 import structlog
@@ -83,6 +83,15 @@ class SharingService:
             db = await get_database()
 
         try:
+            # Check if user has permission to create shares
+            from app.services.role_permission_service import role_permission_service
+            permission_check = await role_permission_service.check_permission(
+                user_id, ShareOperation.CREATE, PermissionScope.RESOURCE_TYPE, 
+                resource_type=request.resource_type, db=db
+            )
+            
+            if not permission_check.has_permission:
+                raise ShareSecurityError(f"Insufficient permissions to create {request.resource_type.value} shares")
             # Generate unique share token
             share_token = self.generate_share_token()
             
@@ -320,8 +329,36 @@ class SharingService:
         if db is None:
             db = await get_database()
 
-        # Build query
-        query = select(SharedResource).where(SharedResource.created_by == user_id)
+        # Check if user has permission to list shares
+        from app.services.role_permission_service import role_permission_service
+        
+        # Check if user has global read permissions (can see all shares)
+        global_permission_check = await role_permission_service.check_permission(
+            user_id, ShareOperation.READ, PermissionScope.GLOBAL, db=db
+        )
+        
+        # Build query - either user's own shares or all shares if they have global permissions
+        if global_permission_check.has_permission:
+            # User can see all shares
+            query = select(SharedResource)
+        else:
+            # Check if user has resource-type level permissions
+            resource_type_permission = False
+            if request.resource_type:
+                resource_type_check = await role_permission_service.check_permission(
+                    user_id, ShareOperation.READ, PermissionScope.RESOURCE_TYPE,
+                    resource_type=request.resource_type, db=db
+                )
+                resource_type_permission = resource_type_check.has_permission
+            
+            if resource_type_permission:
+                # User can see shares of specific resource type
+                query = select(SharedResource)
+                if request.resource_type:
+                    query = query.where(SharedResource.resource_type == request.resource_type)
+            else:
+                # User can only see their own shares
+                query = select(SharedResource).where(SharedResource.created_by == user_id)
 
         # Apply filters
         if request.resource_type:
@@ -423,19 +460,35 @@ class SharingService:
             db = await get_database()
 
         try:
-            # Get existing share
+            # Get existing share first
             result = await db.execute(
-                select(SharedResource).where(
-                    and_(
-                        SharedResource.share_id == share_id,
-                        SharedResource.created_by == user_id
-                    )
-                )
+                select(SharedResource).where(SharedResource.share_id == share_id)
             )
             share = result.scalar_one_or_none()
             
             if not share:
                 raise ShareNotFoundError("Share not found")
+
+            # Check if user has permission to update this share
+            from app.services.role_permission_service import role_permission_service
+            
+            # Check if user is the creator or has global/resource update permissions
+            is_creator = share.created_by == user_id
+            if not is_creator:
+                permission_check = await role_permission_service.check_permission(
+                    user_id, ShareOperation.UPDATE, PermissionScope.SHARE, 
+                    scope_id=str(share_id), db=db
+                )
+                
+                if not permission_check.has_permission:
+                    # Try resource-level permission
+                    permission_check = await role_permission_service.check_permission(
+                        user_id, ShareOperation.UPDATE, PermissionScope.RESOURCE,
+                        scope_id=str(share.resource_id), resource_type=share.resource_type, db=db
+                    )
+                    
+                    if not permission_check.has_permission:
+                        raise ShareSecurityError("Insufficient permissions to update this share")
 
             # Update fields
             if request.resource_name is not None:
@@ -527,18 +580,35 @@ class SharingService:
             db = await get_database()
 
         try:
+            # Get existing share first
             result = await db.execute(
-                select(SharedResource).where(
-                    and_(
-                        SharedResource.share_id == share_id,
-                        SharedResource.created_by == user_id
-                    )
-                )
+                select(SharedResource).where(SharedResource.share_id == share_id)
             )
             share = result.scalar_one_or_none()
             
             if not share:
                 raise ShareNotFoundError("Share not found")
+
+            # Check if user has permission to delete this share
+            from app.services.role_permission_service import role_permission_service
+            
+            # Check if user is the creator or has global/resource delete permissions
+            is_creator = share.created_by == user_id
+            if not is_creator:
+                permission_check = await role_permission_service.check_permission(
+                    user_id, ShareOperation.DELETE, PermissionScope.SHARE, 
+                    scope_id=str(share_id), db=db
+                )
+                
+                if not permission_check.has_permission:
+                    # Try resource-level permission
+                    permission_check = await role_permission_service.check_permission(
+                        user_id, ShareOperation.DELETE, PermissionScope.RESOURCE,
+                        scope_id=str(share.resource_id), resource_type=share.resource_type, db=db
+                    )
+                    
+                    if not permission_check.has_permission:
+                        raise ShareSecurityError("Insufficient permissions to delete this share")
 
             await db.delete(share)
             await db.commit()
