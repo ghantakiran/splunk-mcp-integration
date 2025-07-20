@@ -19,7 +19,8 @@ from sqlalchemy.sql import func
 from app.core.config import settings
 from app.models.sharing_models import (
     ShareType, SharePermission, ShareStatus, AccessMethod,
-    ExpirationPolicy, ShareRole, ShareOperation, PermissionScope
+    ExpirationPolicy, ShareRole, ShareOperation, PermissionScope,
+    AuditEventType, AuditEventSeverity, AuditEventCategory
 )
 
 # Database setup
@@ -419,6 +420,84 @@ class ShareRoleDefinitions(Base):
     __table_args__ = (
         Index("idx_role_assignable_system", "role", "is_assignable", "is_system_role"),
         Index("idx_priority_assignable", "priority", "is_assignable"),
+    )
+
+
+class ShareAuditTrail(Base):
+    """Comprehensive audit trail database model."""
+    __tablename__ = "share_audit_trail"
+
+    event_id = Column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    event_type = Column(SQLEnum(AuditEventType), nullable=False, index=True)
+    category = Column(SQLEnum(AuditEventCategory), nullable=False, index=True)
+    severity = Column(SQLEnum(AuditEventSeverity), nullable=False, index=True)
+    
+    # Event details
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=func.now(), index=True)
+    
+    # User and session context
+    user_id = Column(String(255), nullable=True, index=True)
+    session_id = Column(String(255), nullable=True, index=True)
+    ip_address = Column(String(45), nullable=True, index=True)  # Support IPv6
+    user_agent = Column(Text, nullable=True)
+    
+    # Resource context
+    share_id = Column(PostgreSQLUUID(as_uuid=True), nullable=True, index=True)
+    resource_id = Column(PostgreSQLUUID(as_uuid=True), nullable=True, index=True)
+    resource_type = Column(SQLEnum(ShareType), nullable=True, index=True)
+    
+    # Operation context
+    operation = Column(SQLEnum(ShareOperation), nullable=True, index=True)
+    scope = Column(SQLEnum(PermissionScope), nullable=True, index=True)
+    scope_id = Column(String(255), nullable=True, index=True)
+    
+    # Before and after states for changes
+    before_state = Column(JSON, nullable=True)
+    after_state = Column(JSON, nullable=True)
+    
+    # Additional context and metadata
+    context = Column(JSON, nullable=True)
+    metadata = Column(JSON, nullable=True)
+    
+    # Request tracing
+    correlation_id = Column(String(255), nullable=True, index=True)
+    request_id = Column(String(255), nullable=True, index=True)
+    
+    # Security context
+    authentication_method = Column(String(100), nullable=True)
+    authorization_granted = Column(Boolean, nullable=True, index=True)
+    
+    # System context
+    service_name = Column(String(100), nullable=False, default="secure-sharing-service")
+    service_version = Column(String(50), nullable=True)
+    
+    # Tags for categorization and filtering
+    tags = Column(JSON, nullable=True)  # List of tags
+    
+    # Performance tracking
+    processing_time_ms = Column(Float, nullable=True)
+    
+    # Data retention
+    retention_date = Column(DateTime(timezone=True), nullable=True, index=True)
+    
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index("idx_audit_timestamp_category", "timestamp", "category"),
+        Index("idx_audit_user_timestamp", "user_id", "timestamp"),
+        Index("idx_audit_share_timestamp", "share_id", "timestamp"),
+        Index("idx_audit_resource_timestamp", "resource_id", "timestamp"),
+        Index("idx_audit_event_type_timestamp", "event_type", "timestamp"),
+        Index("idx_audit_severity_timestamp", "severity", "timestamp"),
+        Index("idx_audit_operation_timestamp", "operation", "timestamp"),
+        Index("idx_audit_correlation_id", "correlation_id"),
+        Index("idx_audit_request_id", "request_id"),
+        Index("idx_audit_auth_granted", "authorization_granted", "timestamp"),
+        Index("idx_audit_ip_timestamp", "ip_address", "timestamp"),
+        Index("idx_audit_retention_date", "retention_date"),
+        Index("idx_audit_compound_security", "event_type", "severity", "authorization_granted", "timestamp"),
+        Index("idx_audit_compound_activity", "user_id", "share_id", "timestamp"),
     )
 
 

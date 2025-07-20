@@ -12,7 +12,7 @@ import uuid
 
 from app.core.config import settings
 from app.core.database import create_tables, drop_tables
-from app.api.v1.endpoints import shares, role_permissions, analytics
+from app.api.v1.endpoints import shares, role_permissions, analytics, audit_trail
 from app.utils.rate_limiter import rate_limiter, cleanup_expired_rate_limits
 import structlog
 
@@ -235,6 +235,12 @@ app.include_router(
     analytics.router,
     prefix=f"{settings.API_V1_STR}/analytics",
     tags=["analytics"]
+)
+
+app.include_router(
+    audit_trail.router,
+    prefix=f"{settings.API_V1_STR}/audit-trail",
+    tags=["audit-trail"]
 )
 
 

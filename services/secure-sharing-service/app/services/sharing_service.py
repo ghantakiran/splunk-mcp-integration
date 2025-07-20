@@ -144,6 +144,40 @@ class SharingService:
                 created_by=user_id
             )
 
+            # Log audit event for share creation
+            try:
+                from app.services.audit_trail_service import audit_trail_service
+                from app.models.sharing_models import AuditEventType, AuditEventSeverity
+                
+                await audit_trail_service.log_share_event(
+                    event_type=AuditEventType.SHARE_CREATED,
+                    title="Share Created",
+                    description=f"Created {request.resource_type.value} share: {request.resource_name}",
+                    share_id=share.share_id,
+                    user_id=user_id,
+                    operation=ShareOperation.CREATE,
+                    after_state={
+                        "resource_type": request.resource_type.value,
+                        "resource_name": request.resource_name,
+                        "permissions": [p.value for p in request.permissions],
+                        "requires_authentication": request.requires_authentication,
+                        "password_protected": request.password_protected
+                    },
+                    severity=AuditEventSeverity.LOW,
+                    context={
+                        "access_method": request.access_method.value,
+                        "expiration_policy": request.expiration_policy.value
+                    },
+                    db=db
+                )
+            except Exception as e:
+                # Don't fail the main operation if audit logging fails
+                logger.warning(
+                    "Failed to log audit event for share creation",
+                    share_id=str(share.share_id),
+                    error=str(e)
+                )
+
             return ShareResponse(
                 share_id=share.share_id,
                 resource_type=share.resource_type,
@@ -208,6 +242,36 @@ class SharingService:
         # Validate security
         security_validation = await self._validate_security(share, request)
         if not security_validation.is_valid:
+            # Log security violation audit event
+            try:
+                from app.services.audit_trail_service import audit_trail_service
+                from app.models.sharing_models import AuditEventType, AuditEventSeverity, AuditEventCategory
+                
+                await audit_trail_service.log_security_event(
+                    event_type=AuditEventType.SECURITY_VIOLATION,
+                    title="Share Access Denied",
+                    description=f"Security validation failed: {security_validation.error_message}",
+                    severity=AuditEventSeverity.HIGH,
+                    user_id=request.user_email,
+                    ip_address=request.ip_address,
+                    user_agent=request.user_agent,
+                    context={
+                        "share_id": str(share.share_id),
+                        "resource_type": share.resource_type.value,
+                        "requires_authentication": share.requires_authentication,
+                        "password_protected": share.password_protected,
+                        "violation_type": "access_denied",
+                        "error_message": security_validation.error_message
+                    },
+                    db=db
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to log security violation audit event",
+                    share_id=str(share.share_id),
+                    error=str(e)
+                )
+            
             raise ShareSecurityError(security_validation.error_message)
 
         # Log access attempt
@@ -236,6 +300,36 @@ class SharingService:
             # Don't fail the main operation if metrics collection fails
             logger.warning(
                 "Failed to collect interaction metrics",
+                share_id=str(share.share_id),
+                error=str(e)
+            )
+
+        # Log audit event for share access
+        try:
+            from app.services.audit_trail_service import audit_trail_service
+            from app.models.sharing_models import AuditEventType, AuditEventSeverity
+            
+            await audit_trail_service.log_share_event(
+                event_type=AuditEventType.SHARE_ACCESSED,
+                title="Share Accessed",
+                description=f"User accessed {share.resource_type.value} share: {share.resource_name}",
+                share_id=share.share_id,
+                user_id=request.user_email,  # For public shares, user_email might be None
+                operation=ShareOperation.READ,
+                severity=AuditEventSeverity.LOW,
+                context={
+                    "access_method": share.access_method.value,
+                    "user_agent": request.user_agent,
+                    "authentication_required": share.requires_authentication,
+                    "password_protected": share.password_protected
+                },
+                ip_address=request.ip_address,
+                db=db
+            )
+        except Exception as e:
+            # Don't fail the main operation if audit logging fails
+            logger.warning(
+                "Failed to log audit event for share access",
                 share_id=str(share.share_id),
                 error=str(e)
             )
@@ -545,6 +639,50 @@ class SharingService:
                 updated_by=user_id
             )
 
+            # Log audit event for share update
+            try:
+                from app.services.audit_trail_service import audit_trail_service
+                from app.models.sharing_models import AuditEventType, AuditEventSeverity
+                
+                # Capture what changed
+                changes = {}
+                if request.resource_name is not None:
+                    changes["resource_name"] = {"from": None, "to": request.resource_name}  # Would need original value
+                if request.permissions is not None:
+                    changes["permissions"] = {"to": [p.value for p in request.permissions]}
+                if request.expires_at is not None:
+                    changes["expires_at"] = {"to": request.expires_at.isoformat() if request.expires_at else None}
+                if request.password_protected is not None:
+                    changes["password_protected"] = {"to": request.password_protected}
+                
+                await audit_trail_service.log_share_event(
+                    event_type=AuditEventType.SHARE_UPDATED,
+                    title="Share Updated",
+                    description=f"Updated {share.resource_type.value} share: {share.resource_name}",
+                    share_id=share.share_id,
+                    user_id=user_id,
+                    operation=ShareOperation.UPDATE,
+                    after_state={
+                        "resource_name": share.resource_name,
+                        "permissions": share.permissions,
+                        "expires_at": share.expires_at.isoformat() if share.expires_at else None,
+                        "password_protected": share.password_protected
+                    },
+                    severity=AuditEventSeverity.MEDIUM,
+                    context={
+                        "changes_made": changes,
+                        "total_changes": len(changes)
+                    },
+                    db=db
+                )
+            except Exception as e:
+                # Don't fail the main operation if audit logging fails
+                logger.warning(
+                    "Failed to log audit event for share update",
+                    share_id=str(share.share_id),
+                    error=str(e)
+                )
+
             return ShareResponse(
                 share_id=share.share_id,
                 resource_type=share.resource_type,
@@ -636,6 +774,42 @@ class SharingService:
                 share_id=str(share_id),
                 deleted_by=user_id
             )
+
+            # Log audit event for share deletion
+            try:
+                from app.services.audit_trail_service import audit_trail_service
+                from app.models.sharing_models import AuditEventType, AuditEventSeverity
+                
+                await audit_trail_service.log_share_event(
+                    event_type=AuditEventType.SHARE_DELETED,
+                    title="Share Deleted",
+                    description=f"Deleted {share.resource_type.value} share: {share.resource_name}",
+                    share_id=share.share_id,
+                    user_id=user_id,
+                    operation=ShareOperation.DELETE,
+                    before_state={
+                        "resource_name": share.resource_name,
+                        "resource_type": share.resource_type.value,
+                        "permissions": share.permissions,
+                        "status": share.status.value,
+                        "total_views": share.total_views,
+                        "unique_viewers": share.unique_viewers
+                    },
+                    severity=AuditEventSeverity.MEDIUM,
+                    context={
+                        "deletion_reason": "user_requested",
+                        "share_age_days": (datetime.now(timezone.utc) - share.created_at).days,
+                        "final_view_count": share.total_views
+                    },
+                    db=db
+                )
+            except Exception as e:
+                # Don't fail the main operation if audit logging fails
+                logger.warning(
+                    "Failed to log audit event for share deletion",
+                    share_id=str(share_id),
+                    error=str(e)
+                )
 
             return True
 

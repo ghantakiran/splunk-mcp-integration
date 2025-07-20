@@ -600,6 +600,50 @@ class RolePermissionService:
             db.add(audit_log)
             await db.commit()
 
+            # Also log to comprehensive audit trail
+            try:
+                from app.services.audit_trail_service import audit_trail_service
+                from app.models.sharing_models import AuditEventType, AuditEventSeverity
+                
+                # Determine event type and severity based on permission result
+                if permission_granted:
+                    event_type = AuditEventType.PERMISSION_GRANTED
+                    severity = AuditEventSeverity.LOW
+                    title = "Permission Granted"
+                    description = f"User granted {operation.value} permission for {scope.value}"
+                else:
+                    event_type = AuditEventType.PERMISSION_DENIED
+                    severity = AuditEventSeverity.MEDIUM
+                    title = "Permission Denied"
+                    description = f"User denied {operation.value} permission for {scope.value}"
+                
+                await audit_trail_service.log_permission_event(
+                    event_type=event_type,
+                    title=title,
+                    description=description,
+                    user_id=user_id,
+                    operation=operation,
+                    scope=scope,
+                    scope_id=scope_id,
+                    authorization_granted=permission_granted,
+                    severity=severity,
+                    context={
+                        "resource_type": resource_type.value if resource_type else None,
+                        "share_id": str(share_id) if share_id else None,
+                        "granted_by_role": granted_by_role.value if granted_by_role else None,
+                        "granted_by_permission_id": str(granted_by_permission_id) if granted_by_permission_id else None
+                    },
+                    ip_address=ip_address,
+                    db=db
+                )
+            except Exception as audit_error:
+                logger.warning(
+                    "Failed to log to comprehensive audit trail",
+                    user_id=user_id,
+                    operation=operation.value,
+                    error=str(audit_error)
+                )
+
         except Exception as e:
             logger.error(
                 "Failed to log permission audit",

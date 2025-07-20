@@ -83,6 +83,44 @@ class PermissionScope(str, Enum):
     SHARE = "share"
 
 
+class AuditEventType(str, Enum):
+    """Types of events that can be audited."""
+    SHARE_CREATED = "share_created"
+    SHARE_UPDATED = "share_updated"
+    SHARE_DELETED = "share_deleted"
+    SHARE_ACCESSED = "share_accessed"
+    SHARE_REVOKED = "share_revoked"
+    SHARE_EXPIRED = "share_expired"
+    PERMISSION_GRANTED = "permission_granted"
+    PERMISSION_DENIED = "permission_denied"
+    ROLE_ASSIGNED = "role_assigned"
+    ROLE_REVOKED = "role_revoked"
+    INVITATION_SENT = "invitation_sent"
+    INVITATION_ACCEPTED = "invitation_accepted"
+    CONFIGURATION_CHANGED = "configuration_changed"
+    SECURITY_VIOLATION = "security_violation"
+    PASSWORD_CHANGED = "password_changed"
+    BULK_OPERATION = "bulk_operation"
+
+
+class AuditEventSeverity(str, Enum):
+    """Severity levels for audit events."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class AuditEventCategory(str, Enum):
+    """Categories for audit events."""
+    SHARE_MANAGEMENT = "share_management"
+    ACCESS_CONTROL = "access_control"
+    PERMISSION_MANAGEMENT = "permission_management"
+    SECURITY = "security"
+    CONFIGURATION = "configuration"
+    SYSTEM = "system"
+
+
 # Request Models
 class CreateShareRequest(BaseModel):
     """Request model for creating a share."""
@@ -532,3 +570,198 @@ class BulkRoleOperation(BaseModel):
     successful_operations: int
     failed_operations: int
     errors: List[Dict[str, Any]]
+
+
+# Audit Trail Models
+class AuditTrailEvent(BaseModel):
+    """Model for audit trail events."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    event_id: UUID
+    event_type: AuditEventType
+    category: AuditEventCategory
+    severity: AuditEventSeverity
+    
+    # Event details
+    title: str
+    description: str
+    timestamp: datetime
+    
+    # User and session context
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    
+    # Resource context
+    share_id: Optional[UUID] = None
+    resource_id: Optional[UUID] = None
+    resource_type: Optional[ShareType] = None
+    
+    # Operation context
+    operation: Optional[ShareOperation] = None
+    scope: Optional[PermissionScope] = None
+    scope_id: Optional[str] = None
+    
+    # Before and after states for changes
+    before_state: Optional[Dict[str, Any]] = None
+    after_state: Optional[Dict[str, Any]] = None
+    
+    # Additional context and metadata
+    context: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    
+    # Request tracing
+    correlation_id: Optional[str] = None
+    request_id: Optional[str] = None
+    
+    # Security context
+    authentication_method: Optional[str] = None
+    authorization_granted: Optional[bool] = None
+    
+    # System context
+    service_name: str = "secure-sharing-service"
+    service_version: Optional[str] = None
+    
+    # Tags for categorization and filtering
+    tags: Optional[List[str]] = None
+
+
+class CreateAuditEventRequest(BaseModel):
+    """Request model for creating audit events."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    event_type: AuditEventType
+    category: AuditEventCategory
+    severity: AuditEventSeverity = AuditEventSeverity.LOW
+    
+    title: str = Field(..., max_length=255)
+    description: str = Field(..., max_length=2000)
+    
+    # Optional context
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    
+    share_id: Optional[UUID] = None
+    resource_id: Optional[UUID] = None
+    resource_type: Optional[ShareType] = None
+    
+    operation: Optional[ShareOperation] = None
+    scope: Optional[PermissionScope] = None
+    scope_id: Optional[str] = None
+    
+    before_state: Optional[Dict[str, Any]] = None
+    after_state: Optional[Dict[str, Any]] = None
+    context: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+    
+    correlation_id: Optional[str] = None
+    request_id: Optional[str] = None
+    authentication_method: Optional[str] = None
+    authorization_granted: Optional[bool] = None
+    
+    tags: Optional[List[str]] = None
+
+
+class AuditTrailQuery(BaseModel):
+    """Query parameters for audit trail retrieval."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    # Time range
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    
+    # Event filtering
+    event_types: Optional[List[AuditEventType]] = None
+    categories: Optional[List[AuditEventCategory]] = None
+    severities: Optional[List[AuditEventSeverity]] = None
+    
+    # User and resource filtering
+    user_ids: Optional[List[str]] = None
+    share_ids: Optional[List[UUID]] = None
+    resource_ids: Optional[List[UUID]] = None
+    resource_types: Optional[List[ShareType]] = None
+    
+    # Operation filtering
+    operations: Optional[List[ShareOperation]] = None
+    scopes: Optional[List[PermissionScope]] = None
+    
+    # Security filtering
+    authorization_granted: Optional[bool] = None
+    ip_addresses: Optional[List[str]] = None
+    
+    # Text search
+    search_query: Optional[str] = None
+    tags: Optional[List[str]] = None
+    
+    # Pagination and sorting
+    limit: int = Field(default=50, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+    sort_by: str = Field(default="timestamp")
+    sort_order: str = Field(default="desc", pattern="^(asc|desc)$")
+
+
+class AuditTrailResponse(BaseModel):
+    """Response model for audit trail queries."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    events: List[AuditTrailEvent]
+    total_count: int
+    filtered_count: int
+    limit: int
+    offset: int
+    has_more: bool
+    
+    # Query summary
+    query_metadata: Dict[str, Any]
+    execution_time_ms: float
+
+
+class AuditTrailStatistics(BaseModel):
+    """Statistics for audit trail analysis."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    total_events: int
+    event_count_by_type: Dict[AuditEventType, int]
+    event_count_by_category: Dict[AuditEventCategory, int]
+    event_count_by_severity: Dict[AuditEventSeverity, int]
+    
+    # Time-based statistics
+    events_by_hour: List[Dict[str, Any]]
+    events_by_day: List[Dict[str, Any]]
+    
+    # User activity
+    top_active_users: List[Dict[str, Any]]
+    unique_users_count: int
+    
+    # Resource activity
+    most_accessed_shares: List[Dict[str, Any]]
+    resource_type_activity: Dict[ShareType, int]
+    
+    # Security insights
+    security_events_count: int
+    failed_authorization_count: int
+    suspicious_activity_indicators: List[Dict[str, Any]]
+    
+    # Operational insights
+    peak_activity_hours: List[int]
+    average_events_per_day: float
+    retention_policy_compliance: Dict[str, Any]
+
+
+class AuditTrailExportRequest(BaseModel):
+    """Request model for exporting audit trail data."""
+    model_config = ConfigDict(str_strip_whitespace=True)
+    
+    query: AuditTrailQuery
+    export_format: str = Field(default="json", pattern="^(json|csv|xlsx)$")
+    include_metadata: bool = True
+    include_sensitive_data: bool = False
+    compression: Optional[str] = Field(default=None, pattern="^(gzip|zip)?$")
+    
+    # Export customization
+    columns: Optional[List[str]] = None
+    custom_title: Optional[str] = None
+    include_summary: bool = True

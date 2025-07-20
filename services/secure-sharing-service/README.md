@@ -20,6 +20,14 @@ A comprehensive microservice for secure resource sharing with expiration, access
 - **Performance Metrics**: Session duration, bounce rates, conversion rates, and geographic distribution
 - **Dashboard Analytics**: Ready-to-use dashboard data with KPIs, trends, and top-performing shares
 
+### Audit Trail & Compliance
+- **Comprehensive Audit Trail**: Complete audit logging for all sharing operations and security events
+- **Event Classification**: 15+ event types across 6 categories (share management, security, permissions, etc.)
+- **Severity Levels**: Critical, high, medium, and low severity classification for prioritized monitoring
+- **Security Monitoring**: Automated detection of suspicious activities and failed authorization attempts
+- **Compliance Support**: 7-year retention policy with automated cleanup and compliance reporting
+- **Advanced Querying**: Comprehensive filtering, searching, and analytics across all audit events
+
 ### Security Features
 - **JWT Authentication**: Secure API access with role-based permissions
 - **Public & Authenticated Sharing**: Support for both public (anonymous) and authenticated access modes
@@ -160,6 +168,16 @@ docker-compose up -d
 - `GET /api/v1/analytics/metrics/summary` - Get analytics metrics summary
 - `GET /api/v1/analytics/dashboard` - Get analytics dashboard data
 - `POST /api/v1/analytics/metrics/generate` - Generate metrics aggregation (admin only)
+
+### Audit Trail & Compliance
+- `POST /api/v1/audit-trail/events` - Create audit trail event
+- `GET /api/v1/audit-trail/events` - Query audit trail events with comprehensive filtering
+- `GET /api/v1/audit-trail/events/{id}` - Get specific audit event by ID
+- `GET /api/v1/audit-trail/statistics` - Get comprehensive audit trail statistics
+- `GET /api/v1/audit-trail/events/share/{id}` - Get audit trail for specific share
+- `GET /api/v1/audit-trail/events/user/{id}` - Get audit trail for specific user
+- `GET /api/v1/audit-trail/security/events` - Get security-related audit events (admin only)
+- `POST /api/v1/audit-trail/cleanup` - Clean up expired audit events (admin only)
 
 ### Health & Monitoring
 - `GET /health` - Basic health check
@@ -383,6 +401,45 @@ curl -X GET "http://localhost:8016/api/v1/analytics/dashboard" \
 
 # Generate metrics aggregation (admin only)
 curl -X POST "http://localhost:8016/api/v1/analytics/metrics/generate?period_type=day" \
+  -H "Authorization: Bearer your-admin-jwt-token"
+```
+
+#### Audit Trail & Compliance
+
+```bash
+# Query audit trail events with filtering
+curl -X GET "http://localhost:8016/api/v1/audit-trail/events?event_types=share_created,share_accessed&severities=high,critical&limit=50" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Get audit trail statistics
+curl -X GET "http://localhost:8016/api/v1/audit-trail/statistics?start_time=2024-01-01T00:00:00Z&end_time=2024-12-31T23:59:59Z" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Get audit trail for a specific share
+curl -X GET "http://localhost:8016/api/v1/audit-trail/events/share/your-share-id?limit=100" \
+  -H "Authorization: Bearer your-jwt-token"
+
+# Get security events (admin only)
+curl -X GET "http://localhost:8016/api/v1/audit-trail/security/events?severities=high,critical" \
+  -H "Authorization: Bearer your-admin-jwt-token"
+
+# Create custom audit event
+curl -X POST "http://localhost:8016/api/v1/audit-trail/events" \
+  -H "Authorization: Bearer your-jwt-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "configuration_changed",
+    "category": "configuration",
+    "severity": "medium",
+    "title": "Share Configuration Updated",
+    "description": "User updated share configuration settings",
+    "share_id": "your-share-id",
+    "operation": "update",
+    "context": {"setting": "expiration_policy", "new_value": "after_time"}
+  }'
+
+# Clean up expired audit events (admin only)
+curl -X POST "http://localhost:8016/api/v1/audit-trail/cleanup?batch_size=1000" \
   -H "Authorization: Bearer your-admin-jwt-token"
 ```
 
