@@ -1,0 +1,87 @@
+# Integration Testing Requirements for Splunk MCP Integration
+# This file contains all dependencies needed for running integration tests
+
+# Core Testing Framework
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-html==4.1.1
+pytest-json-report==1.5.0
+pytest-xdist==3.5.0
+pytest-benchmark==4.0.0
+pytest-timeout==2.2.0
+pytest-mock==3.12.0
+
+# HTTP Client and API Testing
+aiohttp==3.9.0
+httpx==0.25.2
+requests==2.31.0
+websockets==12.0
+
+# Data and Serialization
+pydantic==2.5.0
+pydantic-settings==2.0.3
+
+# Database and Cache Testing
+asyncpg==0.29.0
+redis==5.0.1
+sqlalchemy==2.0.23
+
+# Authentication and Security Testing
+authlib==1.2.1
+cryptography==41.0.7
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+uuid==1.30
+
+# Monitoring and Metrics
+prometheus-client==0.19.0
+psutil==5.9.6
+
+# Development and Debugging
+ipdb==0.13.13
+ipython==8.17.2
+
+# Code Quality
+flake8==6.1.0
+black==23.11.0
+isort==5.12.0
+mypy==1.7.1
+
+# Documentation
+Sphinx==7.2.6
+sphinx-rtd-theme==1.3.0
+
+# Load Testing (Optional)
+locust==2.17.0
+
+# Performance Profiling (Optional)
+pytest-profiling==1.7.0
+memory-profiler==0.61.0
+
+# Mocking and Test Data
+factory-boy==3.3.0
+faker==20.1.0
+
+# File and Data Manipulation
+openpyxl==3.1.2
+python-docx==1.1.0
+Pillow==10.1.0
+
+# Logging and Structured Output
+structlog==23.2.0
+python-json-logger==2.0.7
+colorama==0.4.6
+
+# CLI and Process Management
+click==8.1.7
+python-dotenv==1.0.0
+
+# Additional Test Utilities
+tabulate==0.9.0
+jinja2==3.1.2
+markdown==3.5.1
