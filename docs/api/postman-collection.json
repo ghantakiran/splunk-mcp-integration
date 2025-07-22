@@ -1,0 +1,622 @@
+{
+  "info": {
+    "name": "Splunk MCP Integration API",
+    "description": "Comprehensive API collection for testing the Splunk MCP Integration platform",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Auto-refresh token if expired",
+          "const token = pm.globals.get('access_token');",
+          "const tokenExp = pm.globals.get('token_expires_at');",
+          "",
+          "if (!token || (tokenExp && Date.now() > tokenExp)) {",
+          "    console.log('Token expired or missing, refreshing...');",
+          "    // This would trigger the refresh token request",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains access token', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.access_token).to.exist;",
+                  "    ",
+                  "    // Store token for subsequent requests",
+                  "    pm.globals.set('access_token', response.data.access_token);",
+                  "    pm.globals.set('refresh_token', response.data.refresh_token);",
+                  "    pm.globals.set('user_id', response.data.user.id);",
+                  "    ",
+                  "    // Calculate token expiration",
+                  "    const expiresIn = response.data.expires_in * 1000; // Convert to ms",
+                  "    pm.globals.set('token_expires_at', Date.now() + expiresIn);",
+                  "});",
+                  "",
+                  "pm.test('User data is present', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.user).to.exist;",
+                  "    pm.expect(response.data.user.username).to.exist;",
+                  "    pm.expect(response.data.user.email).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticate user and obtain JWT tokens"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('New access token received', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.access_token).to.exist;",
+                  "    pm.globals.set('access_token', response.data.access_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('System status is healthy', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.status).to.be.oneOf(['healthy', 'degraded']);",
+                  "});",
+                  "",
+                  "pm.test('Services status included', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.services).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "System Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/system/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "system", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "NLP Engine",
+      "item": [
+        {
+          "name": "Process Simple Query",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Query processed successfully', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.spl_query).to.exist;",
+                  "    pm.expect(response.data.query_id).to.exist;",
+                  "    ",
+                  "    // Store query ID for follow-up requests",
+                  "    pm.globals.set('last_query_id', response.data.query_id);",
+                  "});",
+                  "",
+                  "pm.test('SPL query generated', function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.data.spl_query).to.include('search');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"show me errors from the last hour\",\n  \"conversation_id\": \"test_conv_001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/nlp/process-query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "nlp", "process-query"]
+            }
+          }
+        },
+        {
+          "name": "Process Query with Visualization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"show me top 10 sources with most errors in the last 24 hours and create a bar chart\",\n  \"conversation_id\": \"test_conv_002\",\n  \"options\": {\n    \"include_visualization\": true,\n    \"max_results\": 10\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/nlp/process-query",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "nlp", "process-query"]
+            }
+          }
+        },
+        {
+          "name": "Get Query History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/nlp/queries?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "nlp", "queries"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Visualization",
+      "item": [
+        {
+          "name": "Generate Bar Chart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Chart generated successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.id).to.exist;",
+                  "    pm.globals.set('chart_id', response.data.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": [\n    {\"source\": \"web_server\", \"count\": 45},\n    {\"source\": \"app_server\", \"count\": 32},\n    {\"source\": \"database\", \"count\": 18},\n    {\"source\": \"auth_service\", \"count\": 12}\n  ],\n  \"chart_type\": \"bar\",\n  \"title\": \"Errors by Source\",\n  \"x_axis\": \"source\",\n  \"y_axis\": \"count\",\n  \"theme\": \"corporate\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/visualization/generate-chart",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "visualization", "generate-chart"]
+            }
+          }
+        },
+        {
+          "name": "Create Dashboard",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Security Overview Dashboard\",\n  \"description\": \"Real-time security monitoring dashboard\",\n  \"layout\": {\n    \"columns\": 12,\n    \"row_height\": 150\n  },\n  \"panels\": [\n    {\n      \"title\": \"Error Trends\",\n      \"type\": \"line_chart\",\n      \"query\": \"search earliest=-24h error | timechart span=1h count\",\n      \"position\": {\"x\": 0, \"y\": 0, \"w\": 6, \"h\": 2}\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/visualization/dashboards",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "visualization", "dashboards"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "item": [
+        {
+          "name": "List Alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/alerts?page=1&limit=20&status=active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "alerts"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Alert created successfully', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.id).to.exist;",
+                  "    pm.globals.set('alert_id', response.data.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"High Error Rate Alert\",\n  \"description\": \"Alert when error rate exceeds 100 errors per minute\",\n  \"severity\": \"high\",\n  \"notification_channels\": [\n    {\n      \"type\": \"email\",\n      \"config\": {\n        \"recipients\": [\"security@company.com\"]\n      }\n    },\n    {\n      \"type\": \"slack\",\n      \"config\": {\n        \"channel\": \"#alerts\"\n      }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/alerts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "alerts"]
+            }
+          }
+        },
+        {
+          "name": "Get Alert Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/alerts/{{alert_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "alerts", "{{alert_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Email Service",
+      "item": [
+        {
+          "name": "Process Email Query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"user@company.com\",\n  \"subject\": \"Query: Show me errors from last hour\",\n  \"body\": \"Please show me all errors from the last hour with severity high\",\n  \"message_id\": \"msg_12345\",\n  \"received_at\": \"2025-01-22T10:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/email/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "email", "process"]
+            }
+          }
+        },
+        {
+          "name": "Create Report Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_email\": \"manager@company.com\",\n  \"report_name\": \"Daily Error Summary\",\n  \"query\": \"search earliest=-24h severity=error | stats count by source\",\n  \"schedule\": {\n    \"frequency\": \"daily\",\n    \"time\": \"09:00\",\n    \"timezone\": \"UTC\",\n    \"days\": [\"monday\", \"tuesday\", \"wednesday\", \"thursday\", \"friday\"]\n  },\n  \"format\": \"pdf\",\n  \"template\": \"executive_summary\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/email/reports/subscribe",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "email", "reports", "subscribe"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhook Service",
+      "item": [
+        {
+          "name": "Create Webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Webhook created successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.success).to.be.true;",
+                  "    pm.expect(response.data.webhook_id).to.exist;",
+                  "    pm.globals.set('webhook_id', response.data.webhook_id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Security Alerts Webhook\",\n  \"url\": \"https://httpbin.org/post\",\n  \"method\": \"POST\",\n  \"headers\": {\n    \"Content-Type\": \"application/json\"\n  },\n  \"events\": [\"alert.triggered\", \"security.violation\"],\n  \"filters\": {\n    \"severity\": [\"high\", \"critical\"]\n  },\n  \"active\": true,\n  \"timeout\": 30000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks"]
+            }
+          }
+        },
+        {
+          "name": "Test Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"test_payload\": {\n    \"type\": \"test\",\n    \"message\": \"This is a test webhook delivery\",\n    \"timestamp\": \"2025-01-22T10:30:00Z\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/webhooks/{{webhook_id}}/test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "webhooks", "{{webhook_id}}", "test"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Report Scheduling",
+      "item": [
+        {
+          "name": "Create Report Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Daily Security Summary\",\n  \"description\": \"Daily summary of security events and alerts\",\n  \"query\": \"search earliest=-24h index=security | stats count by severity, source\",\n  \"schedule\": {\n    \"type\": \"cron\",\n    \"expression\": \"0 9 * * 1-5\",\n    \"timezone\": \"America/New_York\"\n  },\n  \"delivery\": {\n    \"channels\": [\n      {\n        \"type\": \"email\",\n        \"recipients\": [\"security-team@company.com\"],\n        \"format\": \"pdf\",\n        \"template\": \"executive_summary\"\n      }\n    ]\n  },\n  \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/schedules",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "schedules"]
+            }
+          }
+        },
+        {
+          "name": "List Schedules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/schedules?status=active&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "schedules"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
