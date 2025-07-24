@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 NAMESPACE="splunk-mcp-prod"
 MONITORING_NAMESPACE="monitoring"
-LOG_FILE="/var/log/splunk-mcp-deployment.log"
+LOG_FILE="./logs/splunk-mcp-deployment.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
 
 # Colors for output

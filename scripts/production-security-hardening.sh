@@ -8,7 +8,7 @@ set -euo pipefail
 # Configuration
 NAMESPACE="splunk-mcp-prod"
 MONITORING_NAMESPACE="monitoring"
-LOG_FILE="/var/log/splunk-mcp-security-hardening.log"
+LOG_FILE="./logs/splunk-mcp-security-hardening.log"
 DATE=$(date '+%Y-%m-%d %H:%M:%S')
 
 # Colors for output
