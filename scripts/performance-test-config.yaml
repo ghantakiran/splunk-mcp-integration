@@ -1,0 +1,289 @@
+# Performance Testing Configuration for Splunk MCP Integration
+
+# Base configuration
+base_url: 'http://localhost:8000'
+
+# Test endpoints with weights (higher weight = more frequent testing)
+endpoints:
+  - path: '/health'
+    method: 'GET'
+    weight: 10
+    expected_response_time: 0.1
+  
+  - path: '/api/v1/auth/login'
+    method: 'POST'
+    weight: 5
+    data:
+      username: 'testuser'
+      password: 'testpass123'
+    expected_response_time: 0.5
+  
+  - path: '/api/v1/nlp/query'
+    method: 'POST'
+    weight: 20
+    data:
+      query: 'show me errors from last hour'
+      conversation_id: 'test-conversation-1'
+    expected_response_time: 2.0
+  
+  - path: '/api/v1/nlp/query'
+    method: 'POST'
+    weight: 15
+    data:
+      query: 'count events by sourcetype'
+      conversation_id: 'test-conversation-2'
+    expected_response_time: 1.5
+  
+  - path: '/api/v1/visualization/charts'
+    method: 'GET'
+    weight: 15
+    expected_response_time: 0.8
+  
+  - path: '/api/v1/visualization/generate'
+    method: 'POST'
+    weight: 10
+    data:
+      chart_type: 'line'
+      data:
+        - {"time": "2024-01-01T00:00:00Z", "value": 100}
+        - {"time": "2024-01-01T01:00:00Z", "value": 150}
+        - {"time": "2024-01-01T02:00:00Z", "value": 120}
+    expected_response_time: 1.0
+  
+  - path: '/api/v1/dashboards'
+    method: 'GET'
+    weight: 10
+    expected_response_time: 0.5
+  
+  - path: '/api/v1/alerts'
+    method: 'GET'
+    weight: 8
+    expected_response_time: 0.3
+  
+  - path: '/api/v1/alerts'
+    method: 'POST'
+    weight: 3
+    data:
+      name: 'Test Alert'
+      query: 'index=main error'
+      threshold: 10
+      time_window: 300
+    expected_response_time: 0.8
+  
+  - path: '/api/v1/exports/pdf'
+    method: 'POST'
+    weight: 2
+    data:
+      report_name: 'Test Report'
+      template: 'standard'
+      data: {"title": "Test", "content": "Sample content"}
+    expected_response_time: 5.0
+
+# Authentication configuration
+authentication:
+  enabled: true
+  token_endpoint: '/api/v1/auth/login'
+  username: 'testuser'
+  password: 'testpass123'
+  token_refresh_interval: 3600  # seconds
+
+# Load testing configuration
+load_test:
+  concurrent_users: [1, 5, 10, 25, 50, 100, 200]
+  duration_seconds: 120
+  ramp_up_seconds: 20
+  cooldown_seconds: 10
+
+# Stress testing configuration
+stress_test:
+  max_concurrent_users: 1000
+  step_size: 50
+  step_duration: 60
+  failure_threshold:
+    error_rate: 0.1
+    response_time: 10.0
+
+# Spike testing configuration
+spike_test:
+  normal_load: 20
+  spike_load: 200
+  spike_duration: 60
+  recovery_duration: 60
+
+# Volume testing configuration
+volume_test:
+  concurrent_users: 100
+  duration_hours: 2
+  data_scenarios:
+    - large_query: 'search index=* | stats count by host | sort -count'
+    - complex_visualization: 'multiple_charts_dashboard'
+    - bulk_export: 'large_pdf_report'
+
+# Performance thresholds
+thresholds:
+  # Response time thresholds (seconds)
+  max_response_time: 3.0
+  avg_response_time: 1.0
+  percentile_95: 2.5
+  percentile_99: 5.0
+  
+  # Error rate thresholds
+  max_error_rate: 0.05  # 5%
+  max_timeout_rate: 0.01  # 1%
+  
+  # Throughput thresholds
+  min_throughput: 100  # requests per second
+  target_throughput: 500  # requests per second
+  
+  # Resource utilization thresholds
+  max_cpu_usage: 0.8    # 80%
+  max_memory_usage: 0.8  # 80%
+  max_disk_usage: 0.9    # 90%
+
+# Monitoring configuration
+monitoring:
+  metrics_collection: true
+  system_resources: true
+  application_metrics: true
+  custom_metrics:
+    - database_connections
+    - redis_memory_usage
+    - active_sessions
+    - query_queue_length
+
+# Test data scenarios
+test_scenarios:
+  # Typical user workflows
+  user_workflows:
+    - name: 'data_analyst'
+      weight: 30
+      actions:
+        - login
+        - create_query
+        - visualize_results
+        - create_dashboard
+        - export_report
+        - logout
+    
+    - name: 'security_analyst'
+      weight: 20
+      actions:
+        - login
+        - security_query
+        - create_alert
+        - view_dashboard
+        - investigate_incident
+        - logout
+    
+    - name: 'business_user'
+      weight: 40
+      actions:
+        - login
+        - simple_query
+        - view_dashboard
+        - export_data
+        - logout
+    
+    - name: 'admin_user'
+      weight: 10
+      actions:
+        - login
+        - system_health_check
+        - user_management
+        - configuration_changes
+        - logout
+
+  # Data volume scenarios
+  data_scenarios:
+    small_dataset:
+      query_complexity: 'low'
+      data_volume: '< 1MB'
+      expected_time: '< 1s'
+    
+    medium_dataset:
+      query_complexity: 'medium'
+      data_volume: '1-100MB'
+      expected_time: '< 5s'
+    
+    large_dataset:
+      query_complexity: 'high'
+      data_volume: '> 100MB'
+      expected_time: '< 30s'
+
+# Environment-specific configurations
+environments:
+  development:
+    base_url: 'http://localhost:8000'
+    concurrent_users_limit: 50
+    duration_limit: 300  # 5 minutes
+  
+  staging:
+    base_url: 'https://staging.splunk-mcp.company.com'
+    concurrent_users_limit: 200
+    duration_limit: 1800  # 30 minutes
+  
+  production:
+    base_url: 'https://splunk-mcp.company.com'
+    concurrent_users_limit: 1000
+    duration_limit: 7200  # 2 hours
+
+# Reporting configuration
+reporting:
+  output_formats: ['console', 'json', 'html', 'csv']
+  detailed_metrics: true
+  charts_enabled: true
+  comparison_enabled: true
+  
+  # Report sections
+  sections:
+    - executive_summary
+    - performance_metrics
+    - error_analysis
+    - resource_utilization
+    - recommendations
+    - threshold_analysis
+  
+  # Alerting for performance issues
+  alerts:
+    email_recipients: ['ops-team@company.com']
+    slack_webhook: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    threshold_violations: true
+    performance_degradation: true
+
+# Test execution settings
+execution:
+  parallel_test_suites: false
+  cleanup_between_tests: true
+  warm_up_requests: 10
+  cool_down_period: 30
+  retry_failed_requests: 3
+  request_timeout: 30
+  
+  # Data cleanup
+  cleanup:
+    test_data: true
+    temporary_files: true
+    cache_data: true
+    session_data: true
+
+# Advanced configuration
+advanced:
+  # Custom headers for all requests
+  custom_headers:
+    'User-Agent': 'SplunkMCP-PerformanceTest/1.0'
+    'X-Test-Environment': 'performance'
+  
+  # Request/response logging
+  logging:
+    level: 'INFO'
+    request_logging: false
+    response_logging: false
+    metrics_logging: true
+    file_output: 'performance-test.log'
+  
+  # Performance profiling
+  profiling:
+    enabled: false
+    memory_profiling: false
+    cpu_profiling: false
+    network_profiling: false
