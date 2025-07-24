@@ -1,0 +1,118 @@
+# Terraform Variables for Splunk MCP Integration Platform
+# Production Environment Configuration Example
+# Copy this file to terraform.tfvars and update values for your environment
+
+# Project Configuration
+project_name   = "splunk-mcp"
+environment    = "production"
+project_owner  = "platform-team"
+cost_center    = "engineering"
+
+# AWS Configuration
+aws_region               = "us-west-2"
+terraform_state_bucket   = "your-terraform-state-bucket"
+terraform_lock_table     = "your-terraform-lock-table"
+
+# Networking Configuration
+vpc_cidr = "10.0.0.0/16"
+
+# EKS Configuration
+kubernetes_version = "1.28"
+cluster_endpoint_public_access_cidrs = [
+  "203.0.113.0/24",  # Replace with your office IP range
+  "198.51.100.0/24"  # Replace with your home IP range
+]
+
+# EKS Node Group Configuration
+node_instance_types = ["t3.large", "t3.xlarge"]
+node_disk_size      = 50
+node_desired_size   = 3
+node_min_size       = 2
+node_max_size       = 10
+
+# PostgreSQL RDS Configuration
+postgresql_version                   = "15.4"
+postgresql_instance_class           = "db.r6g.large"
+postgresql_allocated_storage        = 100
+postgresql_max_allocated_storage    = 1000
+postgresql_username                 = "splunk_mcp_admin"
+postgresql_backup_retention_period  = 7
+postgresql_backup_window            = "03:00-04:00"
+postgresql_maintenance_window       = "sun:04:00-sun:05:00"
+
+# Redis ElastiCache Configuration
+redis_node_type                = "cache.r6g.large"
+redis_num_cache_nodes         = 2
+redis_snapshot_retention_limit = 5
+redis_snapshot_window         = "03:00-05:00"
+redis_maintenance_window      = "sun:05:00-sun:06:00"
+
+# Security Configuration
+enable_deletion_protection    = true
+enable_secrets_encryption    = true
+enable_network_policies      = true
+allowed_cidr_blocks = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16"
+]
+
+# Monitoring and Logging Configuration
+log_retention_days        = 14
+enable_container_insights = true
+enable_enhanced_monitoring = true
+enable_performance_insights = true
+
+# Backup and Disaster Recovery
+enable_automated_backups = true
+cross_region_backup     = false
+backup_retention_period = 30
+
+# Performance Configuration
+enable_enhanced_networking = true
+enable_ebs_optimization   = true
+enable_auto_scaling       = true
+enable_cluster_autoscaler = true
+
+# Multi-AZ Configuration
+multi_az_enabled = true
+
+# Cost Optimization
+enable_spot_instances     = false
+enable_scheduled_scaling  = false
+
+# Application Configuration
+api_domain_name      = "api.yourdomain.com"
+frontend_domain_name = "app.yourdomain.com"
+ssl_certificate_arn  = "arn:aws:acm:us-west-2:123456789012:certificate/your-cert-id"
+
+# External Integration Configuration
+splunk_integration = {
+  enabled = true
+  host    = "splunk.yourdomain.com"
+  port    = 8089
+}
+
+external_apis = {
+  openai = {
+    enabled     = true
+    endpoint    = "https://api.openai.com"
+    timeout     = 30
+    retry_count = 3
+  }
+  anthropic = {
+    enabled     = true
+    endpoint    = "https://api.anthropic.com"
+    timeout     = 30
+    retry_count = 3
+  }
+}
+
+# Additional Resource Tags
+additional_tags = {
+  "Department"   = "Engineering"
+  "Application"  = "Splunk-MCP-Integration"
+  "Contact"      = "platform-team@yourdomain.com"
+  "CostCenter"   = "engineering-ops"
+  "Compliance"   = "required"
+}

@@ -1,0 +1,334 @@
+# Comprehensive Test Configuration for Splunk MCP Integration
+# This file defines all testing parameters, thresholds, and service configurations
+
+# Service Configuration
+services:
+  # Backend Microservices
+  - api-gateway
+  - nlp-engine
+  - visualization-service
+  - alert-manager
+  - webhook-service
+  - email-service
+  - pdf-export-service
+  - powerpoint-export-service
+  - word-export-service
+  - csv-export-service
+  - itsm-service
+  - bi-integration-service
+  - html-report-service
+  - report-scheduling-service
+  
+  # Frontend Application
+  - frontend
+
+# Test Types and Configuration
+test_types:
+  unit:
+    description: "Unit tests for individual components and functions"
+    required_coverage: 90.0
+    timeout: 300
+    critical: true
+    parallel: true
+    
+  integration:
+    description: "Integration tests for service-to-service communication"
+    required_coverage: 80.0
+    timeout: 600
+    critical: true
+    parallel: false
+    
+  performance:
+    description: "Load and stress testing for scalability validation"
+    required_coverage: 0.0
+    timeout: 1800
+    critical: false
+    parallel: false
+    
+  security:
+    description: "Security vulnerability and penetration testing"
+    required_coverage: 0.0
+    timeout: 3600
+    critical: true
+    parallel: false
+    
+  e2e:
+    description: "End-to-end user workflow testing"
+    required_coverage: 0.0
+    timeout: 1200
+    critical: true
+    parallel: false
+
+# Coverage Thresholds
+coverage_thresholds:
+  # Backend Services
+  backend_unit: 90.0
+  backend_integration: 80.0
+  
+  # Frontend Components
+  frontend_unit: 85.0
+  frontend_integration: 75.0
+  
+  # Overall Project
+  overall: 85.0
+  critical_paths: 95.0
+
+# Performance Benchmarks
+performance_benchmarks:
+  api_response_time:
+    target: 100  # milliseconds
+    threshold: 200
+    critical: 500
+    
+  concurrent_users:
+    target: 1000
+    threshold: 500
+    critical: 100
+    
+  query_processing_time:
+    target: 2000  # milliseconds
+    threshold: 5000
+    critical: 10000
+    
+  document_generation_time:
+    target: 30000  # milliseconds
+    threshold: 60000
+    critical: 120000
+    
+  memory_usage:
+    target: 2048  # MB per service
+    threshold: 4096
+    critical: 8192
+    
+  cpu_usage:
+    target: 70  # percentage under load
+    threshold: 85
+    critical: 95
+
+# Security Testing Configuration
+security_testing:
+  owasp_compliance:
+    enabled: true
+    categories:
+      - injection
+      - broken_authentication
+      - sensitive_data_exposure
+      - xml_external_entities
+      - broken_access_control
+      - security_misconfiguration
+      - cross_site_scripting
+      - insecure_deserialization
+      - known_vulnerabilities
+      - insufficient_logging
+  
+  vulnerability_scanning:
+    enabled: true
+    tools:
+      - bandit
+      - safety
+      - semgrep
+      - owasp_zap
+    
+  penetration_testing:
+    enabled: true
+    scope:
+      - authentication_bypass
+      - authorization_escalation
+      - input_validation
+      - session_management
+      - api_security
+
+# Environment Configuration
+environments:
+  test:
+    database:
+      host: "localhost"
+      port: 5432
+      name: "splunk_mcp_test"
+      user: "test_user"
+      
+    redis:
+      host: "localhost"
+      port: 6379
+      db: 1
+      
+    services:
+      base_url: "http://localhost"
+      ports:
+        api-gateway: 8000
+        nlp-engine: 8001
+        visualization-service: 8002
+        alert-manager: 8003
+        frontend: 3000
+  
+  ci:
+    database:
+      host: "postgres-test"
+      port: 5432
+      name: "splunk_mcp_ci"
+      user: "ci_user"
+      
+    redis:
+      host: "redis-test"
+      port: 6379
+      db: 1
+      
+    services:
+      base_url: "http://ci-environment"
+      timeout: 300
+
+# Test Data Configuration
+test_data:
+  generation:
+    enabled: true
+    seed: 12345
+    
+  users:
+    count: 100
+    roles:
+      - admin: 10
+      - manager: 20
+      - analyst: 50
+      - viewer: 20
+      
+  queries:
+    count: 1000
+    complexity_distribution:
+      simple: 60%
+      medium: 30%
+      complex: 10%
+      
+  visualizations:
+    types:
+      - bar_chart: 25%
+      - line_chart: 25%
+      - pie_chart: 20%
+      - table: 15%
+      - heatmap: 10%
+      - scatter_plot: 5%
+
+# Quality Gates
+quality_gates:
+  unit_tests:
+    coverage_minimum: 90.0
+    test_count_minimum: 100
+    failure_threshold: 0
+    
+  integration_tests:
+    coverage_minimum: 80.0
+    test_count_minimum: 50
+    failure_threshold: 0
+    
+  performance_tests:
+    response_time_threshold: 200
+    throughput_minimum: 1000
+    error_rate_maximum: 1.0
+    
+  security_tests:
+    vulnerability_count_maximum: 0
+    critical_issues_maximum: 0
+    compliance_score_minimum: 95.0
+
+# Reporting Configuration
+reporting:
+  formats:
+    - json
+    - html
+    - junit
+    - sonar
+    
+  destinations:
+    - file_system
+    - email
+    - slack
+    - jira
+    
+  retention:
+    days: 90
+    archive_after: 30
+    
+  metrics:
+    enabled: true
+    prometheus_endpoint: "http://localhost:9090"
+    grafana_dashboard: true
+
+# CI/CD Integration
+ci_cd:
+  github_actions:
+    enabled: true
+    workflows:
+      - pull_request
+      - main_branch
+      - release
+      
+  triggers:
+    on_commit: ["unit", "integration"]
+    on_pr: ["unit", "integration", "security"]
+    on_release: ["all"]
+    
+  notifications:
+    slack_webhook: "${SLACK_WEBHOOK_URL}"
+    email_recipients:
+      - "team@company.com"
+      - "qa@company.com"
+
+# Parallel Execution Configuration
+parallelization:
+  max_workers: 4
+  timeout_multiplier: 1.5
+  
+  by_test_type:
+    unit: 8
+    integration: 2
+    performance: 1
+    security: 1
+    e2e: 1
+
+# Service-Specific Configuration
+service_specific:
+  nlp-engine:
+    unit_tests:
+      timeout: 600  # Longer timeout for AI processing
+      required_coverage: 95.0
+      
+  visualization-service:
+    performance_tests:
+      chart_generation_timeout: 30000
+      concurrent_chart_limit: 50
+      
+  pdf-export-service:
+    integration_tests:
+      file_size_limit: 50000000  # 50MB
+      generation_timeout: 60000
+      
+  frontend:
+    unit_tests:
+      coverage_threshold: 85.0
+      accessibility_testing: true
+      browser_compatibility:
+        - chrome
+        - firefox
+        - safari
+        - edge
+
+# Test Utilities Configuration
+utilities:
+  mock_services:
+    enabled: true
+    external_apis:
+      - openai
+      - anthropic
+      - splunk
+      
+  data_fixtures:
+    path: "tests/fixtures"
+    auto_cleanup: true
+    
+  database_migrations:
+    auto_migrate: true
+    reset_between_tests: true
+    
+  logging:
+    level: "INFO"
+    format: "json"
+    correlation_id: true

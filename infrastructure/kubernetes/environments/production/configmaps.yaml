@@ -1,0 +1,205 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: api-gateway
+    environment: production
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  API_GATEWAY_PORT: "8000"
+  CORS_ORIGINS: "https://app.yourdomain.com,https://admin.yourdomain.com"
+  RATE_LIMITING_ENABLED: "true"
+  RATE_LIMIT_DEFAULT: "1000"
+  RATE_LIMIT_BURST: "10"
+  JWT_EXPIRATION_HOURS: "1"
+  JWT_REFRESH_EXPIRATION_DAYS: "30"
+  SESSION_MAX_AGE: "3600"
+  SECURITY_HEADERS_ENABLED: "true"
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+  PERFORMANCE_MONITORING: "true"
+  AUDIT_LOGGING: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nlp-engine-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: nlp-engine
+    environment: production
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  NLP_ENGINE_PORT: "8001"
+  AI_MODEL_PRIMARY_PROVIDER: "openai"
+  AI_MODEL_FALLBACK_PROVIDER: "anthropic"
+  OPENAI_MODEL: "gpt-4"
+  ANTHROPIC_MODEL: "claude-3-opus"
+  MAX_TOKENS: "2000"
+  TEMPERATURE: "0.1"
+  TIMEOUT: "30"
+  MAX_RETRIES: "3"
+  QUERY_CACHE_ENABLED: "true"
+  QUERY_CACHE_TTL: "600"
+  CONTEXT_CACHE_ENABLED: "true"
+  CONTEXT_CACHE_TTL: "1800"
+  MAX_QUERY_LENGTH: "1000"
+  CONFIDENCE_THRESHOLD: "0.7"
+  AMBIGUITY_THRESHOLD: "0.8"
+  MAX_PROCESSING_TIME: "30"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: visualization-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: visualization
+    environment: production
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  VISUALIZATION_PORT: "8002"
+  CHART_CACHE_ENABLED: "true"
+  CHART_CACHE_TTL: "300"
+  MAX_CHART_DATA_POINTS: "10000"
+  CHART_EXPORT_ENABLED: "true"
+  INTERACTIVE_CHARTS_ENABLED: "true"
+  REAL_TIME_UPDATES_ENABLED: "true"
+  DASHBOARD_CACHE_TTL: "600"
+  PERFORMANCE_MONITORING: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-manager-config
+  namespace: splunk-mcp-prod
+  labels:
+    app: alert-manager
+    environment: production
+data:
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  ALERT_MANAGER_PORT: "8003"
+  NOTIFICATION_CACHE_TTL: "300"
+  MAX_ALERT_HISTORY: "10000"
+  ESCALATION_ENABLED: "true"
+  CORRELATION_ENABLED: "true"
+  NOISE_REDUCTION_ENABLED: "true"
+  MULTI_CHANNEL_NOTIFICATIONS: "true"
+  PERFORMANCE_MONITORING: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-config
+  namespace: splunk-mcp-prod
+  labels:
+    component: database
+    environment: production
+data:
+  POSTGRES_DB: "splunk_mcp_prod"
+  POSTGRES_USER: "splunk_mcp_admin"
+  POSTGRES_HOST: "postgres-primary.internal"
+  POSTGRES_PORT: "5432"
+  POSTGRES_SSL_MODE: "require"
+  POSTGRES_POOL_SIZE: "20"
+  POSTGRES_MAX_OVERFLOW: "30"
+  POSTGRES_POOL_TIMEOUT: "30"
+  POSTGRES_POOL_RECYCLE: "3600"
+  DATABASE_QUERY_TIMEOUT: "30000"
+  DATABASE_LOCK_TIMEOUT: "5000"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: splunk-mcp-prod
+  labels:
+    component: redis
+    environment: production
+data:
+  REDIS_HOST: "redis-cluster.internal"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_SSL: "true"
+  REDIS_MAX_CONNECTIONS: "100"
+  REDIS_SOCKET_TIMEOUT: "30"
+  REDIS_HEALTH_CHECK_INTERVAL: "30"
+  REDIS_CACHE_DEFAULT_TTL: "300"
+  REDIS_SESSION_TTL: "3600"
+  REDIS_RATE_LIMIT_WINDOW: "3600"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: splunk-mcp-prod
+  labels:
+    component: monitoring
+    environment: production
+data:
+  METRICS_ENABLED: "true"
+  METRICS_ENDPOINT: "/metrics"
+  METRICS_NAMESPACE: "splunk_mcp"
+  HEALTH_CHECK_ENABLED: "true"
+  HEALTH_CHECK_ENDPOINT: "/health"
+  DETAILED_HEALTH_ENDPOINT: "/health/detailed"
+  TRACING_ENABLED: "true"
+  TRACING_SERVICE_NAME: "splunk-mcp"
+  JAEGER_ENDPOINT: "http://jaeger-collector.monitoring:14268/api/traces"
+  PROMETHEUS_ENDPOINT: "http://prometheus.monitoring:9090"
+  LOG_RETENTION_DAYS: "14"
+  PERFORMANCE_LOGGING: "true"
+  AUDIT_LOGGING: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-config
+  namespace: splunk-mcp-prod
+  labels:
+    component: security
+    environment: production
+data:
+  JWT_ALGORITHM: "HS256"
+  JWT_ISSUER: "splunk-mcp"
+  JWT_AUDIENCE: "splunk-mcp-users"
+  SESSION_SECURE: "true"
+  SESSION_HTTP_ONLY: "true"
+  SESSION_SAME_SITE: "strict"
+  CSRF_PROTECTION: "true"
+  SECURITY_HEADERS_ENABLED: "true"
+  X_CONTENT_TYPE_OPTIONS: "nosniff"
+  X_FRAME_OPTIONS: "DENY"
+  X_XSS_PROTECTION: "1; mode=block"
+  STRICT_TRANSPORT_SECURITY: "max-age=31536000; includeSubDomains; preload"
+  CONTENT_SECURITY_POLICY: "default-src 'self'"
+  REFERRER_POLICY: "strict-origin-when-cross-origin"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feature-flags-config
+  namespace: splunk-mcp-prod
+  labels:
+    component: features
+    environment: production
+data:
+  RATE_LIMITING: "true"
+  CACHING: "true"
+  METRICS_COLLECTION: "true"
+  SECURITY_HEADERS: "true"
+  PERFORMANCE_MONITORING: "true"
+  AUDIT_LOGGING: "true"
+  ADVANCED_ANALYTICS: "true"
+  REAL_TIME_UPDATES: "true"
+  EXPORT_FORMATS: "true"
+  MULTI_CHANNEL_NOTIFICATIONS: "true"
+  AI_SUGGESTIONS: "false"
+  VOICE_INPUT: "false"
+  MOBILE_APP: "false"

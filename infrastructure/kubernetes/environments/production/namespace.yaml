@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-prod
+  labels:
+    name: splunk-mcp-prod
+    environment: production
+    project: splunk-mcp-integration
+    managed-by: terraform
+  annotations:
+    description: "Production namespace for Splunk MCP Integration platform"
+    contact: "platform-team@yourdomain.com"
+    cost-center: "engineering"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: splunk-mcp-prod
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    persistentvolumeclaims: "10"
+    pods: "50"
+    replicationcontrollers: "20"
+    resourcequotas: "1"
+    secrets: "30"
+    services: "20"
+    services.loadbalancers: "3"
+    services.nodeports: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: limit-range
+  namespace: splunk-mcp-prod
+spec:
+  limits:
+  - default:
+      cpu: "2"
+      memory: "4Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    type: Container
+  - max:
+      cpu: "8"
+      memory: "16Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+    type: Container
+  - max:
+      storage: "100Gi"
+    min:
+      storage: "1Gi"
+    type: PersistentVolumeClaim
