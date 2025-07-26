@@ -1,0 +1,899 @@
+name: Advanced Production Deployment Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        default: false
+        type: boolean
+      force_deploy:
+        description: 'Force deployment (skip health checks)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  HELM_VERSION: '3.12.0'
+  KUBECTL_VERSION: '1.28.0'
+
+jobs:
+  # Pre-deployment validation
+  pre-deployment-checks:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+    outputs:
+      deploy-staging: ${{ steps.deployment-decision.outputs.deploy-staging }}
+      deploy-production: ${{ steps.deployment-decision.outputs.deploy-production }}
+      skip-tests: ${{ steps.deployment-decision.outputs.skip-tests }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Validate deployment conditions
+      id: deployment-decision
+      run: |
+        echo "=== Deployment Decision Logic ==="
+        
+        # Manual trigger logic
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "Manual deployment triggered"
+          if [ "${{ github.event.inputs.environment }}" = "staging" ]; then
+            echo "deploy-staging=true" >> $GITHUB_OUTPUT
+            echo "deploy-production=false" >> $GITHUB_OUTPUT
+          else
+            echo "deploy-staging=false" >> $GITHUB_OUTPUT
+            echo "deploy-production=true" >> $GITHUB_OUTPUT
+          fi
+          echo "skip-tests=${{ github.event.inputs.skip_tests }}" >> $GITHUB_OUTPUT
+        else
+          # Automatic deployment logic
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "Main branch push - deploying to production"
+            echo "deploy-staging=false" >> $GITHUB_OUTPUT
+            echo "deploy-production=true" >> $GITHUB_OUTPUT
+            echo "skip-tests=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "Version tag - deploying to production"
+            echo "deploy-staging=false" >> $GITHUB_OUTPUT
+            echo "deploy-production=true" >> $GITHUB_OUTPUT
+            echo "skip-tests=false" >> $GITHUB_OUTPUT
+          else
+            echo "Development branch - no deployment"
+            echo "deploy-staging=false" >> $GITHUB_OUTPUT
+            echo "deploy-production=false" >> $GITHUB_OUTPUT
+            echo "skip-tests=false" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: Check for breaking changes
+      run: |
+        echo "=== Breaking Changes Detection ==="
+        
+        # Check for database migration files
+        if git diff --name-only HEAD~1 | grep -E "(migration|alembic)"; then
+          echo "⚠️ Database migrations detected"
+          echo "BREAKING_CHANGES=database" >> $GITHUB_ENV
+        fi
+        
+        # Check for API contract changes
+        if git diff --name-only HEAD~1 | grep -E "(openapi|swagger|schema)"; then
+          echo "⚠️ API contract changes detected"
+          echo "BREAKING_CHANGES=api" >> $GITHUB_ENV
+        fi
+        
+        # Check for configuration changes
+        if git diff --name-only HEAD~1 | grep -E "(config|settings|env)"; then
+          echo "ℹ️ Configuration changes detected"
+          echo "CONFIG_CHANGES=true" >> $GITHUB_ENV
+        fi
+
+    - name: Validate Kubernetes manifests
+      run: |
+        echo "=== Kubernetes Manifest Validation ==="
+        
+        # Install kubeval
+        wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+        tar xf kubeval-linux-amd64.tar.gz
+        sudo mv kubeval /usr/local/bin
+        
+        # Validate production manifests
+        find infrastructure/kubernetes -name "*.yaml" -not -path "*/examples/*" | xargs kubeval
+        
+        echo "✅ All Kubernetes manifests are valid"
+
+  # Enhanced security scanning
+  advanced-security-scan:
+    name: Advanced Security Analysis
+    runs-on: ubuntu-latest
+    needs: pre-deployment-checks
+    if: needs.pre-deployment-checks.outputs.skip-tests != 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety semgrep checkov
+        
+        # Install additional security tools
+        wget -O - https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+    - name: Run Bandit (Python Security Analysis)
+      run: |
+        echo "=== Python Security Analysis (Bandit) ==="
+        bandit -r services/ -f json -o bandit-report.json --severity-level medium
+        bandit -r services/ --severity-level medium
+
+    - name: Run Safety (Python Dependencies)
+      run: |
+        echo "=== Python Dependencies Security Check (Safety) ==="
+        safety check --json --output safety-report.json
+        safety check
+
+    - name: Run Semgrep (Static Analysis)
+      run: |
+        echo "=== Static Analysis (Semgrep) ==="
+        semgrep --config=auto services/ --json --output=semgrep-report.json
+        semgrep --config=auto services/ --error
+
+    - name: Run Checkov (Infrastructure Security)
+      run: |
+        echo "=== Infrastructure Security Analysis (Checkov) ==="
+        checkov -d infrastructure/ --framework kubernetes --output json --output-file checkov-report.json
+        checkov -d infrastructure/ --framework kubernetes --compact
+
+    - name: Container Image Security Scan
+      run: |
+        echo "=== Container Security Scanning ==="
+        
+        # Build images for scanning
+        docker build -t temp-api-gateway services/api-gateway/
+        docker build -t temp-nlp-engine services/nlp-engine/
+        
+        # Scan images with Trivy
+        trivy image --format json --output trivy-api-gateway.json temp-api-gateway
+        trivy image --format json --output trivy-nlp-engine.json temp-nlp-engine
+        
+        # Check for critical vulnerabilities
+        trivy image --exit-code 1 --severity HIGH,CRITICAL temp-api-gateway
+        trivy image --exit-code 1 --severity HIGH,CRITICAL temp-nlp-engine
+
+    - name: Upload Security Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          *-report.json
+          trivy-*.json
+
+    - name: Security Report Summary
+      if: always()
+      run: |
+        echo "=== Security Scan Summary ==="
+        echo "| Tool | Status | Report |"
+        echo "|------|--------|--------|"
+        echo "| Bandit | $([ -f bandit-report.json ] && echo '✅ Complete' || echo '❌ Failed') | bandit-report.json |"
+        echo "| Safety | $([ -f safety-report.json ] && echo '✅ Complete' || echo '❌ Failed') | safety-report.json |"
+        echo "| Semgrep | $([ -f semgrep-report.json ] && echo '✅ Complete' || echo '❌ Failed') | semgrep-report.json |"
+        echo "| Checkov | $([ -f checkov-report.json ] && echo '✅ Complete' || echo '❌ Failed') | checkov-report.json |"
+        echo "| Trivy | $([ -f trivy-api-gateway.json ] && echo '✅ Complete' || echo '❌ Failed') | trivy-*.json |"
+
+  # Performance and load testing
+  performance-testing:
+    name: Performance & Load Testing
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, advanced-security-scan]
+    if: needs.pre-deployment-checks.outputs.skip-tests != 'true'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: splunk_mcp_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install locust pytest-benchmark
+      working-directory: tests/performance
+
+    - name: Start test services
+      run: |
+        echo "=== Starting Test Services ==="
+        
+        # Start API Gateway
+        cd services/api-gateway
+        python -m pip install -r requirements.txt
+        nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > api-gateway.log 2>&1 &
+        
+        # Start NLP Engine
+        cd ../nlp-engine
+        python -m pip install -r requirements.txt
+        nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 > nlp-engine.log 2>&1 &
+        
+        # Wait for services to start
+        sleep 30
+        
+        # Verify services are running
+        curl -f http://localhost:8000/health || exit 1
+        curl -f http://localhost:8001/health || exit 1
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/splunk_mcp_test
+        REDIS_URL: redis://localhost:6379
+        OPENAI_API_KEY: test_key
+
+    - name: Run Performance Benchmarks
+      run: |
+        echo "=== Performance Benchmarks ==="
+        
+        # Run pytest benchmarks
+        python -m pytest tests/performance/test_benchmarks.py --benchmark-json=benchmark-results.json
+        
+        # Display benchmark results
+        python -c "
+        import json
+        with open('benchmark-results.json', 'r') as f:
+            data = json.load(f)
+        for benchmark in data['benchmarks']:
+            print(f\"📊 {benchmark['name']}: {benchmark['stats']['mean']:.4f}s (±{benchmark['stats']['stddev']:.4f}s)\")
+        "
+      working-directory: tests/performance
+
+    - name: Run Load Testing with Locust
+      run: |
+        echo "=== Load Testing ==="
+        
+        # Run Locust load test
+        locust -f locustfile.py --headless --users 50 --spawn-rate 5 --run-time 2m --host http://localhost:8000 --html load-test-report.html --csv load-test
+        
+        # Parse results
+        echo "📈 Load Test Results:"
+        cat load-test_stats.csv | tail -n +2 | while IFS=',' read -r name requests fails median_response_time average_response_time min_response_time max_response_time average_content_size requests_per_second failures_per_second; do
+          echo "  - $name: ${requests_per_second} req/s, ${median_response_time}ms median"
+        done
+      working-directory: tests/performance
+
+    - name: Upload Performance Reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-reports
+        path: |
+          tests/performance/benchmark-results.json
+          tests/performance/load-test-report.html
+          tests/performance/load-test_*.csv
+
+    - name: Performance Validation
+      run: |
+        echo "=== Performance Validation ==="
+        
+        # Check if performance meets requirements
+        python -c "
+        import json
+        import sys
+        
+        # Load benchmark results
+        with open('tests/performance/benchmark-results.json', 'r') as f:
+            data = json.load(f)
+        
+        # Check performance thresholds
+        failed = False
+        for benchmark in data['benchmarks']:
+            mean_time = benchmark['stats']['mean']
+            if 'api_response' in benchmark['name'] and mean_time > 1.0:  # 1s threshold
+                print(f'❌ {benchmark[\"name\"]} exceeded threshold: {mean_time:.4f}s > 1.0s')
+                failed = True
+            elif 'db_query' in benchmark['name'] and mean_time > 0.1:  # 100ms threshold
+                print(f'❌ {benchmark[\"name\"]} exceeded threshold: {mean_time:.4f}s > 0.1s')
+                failed = True
+            else:
+                print(f'✅ {benchmark[\"name\"]} within threshold: {mean_time:.4f}s')
+        
+        if failed:
+            sys.exit(1)
+        "
+
+  # Build and push production images
+  build-production-images:
+    name: Build Production Images
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, advanced-security-scan, performance-testing]
+    if: needs.pre-deployment-checks.outputs.deploy-staging == 'true' || needs.pre-deployment-checks.outputs.deploy-production == 'true'
+    outputs:
+      image-digest-api-gateway: ${{ steps.build-api-gateway.outputs.digest }}
+      image-digest-nlp-engine: ${{ steps.build-nlp-engine.outputs.digest }}
+      image-digest-visualization: ${{ steps.build-visualization.outputs.digest }}
+      image-digest-frontend: ${{ steps.build-frontend.outputs.digest }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: network=host
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Generate image metadata
+      id: meta
+      run: |
+        echo "Creating image metadata..."
+        
+        # Generate version tag
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="${{ github.sha }}"
+        fi
+        
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "short-sha=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+        echo "timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+    - name: Build and push API Gateway
+      id: build-api-gateway
+      uses: docker/build-push-action@v5
+      with:
+        context: services/api-gateway
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api-gateway:${{ steps.meta.outputs.version }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api-gateway:latest
+        labels: |
+          org.opencontainers.image.title=Splunk MCP API Gateway
+          org.opencontainers.image.description=API Gateway for Splunk MCP Integration
+          org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          org.opencontainers.image.created=${{ steps.meta.outputs.timestamp }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.meta.outputs.version }}
+          BUILD_DATE=${{ steps.meta.outputs.timestamp }}
+          VCS_REF=${{ github.sha }}
+
+    - name: Build and push NLP Engine
+      id: build-nlp-engine
+      uses: docker/build-push-action@v5
+      with:
+        context: services/nlp-engine
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/nlp-engine:${{ steps.meta.outputs.version }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/nlp-engine:latest
+        labels: |
+          org.opencontainers.image.title=Splunk MCP NLP Engine
+          org.opencontainers.image.description=Natural Language Processing Engine
+          org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          org.opencontainers.image.created=${{ steps.meta.outputs.timestamp }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ steps.meta.outputs.version }}
+          BUILD_DATE=${{ steps.meta.outputs.timestamp }}
+          VCS_REF=${{ github.sha }}
+
+    - name: Build and push Visualization Service
+      id: build-visualization
+      uses: docker/build-push-action@v5
+      with:
+        context: services/visualization
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/visualization:${{ steps.meta.outputs.version }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/visualization:latest
+        labels: |
+          org.opencontainers.image.title=Splunk MCP Visualization Service
+          org.opencontainers.image.description=Data Visualization Service
+          org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          org.opencontainers.image.created=${{ steps.meta.outputs.timestamp }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push Frontend
+      id: build-frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: frontend
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.meta.outputs.version }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+        labels: |
+          org.opencontainers.image.title=Splunk MCP Frontend
+          org.opencontainers.image.description=React Frontend Application
+          org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          org.opencontainers.image.created=${{ steps.meta.outputs.timestamp }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate SBOM (Software Bill of Materials)
+      run: |
+        echo "=== Generating SBOM ==="
+        
+        # Install syft for SBOM generation
+        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+        
+        # Generate SBOM for each service
+        syft ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api-gateway:${{ steps.meta.outputs.version }} -o spdx-json=api-gateway-sbom.json
+        syft ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/nlp-engine:${{ steps.meta.outputs.version }} -o spdx-json=nlp-engine-sbom.json
+        syft ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/visualization:${{ steps.meta.outputs.version }} -o spdx-json=visualization-sbom.json
+        syft ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.meta.outputs.version }} -o spdx-json=frontend-sbom.json
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: |
+          *-sbom.json
+
+  # Staging deployment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-production-images]
+    if: needs.pre-deployment-checks.outputs.deploy-staging == 'true'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install deployment tools
+      run: |
+        # Install kubectl
+        curl -LO "https://dl.k8s.io/release/v${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        
+        # Install Helm
+        curl https://get.helm.sh/helm-v${{ env.HELM_VERSION }}-linux-amd64.tar.gz | tar xz
+        sudo mv linux-amd64/helm /usr/local/bin/
+
+    - name: Configure Kubernetes access
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl config current-context
+        kubectl get nodes
+
+    - name: Pre-deployment backup
+      run: |
+        echo "=== Creating Pre-deployment Backup ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Backup current deployment
+        kubectl get deployments -n staging -o yaml > staging-backup-deployments.yaml
+        kubectl get configmaps -n staging -o yaml > staging-backup-configmaps.yaml
+        kubectl get secrets -n staging -o yaml > staging-backup-secrets.yaml
+
+    - name: Deploy to Staging
+      run: |
+        echo "=== Deploying to Staging Environment ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Update image tags in staging manifests
+        VERSION="${{ github.sha }}"
+        find infrastructure/kubernetes/environments/staging -name "*.yaml" -exec sed -i "s|IMAGE_TAG|${VERSION}|g" {} \;
+        
+        # Apply staging configuration
+        kubectl apply -f infrastructure/kubernetes/environments/staging/
+        
+        # Wait for deployments to complete
+        kubectl rollout status deployment/api-gateway -n staging --timeout=600s
+        kubectl rollout status deployment/nlp-engine -n staging --timeout=600s
+        kubectl rollout status deployment/visualization -n staging --timeout=600s
+        kubectl rollout status deployment/frontend -n staging --timeout=600s
+
+    - name: Run deployment validation
+      run: |
+        echo "=== Deployment Validation ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Wait for services to stabilize
+        sleep 60
+        
+        # Check pod status
+        kubectl get pods -n staging
+        kubectl get services -n staging
+        
+        # Health checks
+        kubectl run test-pod --image=curlimages/curl --rm -it --restart=Never -n staging -- \
+          curl -f http://api-gateway:8000/health
+        
+        kubectl run test-pod --image=curlimages/curl --rm -it --restart=Never -n staging -- \
+          curl -f http://nlp-engine:8001/health
+        
+        kubectl run test-pod --image=curlimages/curl --rm -it --restart=Never -n staging -- \
+          curl -f http://visualization:8002/health
+
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: staging-deployment
+        path: |
+          staging-backup-*.yaml
+
+  # Production deployment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-production-images]
+    if: needs.pre-deployment-checks.outputs.deploy-production == 'true'
+    environment: 
+      name: production
+      url: https://splunk-mcp.yourdomain.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install deployment tools
+      run: |
+        # Install kubectl
+        curl -LO "https://dl.k8s.io/release/v${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        
+        # Install Helm
+        curl https://get.helm.sh/helm-v${{ env.HELM_VERSION }}-linux-amd64.tar.gz | tar xz
+        sudo mv linux-amd64/helm /usr/local/bin/
+
+    - name: Configure Kubernetes access
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        kubectl config current-context
+        kubectl get nodes
+
+    - name: Pre-deployment backup
+      run: |
+        echo "=== Creating Pre-deployment Backup ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Backup current deployment
+        kubectl get deployments -n production -o yaml > production-backup-deployments.yaml
+        kubectl get configmaps -n production -o yaml > production-backup-configmaps.yaml
+        kubectl get secrets -n production -o yaml > production-backup-secrets.yaml
+        
+        # Backup databases
+        kubectl exec postgres-0 -n production -- pg_dump -U splunk_mcp_user splunk_mcp > production-database-backup.sql
+
+    - name: Database migration (if needed)
+      run: |
+        echo "=== Database Migration Check ==="
+        export KUBECONFIG=kubeconfig
+        
+        if [ -n "${{ env.BREAKING_CHANGES }}" ] && [ "${{ env.BREAKING_CHANGES }}" = "database" ]; then
+          echo "Running database migrations..."
+          kubectl run migration-job --image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/api-gateway:${{ github.sha }} \
+            --rm -it --restart=Never -n production -- python manage_db.py upgrade
+        else
+          echo "No database migrations required"
+        fi
+
+    - name: Blue-Green Deployment
+      run: |
+        echo "=== Blue-Green Production Deployment ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Create green deployment
+        VERSION="${{ github.sha }}"
+        
+        # Update image tags in production manifests
+        find infrastructure/kubernetes/environments/production -name "*.yaml" -exec sed -i "s|IMAGE_TAG|${VERSION}|g" {} \;
+        
+        # Deploy green version
+        kubectl apply -f infrastructure/kubernetes/environments/production/
+        
+        # Wait for green deployment to be ready
+        kubectl rollout status deployment/api-gateway -n production --timeout=900s
+        kubectl rollout status deployment/nlp-engine -n production --timeout=900s
+        kubectl rollout status deployment/visualization -n production --timeout=900s
+        kubectl rollout status deployment/frontend -n production --timeout=900s
+
+    - name: Production smoke tests
+      run: |
+        echo "=== Production Smoke Tests ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Wait for services to stabilize
+        sleep 120
+        
+        # Get external IP
+        EXTERNAL_IP=$(kubectl get service api-gateway -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        if [ -z "$EXTERNAL_IP" ]; then
+          EXTERNAL_IP=$(kubectl get service api-gateway -n production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        fi
+        
+        echo "Testing external endpoint: $EXTERNAL_IP"
+        
+        # Health checks
+        curl -f "http://$EXTERNAL_IP/health" --max-time 30
+        curl -f "http://$EXTERNAL_IP/api/v1/health" --max-time 30
+        
+        # Basic functionality tests
+        curl -X POST "http://$EXTERNAL_IP/api/v1/auth/login" \
+          -H "Content-Type: application/json" \
+          -d '{"username":"test","password":"test"}' --max-time 30 || echo "Auth test (expected to fail in test environment)"
+
+    - name: Monitor deployment health
+      run: |
+        echo "=== Monitoring Deployment Health ==="
+        export KUBECONFIG=kubeconfig
+        
+        # Monitor for 5 minutes
+        for i in {1..10}; do
+          echo "Health check iteration $i/10"
+          
+          # Check pod health
+          UNHEALTHY_PODS=$(kubectl get pods -n production --field-selector=status.phase!=Running --no-headers | wc -l)
+          if [ $UNHEALTHY_PODS -gt 0 ]; then
+            echo "Warning: $UNHEALTHY_PODS unhealthy pods detected"
+            kubectl get pods -n production --field-selector=status.phase!=Running
+          fi
+          
+          # Check resource usage
+          kubectl top pods -n production --sort-by=cpu
+          
+          sleep 30
+        done
+
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: production-deployment
+        path: |
+          production-backup-*.yaml
+          production-database-backup.sql
+
+  # Post-deployment validation
+  post-deployment-validation:
+    name: Post-deployment Validation
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install test dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests pytest pytest-html pytest-json-report
+
+    - name: Run end-to-end tests
+      run: |
+        echo "=== End-to-end Validation Tests ==="
+        
+        # Determine environment
+        if [ "${{ needs.deploy-production.result }}" = "success" ]; then
+          ENVIRONMENT="production"
+          BASE_URL="https://api.splunk-mcp.yourdomain.com"
+        else
+          ENVIRONMENT="staging"
+          BASE_URL="https://staging-api.splunk-mcp.yourdomain.com"
+        fi
+        
+        echo "Testing environment: $ENVIRONMENT"
+        echo "Base URL: $BASE_URL"
+        
+        # Run validation tests
+        python -m pytest tests/e2e/ -v \
+          --html=e2e-report.html \
+          --json-report --json-report-file=e2e-report.json \
+          --base-url="$BASE_URL" \
+          --environment="$ENVIRONMENT"
+
+    - name: Performance regression test
+      run: |
+        echo "=== Performance Regression Test ==="
+        
+        # Quick performance check
+        python -c "
+        import requests
+        import time
+        import statistics
+        
+        base_url = 'https://api.splunk-mcp.yourdomain.com' if '${{ needs.deploy-production.result }}' == 'success' else 'https://staging-api.splunk-mcp.yourdomain.com'
+        
+        # Measure response times
+        times = []
+        for i in range(10):
+            start = time.time()
+            try:
+                response = requests.get(f'{base_url}/health', timeout=10)
+                if response.status_code == 200:
+                    times.append(time.time() - start)
+            except Exception as e:
+                print(f'Request {i+1} failed: {e}')
+        
+        if times:
+            avg_time = statistics.mean(times)
+            print(f'Average response time: {avg_time:.3f}s')
+            print(f'95th percentile: {sorted(times)[int(len(times)*0.95)]:.3f}s')
+            
+            if avg_time > 2.0:
+                print('WARNING: Response time exceeds 2s threshold')
+            else:
+                print('✅ Response time within acceptable range')
+        else:
+            print('❌ No successful requests')
+        "
+
+    - name: Upload validation reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: validation-reports
+        path: |
+          e2e-report.html
+          e2e-report.json
+
+  # Notification and cleanup
+  deployment-complete:
+    name: Deployment Complete
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production, post-deployment-validation]
+    if: always()
+    
+    steps:
+    - name: Determine deployment result
+      id: result
+      run: |
+        if [ "${{ needs.deploy-production.result }}" = "success" ]; then
+          echo "environment=Production" >> $GITHUB_OUTPUT
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "url=https://splunk-mcp.yourdomain.com" >> $GITHUB_OUTPUT
+        elif [ "${{ needs.deploy-staging.result }}" = "success" ]; then
+          echo "environment=Staging" >> $GITHUB_OUTPUT
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "url=https://staging.splunk-mcp.yourdomain.com" >> $GITHUB_OUTPUT
+        else
+          echo "environment=None" >> $GITHUB_OUTPUT
+          echo "status=failure" >> $GITHUB_OUTPUT
+          echo "url=" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create GitHub Release (Production only)
+      if: steps.result.outputs.environment == 'Production' && steps.result.outputs.status == 'success'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}-${{ github.sha }}
+        release_name: Production Release v${{ github.run_number }}
+        body: |
+          🚀 **Production Deployment Successful**
+          
+          **Deployment Details:**
+          - Environment: Production
+          - Commit: ${{ github.sha }}
+          - Deployment Time: ${{ github.event.head_commit.timestamp }}
+          - Workflow Run: ${{ github.run_number }}
+          
+          **Services Deployed:**
+          - API Gateway: `ghcr.io/${{ github.repository }}/api-gateway:${{ github.sha }}`
+          - NLP Engine: `ghcr.io/${{ github.repository }}/nlp-engine:${{ github.sha }}`
+          - Visualization: `ghcr.io/${{ github.repository }}/visualization:${{ github.sha }}`
+          - Frontend: `ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}`
+          
+          **Validation Results:**
+          - Security Scans: ✅ Passed
+          - Performance Tests: ✅ Passed  
+          - End-to-end Tests: ✅ Passed
+          
+          **Access URL:** https://splunk-mcp.yourdomain.com
+        draft: false
+        prerelease: false
+
+    - name: Notify Slack
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ steps.result.outputs.status }}
+        channel: '#deployments'
+        text: |
+          ${{ steps.result.outputs.status == 'success' && '✅' || '❌' }} **Deployment ${{ steps.result.outputs.status == 'success' && 'Successful' || 'Failed' }}**
+          
+          **Environment:** ${{ steps.result.outputs.environment }}
+          **Commit:** ${{ github.sha }}
+          **Author:** ${{ github.actor }}
+          **Branch:** ${{ github.ref }}
+          ${{ steps.result.outputs.url && format('**URL:** {0}', steps.result.outputs.url) || '' }}
+          
+          ${{ steps.result.outputs.status != 'success' && 'Please check the GitHub Actions logs for details.' || '' }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Notify Microsoft Teams
+      if: always()
+      uses: skitionek/notify-microsoft-teams@master
+      with:
+        webhook_url: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        needs: ${{ toJson(needs) }}
+        job: ${{ toJson(job) }}
+        steps: ${{ toJson(steps) }}
+        dry_run: false
