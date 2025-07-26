@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  cloud-auth-service:
+    build: .
+    container_name: splunk-cloud-auth-service
+    ports:
+      - "8017:8017"
+      - "9017:9017"  # Metrics port
+    environment:
+      # Application Configuration
+      - APP_NAME=splunk-cloud-auth-service
+      - APP_VERSION=1.0.0
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      
+      # Server Configuration
+      - HOST=0.0.0.0
+      - PORT=8017
+      
+      # Database Configuration
+      - DATABASE_URL=postgresql+asyncpg://cloud_auth_user:cloud_auth_password@postgres:5432/splunk_mcp_cloud_auth
+      - REDIS_URL=redis://redis:6379/7
+      
+      # JWT Configuration
+      - JWT_SECRET_KEY=your-development-secret-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=30
+      
+      # OAuth Configuration
+      - OAUTH_CLIENT_ID=your_oauth_client_id
+      - OAUTH_CLIENT_SECRET=your_oauth_client_secret
+      - OAUTH_AUTHORIZATION_URL=https://auth.scp.splunk.com/oauth2/authorize
+      - OAUTH_TOKEN_URL=https://auth.scp.splunk.com/oauth2/token
+      - OAUTH_REDIRECT_URI=http://localhost:8017/api/v1/oauth/callback
+      - OAUTH_SCOPE=openid profile email
+      
+      # SAML Configuration
+      - SAML_SP_ENTITY_ID=https://localhost:8017/saml/metadata
+      - SAML_SP_ACS_URL=https://localhost:8017/api/v1/saml/acs
+      - SAML_SP_SLS_URL=https://localhost:8017/api/v1/saml/sls
+      
+      # Rate Limiting
+      - RATE_LIMIT_PER_MINUTE=100
+      - RATE_LIMIT_BURST=20
+      - RATE_LIMIT_ENABLED=true
+      
+      # Multi-Tenant Configuration
+      - ENABLE_MULTI_TENANT=true
+      - DEFAULT_TENANT_QUOTA_USERS=100
+      - DEFAULT_TENANT_QUOTA_REQUESTS_PER_HOUR=10000
+      
+      # Security Configuration
+      - PASSWORD_MIN_LENGTH=12
+      - PASSWORD_REQUIRE_SPECIAL=true
+      - MAX_LOGIN_ATTEMPTS=5
+      - LOCKOUT_DURATION_MINUTES=30
+      
+      # Monitoring
+      - ENABLE_METRICS=true
+      - METRICS_PORT=9017
+    
+    depends_on:
+      - postgres
+      - redis
+    
+    volumes:
+      - ./logs:/app/logs
+    
+    networks:
+      - cloud-auth-network
+    
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: cloud-auth-postgres
+    environment:
+      - POSTGRES_DB=splunk_mcp_cloud_auth
+      - POSTGRES_USER=cloud_auth_user
+      - POSTGRES_PASSWORD=cloud_auth_password
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - cloud-auth-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: cloud-auth-redis
+    ports:
+      - "6380:6379"  # Use different port to avoid conflicts
+    volumes:
+      - redis_data:/data
+    networks:
+      - cloud-auth-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: cloud-auth-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:7
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - cloud-auth-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  cloud-auth-network:
+    driver: bridge

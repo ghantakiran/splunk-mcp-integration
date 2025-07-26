@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  cloud-connection-manager:
+    build: .
+    container_name: cloud-connection-manager
+    ports:
+      - "8018:8018"
+      - "9018:9018"  # Metrics port
+    environment:
+      # Application Configuration
+      - SERVICE_NAME=cloud-connection-manager
+      - VERSION=1.0.0
+      - DEBUG=true
+      - HOST=0.0.0.0
+      - PORT=8018
+      
+      # Database Configuration
+      - DATABASE_URL=postgresql+asyncpg://ccm_user:ccm_password@postgres:5432/cloud_connection_manager
+      
+      # Redis Configuration
+      - REDIS_URL=redis://redis:6379/8
+      
+      # Connection Pool Configuration
+      - CONNECTION_POOL_SIZE=50
+      - CONNECTION_POOL_MAX_SIZE=200
+      - CONNECTION_IDLE_TIMEOUT=300
+      - CONNECTION_MAX_LIFETIME=3600
+      - CONNECTION_RETRY_ATTEMPTS=3
+      - CONNECTION_RETRY_DELAY=1.0
+      - CONNECTION_HEALTH_CHECK_INTERVAL=30
+      
+      # Load Balancer Configuration
+      - LOAD_BALANCER_ALGORITHM=round_robin
+      - LOAD_BALANCER_HEALTH_CHECK_TIMEOUT=10
+      - LOAD_BALANCER_FAILOVER_TIMEOUT=30
+      - LOAD_BALANCER_CIRCUIT_BREAKER_ENABLED=true
+      - LOAD_BALANCER_CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+      - LOAD_BALANCER_CIRCUIT_BREAKER_TIMEOUT=60
+      
+      # Health Monitoring Configuration
+      - HEALTH_CHECK_INTERVAL=30
+      - HEALTH_CHECK_TIMEOUT=10
+      - HEALTH_CHECK_RETRIES=3
+      - HEALTH_DEGRADED_THRESHOLD=0.7
+      - HEALTH_UNHEALTHY_THRESHOLD=0.3
+      
+      # Metrics Configuration
+      - METRICS_COLLECTION_INTERVAL=60
+      - METRICS_RETENTION_DAYS=30
+      
+      # Logging Configuration
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=json
+      
+      # External Services
+      - CLOUD_AUTH_SERVICE_URL=http://cloud-auth-service:8017
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - NLP_ENGINE_URL=http://nlp-engine:8001
+      
+      # Security Configuration
+      - JWT_SECRET_KEY=your-development-secret-key-change-in-production
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
+      
+      # Rate Limiting
+      - RATE_LIMIT_PER_MINUTE=100
+      - RATE_LIMIT_BURST=20
+      - RATE_LIMIT_ENABLED=true
+    
+    depends_on:
+      - postgres
+      - redis
+    
+    volumes:
+      - ./logs:/app/logs
+    
+    networks:
+      - ccm-network
+    
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: ccm-postgres
+    environment:
+      - POSTGRES_DB=cloud_connection_manager
+      - POSTGRES_USER=ccm_user
+      - POSTGRES_PASSWORD=ccm_password
+    ports:
+      - "5434:5432"  # Use different port to avoid conflicts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ccm-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: ccm-redis
+    ports:
+      - "6381:6379"  # Use different port to avoid conflicts
+    volumes:
+      - redis_data:/data
+    networks:
+      - ccm-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ccm-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:8
+    ports:
+      - "8082:8081"
+    depends_on:
+      - redis
+    networks:
+      - ccm-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ccm-network:
+    driver: bridge
