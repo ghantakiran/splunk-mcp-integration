@@ -112,6 +112,11 @@ class User(BaseModel):
         """Get display name for UI"""
         return self.full_name if self.full_name != self.username else self.username
     
+    @property
+    def is_admin(self) -> bool:
+        """Check if user is an administrator"""
+        return self.is_superuser or self.has_role("admin")
+    
     def has_role(self, role: str) -> bool:
         """Check if user has a specific role"""
         return role in self.roles

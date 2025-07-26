@@ -14,6 +14,7 @@ from .endpoints import (
     dashboards,
     alerts,
     system,
+    cloud,
     demo_exceptions
 )
 
@@ -46,6 +47,9 @@ api_router.include_router(dashboards.router, prefix="/dashboards", tags=["dashbo
 
 # Alert management endpoints
 api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+
+# Cloud instance management endpoints
+api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud"])
 
 # Demo endpoints (only in development)
 if True:  # Would check settings.debug in production

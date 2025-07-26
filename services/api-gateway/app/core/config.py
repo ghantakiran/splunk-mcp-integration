@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     visualization_url: str = Field(default="http://visualization:8000", env="VISUALIZATION_URL")
     alert_manager_url: str = Field(default="http://alert-manager:8000", env="ALERT_MANAGER_URL")
     
+    # Cloud Services
+    cloud_connection_manager_url: str = Field(default="http://cloud-connection-manager:8018", env="CLOUD_CONNECTION_MANAGER_URL")
+    cloud_auth_service_url: str = Field(default="http://cloud-auth-service:8017", env="CLOUD_AUTH_SERVICE_URL")
+    
     # Splunk Configuration
     splunk_host: Optional[str] = Field(default=None, env="SPLUNK_HOST")
     splunk_token: Optional[str] = Field(default=None, env="SPLUNK_TOKEN")
