@@ -1,0 +1,340 @@
+# Performance Testing Configuration for Splunk MCP Platform
+# ========================================================
+
+# Global Configuration
+global:
+  test_environment: "staging"  # development, staging, production
+  output_directory: "./performance-reports"
+  enable_monitoring: true
+  parallel_execution: true
+  
+# Load Testing Configuration
+load_testing:
+  # Base configuration
+  base_url: "http://localhost:8000"
+  concurrent_users: 50
+  test_duration: 300  # 5 minutes
+  ramp_up_time: 30    # 30 seconds
+  think_time: 1.0     # 1 second between requests
+  timeout: 30         # 30 second timeout
+  max_requests_per_second: 1000
+  
+  # Authentication
+  authentication:
+    username: "test_user"
+    password: "test_password"
+    token_refresh_interval: 1800  # 30 minutes
+  
+  # Test scenarios
+  scenarios:
+    # Light load scenario
+    light_load:
+      concurrent_users: 10
+      test_duration: 60
+      target_endpoints:
+        - "/health"
+        - "/api/v1/user/profile"
+        - "/api/v1/dashboards"
+    
+    # Normal load scenario  
+    normal_load:
+      concurrent_users: 50
+      test_duration: 300
+      target_endpoints:
+        - "/api/v1/queries/nlp"
+        - "/api/v1/chat/message"
+        - "/api/v1/visualizations"
+        - "/api/v1/alerts"
+    
+    # Heavy load scenario
+    heavy_load:
+      concurrent_users: 200
+      test_duration: 600
+      target_endpoints:
+        - "/api/v1/queries/nlp"
+        - "/api/v1/export/pdf"
+        - "/api/v1/dashboards/create"
+    
+    # Stress test scenario
+    stress_test:
+      concurrent_users: 500
+      test_duration: 300
+      max_requests_per_second: 2000
+      target_endpoints:
+        - "/api/v1/queries/nlp"
+
+# Database Performance Testing
+database_testing:
+  # PostgreSQL configuration
+  postgresql:
+    connection_url: "postgresql://user:pass@localhost:5432/splunk_mcp"
+    connection_pool:
+      min_size: 5
+      max_size: 50
+      timeout: 30
+    
+    # Test parameters
+    concurrent_connections: 20
+    test_duration: 120
+    query_iterations: 500
+    
+    # Query categories to test
+    query_categories:
+      simple_queries:
+        - "SELECT 1"
+        - "SELECT current_timestamp"
+        - "SELECT version()"
+      
+      application_queries:
+        - "SELECT COUNT(*) FROM users"
+        - "SELECT * FROM queries ORDER BY created_at DESC LIMIT 10"
+        - "SELECT user_id, COUNT(*) FROM sessions GROUP BY user_id"
+      
+      complex_queries:
+        - |
+          SELECT u.username, COUNT(q.id) as query_count 
+          FROM users u 
+          LEFT JOIN queries q ON u.id = q.user_id 
+          WHERE u.created_at > NOW() - INTERVAL '7 days'
+          GROUP BY u.id, u.username 
+          ORDER BY query_count DESC
+        - |
+          SELECT DATE_TRUNC('hour', created_at) as hour, 
+                 COUNT(*) as requests,
+                 AVG(execution_time) as avg_execution_time
+          FROM queries 
+          WHERE created_at > NOW() - INTERVAL '24 hours'
+          GROUP BY hour 
+          ORDER BY hour
+  
+  # Redis configuration
+  redis:
+    connection_url: "redis://localhost:6379"
+    connection_pool:
+      max_connections: 50
+    
+    # Test parameters
+    operations_per_test: 10000
+    concurrent_operations: 100
+    
+    # Operation types to test
+    operation_types:
+      basic_operations:
+        - "SET"
+        - "GET" 
+        - "DEL"
+      
+      complex_operations:
+        - "LPUSH"
+        - "LRANGE"
+        - "HSET"
+        - "HGET"
+        - "ZADD"
+        - "ZRANGE"
+
+# NLP Engine Performance Testing
+nlp_testing:
+  # Test configuration
+  concurrent_requests: 20
+  test_duration: 180
+  query_complexity_levels: 5
+  
+  # Test queries by complexity
+  test_queries:
+    level_1_simple:
+      - "show errors"
+      - "user count"
+      - "system status"
+    
+    level_2_moderate:
+      - "show me errors from last hour"
+      - "count failed logins today"
+      - "top 10 error messages"
+    
+    level_3_complex:
+      - "find authentication failures grouped by source IP in last 24 hours"
+      - "create chart showing error trends over time with hourly buckets"
+      - "analyze user login patterns and identify anomalies"
+    
+    level_4_advanced:
+      - "correlate error spikes with deployment events and system resource usage"
+      - "build dashboard with multiple visualizations showing system health metrics"
+      - "detect patterns in user behavior that might indicate security threats"
+    
+    level_5_expert:
+      - "perform comprehensive analysis of system performance including error rates, response times, and resource utilization with predictive insights"
+      - "create multi-dimensional analysis of user engagement patterns with seasonal adjustments and anomaly detection"
+
+# Frontend Performance Testing  
+frontend_testing:
+  # Browser testing configuration
+  browser_config:
+    headless: true
+    viewport:
+      width: 1920
+      height: 1080
+    timeout: 30000
+  
+  # Performance metrics to collect
+  metrics:
+    - "first_contentful_paint"
+    - "largest_contentful_paint"
+    - "first_input_delay"
+    - "cumulative_layout_shift"
+    - "total_blocking_time"
+  
+  # User journeys to test
+  user_journeys:
+    basic_navigation:
+      steps:
+        - "load_login_page"
+        - "authenticate_user"
+        - "navigate_to_dashboard"
+        - "load_query_interface"
+    
+    query_workflow:
+      steps:
+        - "authenticate_user"
+        - "enter_natural_language_query"
+        - "wait_for_spl_translation"
+        - "execute_query"
+        - "render_visualization"
+    
+    dashboard_creation:
+      steps:
+        - "authenticate_user"
+        - "create_new_dashboard"
+        - "add_multiple_widgets"
+        - "configure_auto_refresh"
+        - "save_dashboard"
+
+# System Resource Monitoring
+monitoring:
+  # System metrics to collect
+  system_metrics:
+    collection_interval: 5  # seconds
+    metrics:
+      - "cpu_usage"
+      - "memory_usage"
+      - "disk_io"
+      - "network_io"
+      - "load_average"
+  
+  # Application metrics
+  application_metrics:
+    collection_interval: 10  # seconds
+    endpoints:
+      - "http://localhost:8000/metrics"
+      - "http://localhost:8001/metrics"
+      - "http://localhost:8002/metrics"
+  
+  # Database metrics
+  database_metrics:
+    collection_interval: 15  # seconds
+    postgresql_queries:
+      - "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
+      - "SELECT sum(blks_hit) * 100 / sum(blks_hit + blks_read) AS cache_hit_ratio FROM pg_stat_database"
+    
+    redis_commands:
+      - "INFO stats"
+      - "INFO memory"
+      - "INFO clients"
+
+# Performance Thresholds
+thresholds:
+  # Response time thresholds (in seconds)
+  response_time:
+    excellent: 0.5
+    good: 1.0
+    acceptable: 2.0
+    poor: 5.0
+  
+  # Throughput thresholds (requests per second)
+  throughput:
+    minimum: 100
+    target: 500
+    excellent: 1000
+  
+  # Error rate thresholds (percentage)
+  error_rate:
+    acceptable: 1.0
+    warning: 5.0
+    critical: 10.0
+  
+  # Resource utilization thresholds (percentage)
+  resource_utilization:
+    cpu:
+      warning: 70
+      critical: 90
+    memory:
+      warning: 80
+      critical: 95
+    disk:
+      warning: 85
+      critical: 95
+
+# Reporting Configuration
+reporting:
+  # Report formats
+  formats:
+    - "json"
+    - "html"
+    - "csv"
+  
+  # Include in reports
+  include:
+    - "test_configuration"
+    - "performance_metrics"
+    - "system_metrics"
+    - "error_analysis"
+    - "recommendations"
+    - "trend_analysis"
+  
+  # Report delivery
+  delivery:
+    email:
+      enabled: false
+      recipients: []
+      smtp_server: "smtp.company.com"
+    
+    slack:
+      enabled: false
+      webhook_url: ""
+      channel: "#performance-testing"
+    
+    file_storage:
+      enabled: true
+      retention_days: 30
+
+# Environment-Specific Configurations
+environments:
+  development:
+    load_testing:
+      concurrent_users: 5
+      test_duration: 60
+    database_testing:
+      concurrent_connections: 5
+      query_iterations: 50
+  
+  staging:
+    load_testing:
+      concurrent_users: 50
+      test_duration: 300
+    database_testing:
+      concurrent_connections: 20
+      query_iterations: 200
+  
+  production:
+    load_testing:
+      concurrent_users: 200
+      test_duration: 600
+    database_testing:
+      concurrent_connections: 50
+      query_iterations: 1000
+    
+    # Production-specific safety measures
+    safety:
+      max_concurrent_users: 500
+      emergency_stop_threshold:
+        error_rate: 25.0
+        response_time: 10.0
