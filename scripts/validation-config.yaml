@@ -1,0 +1,338 @@
+# Production Readiness Validation Configuration
+# ============================================
+
+validation_config:
+  # Environment-specific configurations
+  environments:
+    development:
+      database:
+        host: localhost
+        port: 5432
+        database: splunk_mcp
+        user: splunk_mcp_user
+        timeout: 10
+      redis:
+        host: localhost
+        port: 6379
+        timeout: 5
+      services_base_url: "http://localhost"
+      
+    staging:
+      database:
+        host: staging-postgres
+        port: 5432
+        database: splunk_mcp_staging
+        user: splunk_mcp_user
+        timeout: 15
+      redis:
+        host: staging-redis
+        port: 6379
+        timeout: 10
+      services_base_url: "https://staging.splunk-mcp.com"
+      
+    production:
+      database:
+        host: prod-postgres
+        port: 5432
+        database: splunk_mcp_prod
+        user: splunk_mcp_user
+        timeout: 20
+      redis:
+        host: prod-redis
+        port: 6379
+        timeout: 15
+      services_base_url: "https://splunk-mcp.com"
+
+  # Service definitions with health check configurations
+  services:
+    - name: "API Gateway"
+      port: 8000
+      health_endpoint: "/health"
+      critical: true
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "NLP Engine"
+      port: 8001
+      health_endpoint: "/health"
+      critical: true
+      timeout: 15
+      expected_response_time: 3.0
+      
+    - name: "Visualization Service"
+      port: 8002
+      health_endpoint: "/health" 
+      critical: true
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Alert Manager"
+      port: 8003
+      health_endpoint: "/health"
+      critical: true
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Slack Bot Service"
+      port: 8004
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Teams Bot Service" 
+      port: 8005
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Email Service"
+      port: 8006
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Webhook Service"
+      port: 8007
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "BI Integration Service"
+      port: 8008
+      health_endpoint: "/health"
+      critical: false
+      timeout: 15
+      expected_response_time: 3.0
+      
+    - name: "PDF Export Service"
+      port: 8009
+      health_endpoint: "/health"
+      critical: false
+      timeout: 20
+      expected_response_time: 5.0
+      
+    - name: "PowerPoint Export Service"
+      port: 8011
+      health_endpoint: "/health"
+      critical: false
+      timeout: 25
+      expected_response_time: 5.0
+      
+    - name: "HTML Report Service"
+      port: 8012
+      health_endpoint: "/health"
+      critical: false
+      timeout: 15
+      expected_response_time: 3.0
+      
+    - name: "Word Export Service"
+      port: 8013
+      health_endpoint: "/health"
+      critical: false
+      timeout: 20
+      expected_response_time: 5.0
+      
+    - name: "CSV Export Service"
+      port: 8014
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "JSON/XML Export Service"
+      port: 8015
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Secure Sharing Service"
+      port: 8016
+      health_endpoint: "/health"
+      critical: false
+      timeout: 10
+      expected_response_time: 2.0
+      
+    - name: "Frontend"
+      port: 3000
+      health_endpoint: "/"
+      critical: true
+      timeout: 10
+      expected_response_time: 1.0
+
+  # Critical API endpoints to validate
+  api_endpoints:
+    - name: "API Documentation"
+      path: "/docs"
+      method: "GET"
+      expected_status: 200
+      timeout: 10
+      
+    - name: "OpenAPI Specification"
+      path: "/openapi.json"
+      method: "GET"
+      expected_status: 200
+      timeout: 5
+      
+    - name: "Health Check API"
+      path: "/api/v1/health"
+      method: "GET"
+      expected_status: 200
+      timeout: 5
+      
+    - name: "Authentication Status"
+      path: "/api/v1/auth/status"
+      method: "GET"
+      expected_status: 401  # Should require authentication
+      timeout: 5
+
+  # Database validation checks
+  database_checks:
+    - name: "Connection Test"
+      query: "SELECT 1"
+      expected_result: 1
+      
+    - name: "Version Check"
+      query: "SELECT version()"
+      validation: "contains"
+      expected: "PostgreSQL"
+      
+    - name: "Schema Validation"
+      query: |
+        SELECT COUNT(*) 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+      validation: "greater_than"
+      expected: 5
+
+  # Redis validation checks  
+  redis_checks:
+    - name: "Ping Test"
+      command: "PING"
+      expected: "PONG"
+      
+    - name: "Set/Get Test"
+      commands:
+        - ["SET", "test_key", "test_value"]
+        - ["GET", "test_key"]
+        - ["DEL", "test_key"]
+      expected: ["OK", "test_value", 1]
+
+  # Kubernetes manifest validation
+  kubernetes_validation:
+    required_directories:
+      - "deployments"
+      - "services" 
+      - "configmaps"
+      - "secrets"
+      - "namespaces"
+      - "rbac"
+      - "network-policies"
+      - "hpa"
+      - "ingress"
+      - "storage"
+      
+    required_files:
+      - "infrastructure/kubernetes/README.md"
+      
+    manifest_validation:
+      - name: "Service Deployments"
+        pattern: "deployments/*.yaml"
+        minimum_count: 15
+        
+      - name: "Service Configurations"
+        pattern: "services/*.yaml" 
+        minimum_count: 15
+        
+      - name: "ConfigMaps"
+        pattern: "configmaps/*.yaml"
+        minimum_count: 5
+
+  # Documentation validation
+  documentation_validation:
+    required_files:
+      - "README.md"
+      - "CLAUDE.md"
+      - "PLANNING.md" 
+      - "TASKS.md"
+      - "docs/project/completion-summary.md"
+      - "docs/operations/deployment-handoff.md"
+      
+    service_documentation:
+      required_per_service:
+        - "README.md"
+        - "CLAUDE.md"
+      optional_per_service:
+        - "TASKS.md"
+        - "Dockerfile"
+        - "docker-compose.yml"
+
+  # Environment variable validation
+  environment_validation:
+    required_global:
+      - "DATABASE_URL"
+      - "REDIS_URL"
+      - "JWT_SECRET_KEY"
+      - "ENVIRONMENT"
+      
+    required_for_nlp:
+      - "OPENAI_API_KEY"
+      - "ANTHROPIC_API_KEY"
+      
+    required_for_integrations:
+      - "SLACK_BOT_TOKEN"
+      - "TEAMS_APP_ID"
+      - "SMTP_HOST"
+      - "SMTP_USER"
+      
+    security_sensitive:
+      - "JWT_SECRET_KEY"
+      - "POSTGRES_PASSWORD"
+      - "REDIS_PASSWORD"
+
+  # Performance benchmarks
+  performance_benchmarks:
+    api_response_time:
+      warning_threshold: 3.0  # seconds
+      critical_threshold: 5.0  # seconds
+      
+    database_query_time:
+      warning_threshold: 1.0  # seconds
+      critical_threshold: 2.0  # seconds
+      
+    redis_operation_time:
+      warning_threshold: 0.1  # seconds
+      critical_threshold: 0.5  # seconds
+
+  # Security validation
+  security_validation:
+    ssl_requirements:
+      production: true
+      staging: true
+      development: false
+      
+    authentication_requirements:
+      jwt_expiration_max: 3600  # 1 hour
+      password_min_length: 8
+      
+    network_security:
+      cors_origins_restricted: true
+      rate_limiting_enabled: true
+
+# Reporting configuration
+reporting:
+  output_formats:
+    - "json"
+    - "html"
+    - "text"
+    
+  include_details: true
+  include_recommendations: true
+  
+  thresholds:
+    success_rate_warning: 90
+    success_rate_critical: 80
