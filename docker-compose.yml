@@ -6,9 +6,9 @@ services:
     image: postgres:15-alpine
     container_name: splunk-mcp-postgres
     environment:
-      POSTGRES_DB: splunk_mcp
-      POSTGRES_USER: splunk_mcp_user
-      POSTGRES_PASSWORD: splunk_mcp_password
+      POSTGRES_DB: ${POSTGRES_DB:-splunk_mcp}
+      POSTGRES_USER: ${POSTGRES_USER:-splunk_mcp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_123}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -26,7 +26,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: splunk-mcp-redis
-    command: redis-server --appendonly yes --requirepass redis_password
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
     volumes:
       - redis_data:/data
       - ./infrastructure/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
@@ -47,10 +47,10 @@ services:
       dockerfile: Dockerfile
     container_name: splunk-mcp-api-gateway
     environment:
-      - DATABASE_URL=postgresql://splunk_mcp_user:splunk_mcp_password@postgres:5432/splunk_mcp
-      - REDIS_URL=redis://:redis_password@redis:6379/0
-      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production
-      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-splunk_mcp_user}:${POSTGRES_PASSWORD:-dev_password_123}@postgres:5432/${POSTGRES_DB:-splunk_mcp}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-not-for-production-use-only}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
       - "8000:8000"
     depends_on:
@@ -73,8 +73,8 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - REDIS_URL=redis://:redis_password@redis:6379/1
-      - ENVIRONMENT=development
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/1
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
       - "8001:8000"
     depends_on:
@@ -87,53 +87,6 @@ services:
       - ./shared:/app/shared
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  spl-translator:
-    build:
-      context: ./services/spl-translator
-      dockerfile: Dockerfile
-    container_name: splunk-mcp-spl-translator
-    environment:
-      - DATABASE_URL=postgresql://splunk_mcp_user:splunk_mcp_password@postgres:5432/splunk_mcp
-      - REDIS_URL=redis://:redis_password@redis:6379/2
-      - ENVIRONMENT=development
-    ports:
-      - "8002:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - splunk-mcp-network
-    volumes:
-      - ./services/spl-translator:/app
-      - ./shared:/app/shared
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-  access-control:
-    build:
-      context: ./services/access-control
-      dockerfile: Dockerfile
-    container_name: splunk-mcp-access-control
-    environment:
-      - DATABASE_URL=postgresql://splunk_mcp_user:splunk_mcp_password@postgres:5432/splunk_mcp
-      - REDIS_URL=redis://:redis_password@redis:6379/3
-      - SPLUNK_HOST=${SPLUNK_HOST:-}
-      - SPLUNK_TOKEN=${SPLUNK_TOKEN:-}
-      - ENVIRONMENT=development
-    ports:
-      - "8003:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - splunk-mcp-network
-    volumes:
-      - ./services/access-control:/app
-      - ./shared:/app/shared
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   visualization:
     build:
@@ -141,11 +94,11 @@ services:
       dockerfile: Dockerfile
     container_name: splunk-mcp-visualization
     environment:
-      - DATABASE_URL=postgresql://splunk_mcp_user:splunk_mcp_password@postgres:5432/splunk_mcp
-      - REDIS_URL=redis://:redis_password@redis:6379/4
-      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-splunk_mcp_user}:${POSTGRES_PASSWORD:-dev_password_123}@postgres:5432/${POSTGRES_DB:-splunk_mcp}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/2
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
-      - "8004:8000"
+      - "8002:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,15 +117,15 @@ services:
       dockerfile: Dockerfile
     container_name: splunk-mcp-alert-manager
     environment:
-      - DATABASE_URL=postgresql://splunk_mcp_user:splunk_mcp_password@postgres:5432/splunk_mcp
-      - REDIS_URL=redis://:redis_password@redis:6379/5
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-splunk_mcp_user}:${POSTGRES_PASSWORD:-dev_password_123}@postgres:5432/${POSTGRES_DB:-splunk_mcp}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/3
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - ENVIRONMENT=development
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
-      - "8005:8000"
+      - "8003:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,7 +179,7 @@ services:
     image: rediscommander/redis-commander:latest
     container_name: splunk-mcp-redis-commander
     environment:
-      - REDIS_HOSTS=local:redis:6379:5:redis_password
+      - REDIS_HOSTS=local:redis:6379:5:${REDIS_PASSWORD:-redis_dev_password}
     ports:
       - "8081:8081"
     depends_on:

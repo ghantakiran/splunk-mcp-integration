@@ -41,7 +41,7 @@ make clean                         # Clean containers and volumes
 - **BI Integration**: 8008, **PDF Export**: 8009
 - **PowerPoint Export**: 8011, **HTML Report**: 8012
 - **Word Export**: 8013, **CSV Export**: 8014
-- **JSON/XML Export**: 8015, **Report Scheduling**: 8015
+- **JSON/XML Export**: 8015, **Report Scheduling**: 8010
 - **Secure Sharing**: 8016
 - **Frontend**: 3000 (React UI)
 - **PostgreSQL**: 5432, **Redis**: 6379
