@@ -1,0 +1,667 @@
+# Disaster Recovery Configuration
+# ==============================
+# Comprehensive configuration for the Splunk MCP Integration platform
+# disaster recovery orchestration system
+
+# Recovery System Settings
+recovery_settings:
+  # Maximum number of concurrent recovery operations
+  max_concurrent_recoveries: 3
+  
+  # Default recovery time objective (RTO) in hours
+  default_rto_hours: 4
+  
+  # Default recovery point objective (RPO) in minutes
+  default_rpo_minutes: 15
+  
+  # Validation timeout in minutes
+  validation_timeout_minutes: 30
+  
+  # Rollback timeout in minutes
+  rollback_timeout_minutes: 15
+  
+  # Auto-retry failed recoveries
+  auto_retry_enabled: true
+  auto_retry_attempts: 3
+  auto_retry_delay_minutes: 10
+  
+  # Recovery plan validation
+  validate_plans_before_execution: true
+  require_approval_for_production: true
+  
+  # Performance thresholds
+  performance_thresholds:
+    max_backup_duration_minutes: 120
+    max_restore_duration_minutes: 240
+    min_throughput_mbps: 10
+    max_acceptable_failure_rate: 0.05  # 5%
+
+# Environment Configurations
+environments:
+  # Production Environment
+  production:
+    name: "Production Environment"
+    description: "Primary production environment for Splunk MCP"
+    
+    # Kubernetes configuration
+    kubernetes:
+      namespace: "splunk-mcp-prod"
+      kubeconfig_path: "/etc/kubernetes/prod-kubeconfig"
+      context: "splunk-mcp-production"
+    
+    # Backup configuration
+    backup:
+      primary_location: "s3://splunk-mcp-backups-prod/production"
+      secondary_location: "gcs://splunk-mcp-dr-backups/production"
+      retention_days: 365
+    
+    # Network configuration
+    network:
+      api_url: "https://api.splunk-mcp.com"
+      internal_network: "10.0.0.0/8"
+      load_balancer: "prod-lb.splunk-mcp.com"
+    
+    # Database configuration
+    database:
+      primary_url: "postgresql://prod-user:${DB_PASSWORD}@prod-db-cluster:5432/splunk_mcp"
+      replica_url: "postgresql://prod-user:${DB_PASSWORD}@prod-db-replica:5432/splunk_mcp"
+      backup_location: "s3://splunk-mcp-db-backups/production"
+    
+    # Redis configuration
+    redis:
+      primary_url: "redis://prod-redis-cluster:6379/0"
+      sentinel_urls: ["redis://prod-redis-sentinel-1:26379", "redis://prod-redis-sentinel-2:26379", "redis://prod-redis-sentinel-3:26379"]
+      backup_location: "s3://splunk-mcp-redis-backups/production"
+    
+    # Recovery validation
+    validation:
+      health_check_url: "https://api.splunk-mcp.com/health"
+      readiness_check_url: "https://api.splunk-mcp.com/ready"
+      metrics_url: "https://api.splunk-mcp.com/metrics"
+      expected_services: ["api-gateway", "nlp-engine", "visualization", "alert-manager", "frontend"]
+      validation_timeout_seconds: 300
+    
+    # SLA requirements
+    sla:
+      rto_hours: 4
+      rpo_minutes: 15
+      availability_percentage: 99.9
+      max_downtime_minutes_per_month: 43  # 99.9% availability
+  
+  # Staging Environment
+  staging:
+    name: "Staging Environment"
+    description: "Pre-production staging environment"
+    
+    kubernetes:
+      namespace: "splunk-mcp-staging"
+      kubeconfig_path: "/etc/kubernetes/staging-kubeconfig"
+      context: "splunk-mcp-staging"
+    
+    backup:
+      primary_location: "s3://splunk-mcp-backups-staging/staging"
+      retention_days: 90
+    
+    network:
+      api_url: "https://staging-api.splunk-mcp.com"
+      internal_network: "172.16.0.0/12"
+      load_balancer: "staging-lb.splunk-mcp.com"
+    
+    database:
+      primary_url: "postgresql://staging-user:${DB_PASSWORD}@staging-db:5432/splunk_mcp_staging"
+      backup_location: "s3://splunk-mcp-db-backups/staging"
+    
+    redis:
+      primary_url: "redis://staging-redis:6379/0"
+      backup_location: "s3://splunk-mcp-redis-backups/staging"
+    
+    validation:
+      health_check_url: "https://staging-api.splunk-mcp.com/health"
+      readiness_check_url: "https://staging-api.splunk-mcp.com/ready"
+      metrics_url: "https://staging-api.splunk-mcp.com/metrics"
+      expected_services: ["api-gateway", "nlp-engine", "visualization", "alert-manager", "frontend"]
+      validation_timeout_seconds: 180
+    
+    sla:
+      rto_hours: 2
+      rpo_minutes: 30
+      availability_percentage: 99.0
+  
+  # Test Environment
+  test:
+    name: "Test Environment"
+    description: "Isolated test environment for DR testing"
+    
+    kubernetes:
+      namespace: "splunk-mcp-test"
+      kubeconfig_path: "/etc/kubernetes/test-kubeconfig"
+      context: "splunk-mcp-test"
+    
+    backup:
+      primary_location: "s3://splunk-mcp-backups-test/test"
+      retention_days: 30
+    
+    network:
+      api_url: "http://test-api.splunk-mcp.local"
+      internal_network: "192.168.0.0/16"
+    
+    database:
+      primary_url: "postgresql://test-user:test@test-db:5432/splunk_mcp_test"
+      backup_location: "s3://splunk-mcp-db-backups/test"
+    
+    redis:
+      primary_url: "redis://test-redis:6379/0"
+      backup_location: "s3://splunk-mcp-redis-backups/test"
+    
+    validation:
+      health_check_url: "http://test-api.splunk-mcp.local/health"
+      expected_services: ["api-gateway", "nlp-engine", "visualization"]
+      validation_timeout_seconds: 120
+    
+    sla:
+      rto_hours: 1
+      rpo_minutes: 60
+
+# Service Definitions and Dependencies
+services:
+  # Core infrastructure services
+  postgres:
+    name: "PostgreSQL Database"
+    priority: 1
+    type: "database"
+    namespace_template: "${environment}"
+    deployment_name: "postgres"
+    health_check:
+      endpoint: "/health"
+      timeout_seconds: 30
+    dependencies: []
+    startup_time_seconds: 60
+    
+  redis:
+    name: "Redis Cache"
+    priority: 2
+    type: "cache"
+    namespace_template: "${environment}"
+    deployment_name: "redis"
+    health_check:
+      endpoint: "/health"
+      timeout_seconds: 15
+    dependencies: []
+    startup_time_seconds: 30
+  
+  # Application services
+  api-gateway:
+    name: "API Gateway"
+    priority: 3
+    type: "application"
+    namespace_template: "splunk-mcp-${environment}"
+    deployment_name: "api-gateway"
+    service_name: "api-gateway"
+    health_check:
+      endpoint: "/health"
+      expected_status: 200
+      timeout_seconds: 30
+    readiness_check:
+      endpoint: "/ready"
+      expected_status: 200
+      timeout_seconds: 10
+    dependencies: ["postgres", "redis"]
+    startup_time_seconds: 45
+    scaling:
+      min_replicas: 2
+      max_replicas: 10
+    
+  nlp-engine:
+    name: "NLP Engine"
+    priority: 4
+    type: "application"
+    namespace_template: "splunk-mcp-${environment}"
+    deployment_name: "nlp-engine"
+    service_name: "nlp-engine"
+    health_check:
+      endpoint: "/health"
+      expected_status: 200
+      timeout_seconds: 45
+    dependencies: ["postgres", "redis", "api-gateway"]
+    startup_time_seconds: 60
+    scaling:
+      min_replicas: 2
+      max_replicas: 8
+    
+  visualization:
+    name: "Visualization Service"
+    priority: 5
+    type: "application"
+    namespace_template: "splunk-mcp-${environment}"
+    deployment_name: "visualization"
+    service_name: "visualization"
+    health_check:
+      endpoint: "/health"
+      expected_status: 200
+      timeout_seconds: 30
+    dependencies: ["postgres", "redis", "api-gateway"]
+    startup_time_seconds: 40
+    scaling:
+      min_replicas: 2
+      max_replicas: 6
+    
+  alert-manager:
+    name: "Alert Manager"
+    priority: 6
+    type: "application"
+    namespace_template: "splunk-mcp-${environment}"
+    deployment_name: "alert-manager"
+    service_name: "alert-manager"
+    health_check:
+      endpoint: "/health"
+      expected_status: 200
+      timeout_seconds: 30
+    dependencies: ["postgres", "redis", "api-gateway"]
+    startup_time_seconds: 35
+    scaling:
+      min_replicas: 2
+      max_replicas: 4
+    
+  frontend:
+    name: "Frontend Application"
+    priority: 7
+    type: "frontend"
+    namespace_template: "splunk-mcp-${environment}"
+    deployment_name: "frontend"
+    service_name: "frontend"
+    health_check:
+      endpoint: "/health"
+      expected_status: 200
+      timeout_seconds: 20
+    dependencies: ["api-gateway"]
+    startup_time_seconds: 30
+    scaling:
+      min_replicas: 3
+      max_replicas: 12
+
+# Recovery Plan Templates
+recovery_plan_templates:
+  # Full System Recovery
+  full_system_recovery:
+    name: "Full System Recovery"
+    description: "Complete system recovery from total failure"
+    recovery_type: "FULL_SYSTEM"
+    estimated_rto_hours: 4
+    estimated_rpo_minutes: 15
+    
+    steps:
+      - name: "Stop All Services"
+        type: "kubernetes_operation"
+        operation: "scale_down"
+        targets: ["all"]
+        timeout_minutes: 10
+        
+      - name: "Restore Database"
+        type: "database_restore"
+        source: "latest_backup"
+        target: "primary"
+        timeout_minutes: 60
+        validation_required: true
+        
+      - name: "Restore Redis"
+        type: "redis_restore"
+        source: "latest_backup"
+        target: "primary"
+        timeout_minutes: 20
+        validation_required: true
+        
+      - name: "Restore Application Data"
+        type: "application_restore"
+        source: "latest_backup"
+        timeout_minutes: 30
+        
+      - name: "Restore Kubernetes Resources"
+        type: "kubernetes_restore"
+        source: "latest_backup"
+        timeout_minutes: 15
+        
+      - name: "Start Services in Order"
+        type: "service_startup"
+        order: "dependency_order"
+        timeout_minutes: 20
+        
+      - name: "Validate System Health"
+        type: "validation"
+        tests: ["health_check", "integration_test", "smoke_test"]
+        timeout_minutes: 30
+    
+    validation_tests:
+      - "api_health_check"
+      - "database_connectivity"
+      - "redis_connectivity"
+      - "service_discovery"
+      - "end_to_end_test"
+    
+    rollback_plan:
+      - name: "Rollback to Previous Backup"
+        type: "full_restore"
+        source: "previous_backup"
+  
+  # Database Only Recovery
+  database_recovery:
+    name: "Database Recovery"
+    description: "Database-only recovery for data corruption issues"
+    recovery_type: "DATABASE_ONLY"
+    estimated_rto_hours: 1
+    estimated_rpo_minutes: 15
+    
+    steps:
+      - name: "Stop Database-Dependent Services"
+        type: "kubernetes_operation"
+        operation: "scale_down"
+        targets: ["api-gateway", "nlp-engine", "visualization", "alert-manager"]
+        timeout_minutes: 5
+        
+      - name: "Create Database Backup"
+        type: "database_backup"
+        target: "current_state"
+        timeout_minutes: 30
+        
+      - name: "Restore Database"
+        type: "database_restore"
+        source: "latest_backup"
+        target: "primary"
+        timeout_minutes: 45
+        validation_required: true
+        
+      - name: "Restart Database-Dependent Services"
+        type: "kubernetes_operation"
+        operation: "scale_up"
+        targets: ["api-gateway", "nlp-engine", "visualization", "alert-manager"]
+        timeout_minutes: 10
+        
+      - name: "Validate Database Recovery"
+        type: "validation"
+        tests: ["database_connectivity", "data_integrity"]
+        timeout_minutes: 15
+    
+    validation_tests:
+      - "database_connectivity"
+      - "data_integrity_check"
+      - "api_health_check"
+  
+  # Application Recovery
+  application_recovery:
+    name: "Application Recovery"
+    description: "Application-only recovery for service issues"
+    recovery_type: "APPLICATION_ONLY"
+    estimated_rto_hours: 0.5
+    estimated_rpo_minutes: 5
+    
+    steps:
+      - name: "Stop Affected Services"
+        type: "kubernetes_operation"
+        operation: "scale_down"
+        targets: ["${affected_services}"]
+        timeout_minutes: 3
+        
+      - name: "Restore Application Configurations"
+        type: "config_restore"
+        source: "latest_backup"
+        timeout_minutes: 10
+        
+      - name: "Restart Affected Services"
+        type: "kubernetes_operation"
+        operation: "scale_up"
+        targets: ["${affected_services}"]
+        timeout_minutes: 10
+        
+      - name: "Validate Application Recovery"
+        type: "validation"
+        tests: ["service_health", "integration_test"]
+        timeout_minutes: 15
+    
+    validation_tests:
+      - "service_health_check"
+      - "api_integration_test"
+
+# Notification Configuration
+notifications:
+  # Notification channels
+  channels:
+    email:
+      enabled: true
+      smtp_server: "smtp.company.com"
+      smtp_port: 587
+      username: "disaster-recovery@company.com"
+      password_env: "SMTP_PASSWORD"
+      tls_enabled: true
+      
+    slack:
+      enabled: true
+      webhook_url_env: "SLACK_WEBHOOK_URL"
+      channel: "#disaster-recovery"
+      username: "DR-Bot"
+      
+    pagerduty:
+      enabled: true
+      integration_key_env: "PAGERDUTY_INTEGRATION_KEY"
+      severity: "critical"
+      
+    teams:
+      enabled: false
+      webhook_url_env: "TEAMS_WEBHOOK_URL"
+  
+  # Notification rules
+  rules:
+    recovery_started:
+      channels: ["email", "slack"]
+      template: "recovery_started"
+      
+    recovery_completed:
+      channels: ["email", "slack"]
+      template: "recovery_completed"
+      
+    recovery_failed:
+      channels: ["email", "slack", "pagerduty"]
+      template: "recovery_failed"
+      escalation_delay_minutes: 15
+      
+    validation_failed:
+      channels: ["email", "slack"]
+      template: "validation_failed"
+      
+    sla_breach:
+      channels: ["email", "slack", "pagerduty"]
+      template: "sla_breach"
+      
+    test_failure:
+      channels: ["email"]
+      template: "test_failure"
+  
+  # Message templates
+  templates:
+    recovery_started: |
+      🔄 **Disaster Recovery Started**
+      
+      Recovery ID: {recovery_id}
+      Environment: {environment}
+      Recovery Type: {recovery_type}
+      Estimated RTO: {estimated_rto}
+      
+      Started at: {start_time}
+      
+    recovery_completed: |
+      ✅ **Disaster Recovery Completed Successfully**
+      
+      Recovery ID: {recovery_id}
+      Environment: {environment}
+      Recovery Type: {recovery_type}
+      Actual RTO: {actual_rto}
+      
+      Services Recovered: {services_recovered}
+      Validation Tests: {validation_tests_passed}/{validation_tests_total}
+      
+    recovery_failed: |
+      🚨 **CRITICAL: Disaster Recovery Failed**
+      
+      Recovery ID: {recovery_id}
+      Environment: {environment}
+      Error: {error_message}
+      
+      Manual intervention required immediately!
+      
+    validation_failed: |
+      ⚠️ **Recovery Validation Failed**
+      
+      Recovery ID: {recovery_id}
+      Failed Tests: {failed_tests}
+      
+      Please investigate and take corrective action.
+      
+    sla_breach: |
+      📊 **SLA Breach Detected**
+      
+      Environment: {environment}
+      Metric: {metric}
+      Current Value: {current_value}
+      SLA Target: {sla_target}
+      
+      Immediate attention required!
+
+# Security Configuration
+security:
+  # Encryption settings
+  encryption:
+    at_rest:
+      enabled: true
+      algorithm: "AES-256-GCM"
+      key_rotation_days: 90
+      
+    in_transit:
+      enabled: true
+      tls_version: "1.3"
+      cipher_suites: ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"]
+  
+  # Access control
+  access_control:
+    rbac_enabled: true
+    require_mfa: true
+    session_timeout_minutes: 30
+    
+    roles:
+      admin:
+        permissions: ["create_plan", "execute_recovery", "delete_plan", "view_all"]
+        users: ["admin@company.com"]
+        
+      operator:
+        permissions: ["execute_recovery", "view_all", "test_plan"]
+        users: ["ops-team@company.com"]
+        
+      viewer:
+        permissions: ["view_all"]
+        users: ["monitoring@company.com"]
+  
+  # Audit logging
+  audit:
+    enabled: true
+    log_level: "INFO"
+    retention_days: 1095  # 3 years
+    fields: ["timestamp", "user", "action", "resource", "result", "ip_address"]
+
+# Performance and Monitoring
+monitoring:
+  # Metrics collection
+  metrics:
+    enabled: true
+    collection_interval_seconds: 30
+    retention_days: 90
+    
+    custom_metrics:
+      - name: "recovery_duration_seconds"
+        type: "histogram"
+        description: "Time taken for recovery operations"
+        
+      - name: "backup_size_bytes"
+        type: "gauge"
+        description: "Size of backup files"
+        
+      - name: "validation_test_success_rate"
+        type: "gauge"
+        description: "Success rate of validation tests"
+  
+  # Health checks
+  health_checks:
+    enabled: true
+    interval_seconds: 60
+    timeout_seconds: 30
+    
+    endpoints:
+      - name: "backup_system"
+        url: "http://backup-system:8080/health"
+        
+      - name: "storage_backend"
+        url: "http://storage-backend:8080/health"
+  
+  # Alerting thresholds
+  alerts:
+    recovery_duration_threshold_minutes: 300  # 5 hours
+    backup_failure_threshold: 2  # consecutive failures
+    validation_failure_threshold: 1
+    storage_utilization_threshold: 0.85  # 85%
+
+# Cost Management
+cost_management:
+  # Budget limits
+  budgets:
+    monthly_storage_cost_usd: 1000
+    monthly_compute_cost_usd: 500
+    
+  # Cost optimization
+  optimization:
+    auto_cleanup_enabled: true
+    storage_lifecycle_enabled: true
+    unused_resource_detection: true
+    
+    storage_lifecycle:
+      - days: 30
+        storage_class: "STANDARD_IA"
+      - days: 90
+        storage_class: "GLACIER"
+      - days: 365
+        storage_class: "DEEP_ARCHIVE"
+
+# Integration Settings
+integrations:
+  # External systems
+  servicenow:
+    enabled: false
+    instance_url: "https://company.service-now.com"
+    username_env: "SERVICENOW_USERNAME"
+    password_env: "SERVICENOW_PASSWORD"
+    
+  jira:
+    enabled: false
+    server_url: "https://company.atlassian.net"
+    username_env: "JIRA_USERNAME"
+    api_token_env: "JIRA_API_TOKEN"
+    
+  splunk:
+    enabled: true
+    hec_url: "https://splunk.company.com:8088"
+    hec_token_env: "SPLUNK_HEC_TOKEN"
+    index: "disaster_recovery"
+
+# Testing Configuration
+testing:
+  # Test schedules
+  schedules:
+    daily_validation: "0 6 * * *"  # 6 AM daily
+    weekly_comprehensive: "0 2 * * 0"  # 2 AM Sunday
+    monthly_compliance: "0 1 1 * *"  # 1 AM on 1st of month
+    
+  # Test environments
+  test_environments:
+    - "test"
+    - "staging"
+    
+  # Test data management
+  test_data:
+    auto_generate: true
+    cleanup_after_test: true
+    anonymize_production_data: true
