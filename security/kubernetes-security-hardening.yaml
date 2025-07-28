@@ -1,0 +1,690 @@
+# Kubernetes Security Hardening Configuration
+# Comprehensive security configurations for Splunk MCP Integration platform
+
+---
+# Pod Security Standards - Restricted Profile
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: splunk-mcp-prod
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+
+---
+# Network Policy - Default Deny All
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: splunk-mcp-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Network Policy - API Gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-policy
+  namespace: splunk-mcp-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS outbound
+    - protocol: TCP
+      port: 53   # DNS
+    - protocol: UDP
+      port: 53   # DNS
+
+---
+# Network Policy - NLP Engine
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nlp-engine-policy
+  namespace: splunk-mcp-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: nlp-engine
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8001
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # OpenAI/Anthropic APIs
+
+---
+# Network Policy - Database
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  namespace: splunk-mcp-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Network Policy - Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: splunk-mcp-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Security Context Constraints
+apiVersion: v1
+kind: SecurityContextConstraints
+metadata:
+  name: splunk-mcp-restricted
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+  - max: 65535
+readOnlyRootFilesystem: true
+requiredDropCapabilities:
+- ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seccompProfiles:
+- runtime/default
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+  - max: 65535
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+
+---
+# RBAC - Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: splunk-mcp-service-account
+  namespace: splunk-mcp-prod
+automountServiceAccountToken: false
+
+---
+# RBAC - Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: splunk-mcp-prod
+  name: splunk-mcp-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames: ["app-secrets"]
+
+---
+# RBAC - RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: splunk-mcp-role-binding
+  namespace: splunk-mcp-prod
+subjects:
+- kind: ServiceAccount
+  name: splunk-mcp-service-account
+  namespace: splunk-mcp-prod
+roleRef:
+  kind: Role
+  name: splunk-mcp-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Pod Disruption Budget - API Gateway
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+  namespace: splunk-mcp-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+
+---
+# Pod Disruption Budget - NLP Engine
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nlp-engine-pdb
+  namespace: splunk-mcp-prod
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: nlp-engine
+
+---
+# Resource Quota
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: splunk-mcp-quota
+  namespace: splunk-mcp-prod
+spec:
+  hard:
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    persistentvolumeclaims: "10"
+    secrets: "10"
+    configmaps: "20"
+    services: "25"
+
+---
+# Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: splunk-mcp-limits
+  namespace: splunk-mcp-prod
+spec:
+  limits:
+  - default:
+      cpu: "500m"
+      memory: "1Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "256Mi"
+    type: Container
+  - max:
+      cpu: "2"
+      memory: "4Gi"
+    min:
+      cpu: "50m"
+      memory: "128Mi"
+    type: Container
+
+---
+# Certificate Issuer - Let's Encrypt
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: security@company.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+
+---
+# Secret - TLS Certificate
+apiVersion: v1
+kind: Secret
+metadata:
+  name: splunk-mcp-tls
+  namespace: splunk-mcp-prod
+type: kubernetes.io/tls
+# Note: Certificate will be automatically provisioned by cert-manager
+
+---
+# ConfigMap - Security Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-config
+  namespace: splunk-mcp-prod
+data:
+  security.yaml: |
+    authentication:
+      jwt:
+        secret_key: "${JWT_SECRET_KEY}"
+        algorithm: "HS256"
+        expire_minutes: 30
+        refresh_expire_days: 7
+      session:
+        timeout_minutes: 60
+        max_sessions_per_user: 3
+    
+    authorization:
+      rbac:
+        enabled: true
+        cache_ttl: 300
+        default_role: "user"
+      
+    password_policy:
+      min_length: 12
+      require_uppercase: true
+      require_lowercase: true
+      require_numbers: true
+      require_special_chars: true
+      max_age_days: 90
+      history_count: 12
+    
+    security_headers:
+      hsts:
+        enabled: true
+        max_age: 31536000
+        include_subdomains: true
+      csp:
+        enabled: true
+        policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+      frame_options: "DENY"
+      content_type_options: "nosniff"
+      xss_protection: "1; mode=block"
+    
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 100
+      burst_size: 200
+      whitelist_ips: []
+    
+    audit_logging:
+      enabled: true
+      log_level: "INFO"
+      include_request_body: false
+      include_response_body: false
+      retention_days: 90
+    
+    encryption:
+      at_rest:
+        enabled: true
+        algorithm: "AES-256-GCM"
+      in_transit:
+        tls_version: "1.3"
+        cipher_suites:
+          - "TLS_AES_256_GCM_SHA384"
+          - "TLS_CHACHA20_POLY1305_SHA256"
+          - "TLS_AES_128_GCM_SHA256"
+
+---
+# ConfigMap - Security Monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-monitoring-config
+  namespace: splunk-mcp-prod
+data:
+  monitoring.yaml: |
+    alerts:
+      failed_login_threshold: 5
+      suspicious_activity_threshold: 10
+      brute_force_window_minutes: 5
+      anomaly_detection_enabled: true
+    
+    compliance:
+      frameworks:
+        - "SOC2"
+        - "GDPR"
+        - "HIPAA"
+        - "ISO27001"
+        - "NIST"
+      
+      data_classification:
+        enabled: true
+        levels:
+          - "public"
+          - "internal"
+          - "confidential"
+          - "restricted"
+      
+      retention_policies:
+        audit_logs: "7_years"
+        user_data: "6_years"
+        session_data: "1_year"
+        temporary_data: "30_days"
+    
+    vulnerability_scanning:
+      enabled: true
+      schedule: "0 2 * * *"  # Daily at 2 AM
+      tools:
+        - "trivy"
+        - "clair"
+        - "snyk"
+      
+    security_benchmarks:
+      kubernetes:
+        - "CIS_Kubernetes_Benchmark"
+        - "NSA_CISA_Kubernetes_Hardening"
+      container:
+        - "CIS_Docker_Benchmark"
+        - "NIST_Container_Security"
+
+---
+# DaemonSet - Security Agent
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: security-agent
+  namespace: splunk-mcp-prod
+spec:
+  selector:
+    matchLabels:
+      app: security-agent
+  template:
+    metadata:
+      labels:
+        app: security-agent
+    spec:
+      serviceAccountName: splunk-mcp-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: security-agent
+        image: security/agent:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/security-agent
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      volumes:
+      - name: config
+        configMap:
+          name: security-monitoring-config
+      - name: tmp
+        emptyDir: {}
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+
+---
+# Admission Controller - OPA Gatekeeper Policy
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredsecuritycontext
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredSecurityContext
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            runAsNonRoot:
+              type: boolean
+            runAsUser:
+              type: integer
+            fsGroup:
+              type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredsecuritycontext
+
+        violation[{"msg": msg}] {
+            container := input.review.object.spec.containers[_]
+            not container.securityContext.runAsNonRoot
+            msg := "Container must run as non-root user"
+        }
+
+        violation[{"msg": msg}] {
+            not input.review.object.spec.securityContext.runAsNonRoot
+            msg := "Pod must run as non-root user"
+        }
+
+        violation[{"msg": msg}] {
+            container := input.review.object.spec.containers[_]
+            container.securityContext.allowPrivilegeEscalation != false
+            msg := "Container must not allow privilege escalation"
+        }
+
+---
+# OPA Gatekeeper Constraint
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredSecurityContext
+metadata:
+  name: must-run-as-nonroot
+spec:
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "DaemonSet", "StatefulSet"]
+    namespaces: ["splunk-mcp-prod"]
+  parameters:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+---
+# Service Monitor for Security Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: security-metrics
+  namespace: splunk-mcp-prod
+spec:
+  selector:
+    matchLabels:
+      app: security-agent
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    honorLabels: true
+
+---
+# Prometheus Rule for Security Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: security-alerts
+  namespace: splunk-mcp-prod
+spec:
+  groups:
+  - name: security.rules
+    rules:
+    - alert: HighFailedLoginAttempts
+      expr: increase(failed_login_attempts_total[5m]) > 5
+      for: 1m
+      labels:
+        severity: warning
+        category: security
+      annotations:
+        summary: "High number of failed login attempts detected"
+        description: "{{ $value }} failed login attempts in the last 5 minutes"
+
+    - alert: SuspiciousActivity
+      expr: increase(suspicious_activity_total[1m]) > 2
+      for: 0m
+      labels:
+        severity: critical
+        category: security
+      annotations:
+        summary: "Suspicious activity detected"
+        description: "{{ $value }} suspicious activities detected in the last minute"
+
+    - alert: UnauthorizedApiAccess
+      expr: increase(unauthorized_api_access_total[5m]) > 3
+      for: 2m
+      labels:
+        severity: warning
+        category: security
+      annotations:
+        summary: "Unauthorized API access attempts"
+        description: "{{ $value }} unauthorized API access attempts in the last 5 minutes"
+
+    - alert: SecurityConfigurationDrift
+      expr: security_configuration_drift > 0
+      for: 5m
+      labels:
+        severity: critical
+        category: security
+      annotations:
+        summary: "Security configuration drift detected"
+        description: "Security configuration has drifted from baseline"
+
+    - alert: VulnerabilityDetected
+      expr: vulnerability_count > 0
+      for: 0m
+      labels:
+        severity: high
+        category: security
+      annotations:
+        summary: "Security vulnerability detected"
+        description: "{{ $value }} security vulnerabilities detected in container images"
+
+    - alert: CertificateExpiring
+      expr: ssl_certificate_expiry_days < 30
+      for: 1h
+      labels:
+        severity: warning
+        category: security
+      annotations:
+        summary: "SSL certificate expiring soon"
+        description: "SSL certificate expires in {{ $value }} days"
