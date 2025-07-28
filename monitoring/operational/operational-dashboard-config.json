@@ -1,0 +1,424 @@
+{
+  "operational_dashboards": {
+    "platform_overview": {
+      "dashboard_id": "platform-ops-overview",
+      "title": "Platform Operations Overview",
+      "description": "Executive-level operational metrics and KPIs",
+      "refresh_interval": "30s",
+      "panels": [
+        {
+          "id": "business_metrics",
+          "title": "Business Impact Metrics",
+          "type": "stat",
+          "targets": [
+            {
+              "metric": "splunk_mcp_active_users_total",
+              "label": "Active Users (24h)"
+            },
+            {
+              "metric": "rate(splunk_mcp_queries_successful_total[24h])",
+              "label": "Successful Queries/day"
+            },
+            {
+              "metric": "splunk_mcp_dashboards_created_total",
+              "label": "Dashboards Created (24h)"
+            },
+            {
+              "metric": "splunk_mcp_user_satisfaction_score",
+              "label": "User Satisfaction Score"
+            }
+          ],
+          "thresholds": {
+            "active_users": { "warning": 100, "critical": 50 },
+            "query_success_rate": { "warning": 0.95, "critical": 0.90 },
+            "satisfaction_score": { "warning": 4.0, "critical": 3.5 }
+          }
+        },
+        {
+          "id": "operational_efficiency",
+          "title": "Operational Efficiency",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "histogram_quantile(0.95, rate(splunk_mcp_query_duration_seconds_bucket[5m]))",
+              "label": "95th Percentile Query Time"
+            },
+            {
+              "metric": "rate(splunk_mcp_incidents_total[1h])",
+              "label": "Incident Rate/hour"
+            },
+            {
+              "metric": "splunk_mcp_automation_success_rate",
+              "label": "Automation Success Rate"
+            }
+          ]
+        },
+        {
+          "id": "service_health_matrix",
+          "title": "Service Health Matrix",
+          "type": "heatmap",
+          "targets": [
+            {
+              "metric": "up{job=~\"splunk-mcp-.*\"}",
+              "label": "Service Availability"
+            }
+          ]
+        },
+        {
+          "id": "resource_utilization",
+          "title": "Resource Utilization Trends",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "avg(rate(container_cpu_usage_seconds_total{namespace=\"splunk-mcp-prod\"}[5m]))",
+              "label": "Average CPU Usage"
+            },
+            {
+              "metric": "avg(container_memory_usage_bytes{namespace=\"splunk-mcp-prod\"}) / avg(container_spec_memory_limit_bytes{namespace=\"splunk-mcp-prod\"})",
+              "label": "Memory Utilization"
+            },
+            {
+              "metric": "avg(rate(container_network_receive_bytes_total{namespace=\"splunk-mcp-prod\"}[5m]))",
+              "label": "Network I/O"
+            }
+          ]
+        }
+      ]
+    },
+    "service_operations": {
+      "dashboard_id": "service-operations",
+      "title": "Service Operations Dashboard",
+      "description": "Detailed service-level operational metrics",
+      "refresh_interval": "15s",
+      "panels": [
+        {
+          "id": "service_status_overview",
+          "title": "Service Status Overview",
+          "type": "table",
+          "targets": [
+            {
+              "metric": "up{job=~\"splunk-mcp-.*\"}",
+              "format": "table",
+              "columns": ["service", "status", "uptime", "last_restart"]
+            }
+          ]
+        },
+        {
+          "id": "request_flow_analysis",
+          "title": "Request Flow Analysis",
+          "type": "sankey",
+          "targets": [
+            {
+              "metric": "rate(http_requests_total{job=\"api-gateway\"}[5m])",
+              "label": "API Gateway → Services"
+            }
+          ]
+        },
+        {
+          "id": "error_rate_trending",
+          "title": "Error Rate Trending",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m])",
+              "label": "5xx Error Rate by Service"
+            },
+            {
+              "metric": "rate(http_requests_total{status=~\"4..\"}[5m]) / rate(http_requests_total[5m])",
+              "label": "4xx Error Rate by Service"
+            }
+          ],
+          "alert_rules": [
+            {
+              "condition": "5xx_error_rate > 0.05",
+              "severity": "critical",
+              "message": "High 5xx error rate detected"
+            }
+          ]
+        },
+        {
+          "id": "performance_breakdown",
+          "title": "Performance Breakdown by Endpoint",
+          "type": "heatmap",
+          "targets": [
+            {
+              "metric": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+              "label": "95th Percentile Response Time"
+            }
+          ]
+        }
+      ]
+    },
+    "user_experience": {
+      "dashboard_id": "user-experience",
+      "title": "User Experience Monitoring",
+      "description": "User-centric operational metrics and experience indicators",
+      "refresh_interval": "60s",
+      "panels": [
+        {
+          "id": "user_journey_funnel",
+          "title": "User Journey Funnel",
+          "type": "funnel",
+          "targets": [
+            {
+              "metric": "rate(splunk_mcp_user_login_total[1h])",
+              "label": "User Logins"
+            },
+            {
+              "metric": "rate(splunk_mcp_queries_initiated_total[1h])",
+              "label": "Queries Started"
+            },
+            {
+              "metric": "rate(splunk_mcp_queries_successful_total[1h])",
+              "label": "Queries Completed"
+            },
+            {
+              "metric": "rate(splunk_mcp_dashboards_created_total[1h])",
+              "label": "Dashboards Created"
+            }
+          ]
+        },
+        {
+          "id": "user_satisfaction_trends",
+          "title": "User Satisfaction Trends",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "avg(splunk_mcp_user_satisfaction_score)",
+              "label": "Average Satisfaction Score"
+            },
+            {
+              "metric": "rate(splunk_mcp_feedback_negative_total[6h])",
+              "label": "Negative Feedback Rate"
+            },
+            {
+              "metric": "avg(splunk_mcp_session_duration_seconds)",
+              "label": "Average Session Duration"
+            }
+          ]
+        },
+        {
+          "id": "feature_adoption_matrix",
+          "title": "Feature Adoption Matrix",
+          "type": "heatmap",
+          "targets": [
+            {
+              "metric": "rate(splunk_mcp_feature_usage_total[24h])",
+              "label": "Feature Usage by Department"
+            }
+          ]
+        },
+        {
+          "id": "onboarding_efficiency",
+          "title": "Onboarding Efficiency",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "avg(splunk_mcp_onboarding_completion_time_seconds)",
+              "label": "Average Onboarding Time"
+            },
+            {
+              "metric": "rate(splunk_mcp_onboarding_completed_total[24h])",
+              "label": "Onboarding Completions"
+            },
+            {
+              "metric": "splunk_mcp_onboarding_abandonment_rate",
+              "label": "Onboarding Abandonment Rate"
+            }
+          ]
+        }
+      ]
+    },
+    "operational_intelligence": {
+      "dashboard_id": "operational-intelligence",
+      "title": "Operational Intelligence",
+      "description": "AI-powered operational insights and predictive analytics",
+      "refresh_interval": "300s",
+      "panels": [
+        {
+          "id": "capacity_forecasting",
+          "title": "Capacity Forecasting",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "predict_linear(avg(rate(container_cpu_usage_seconds_total[1h]))[24h:1h], 7*24*3600)",
+              "label": "Predicted CPU Usage (7 days)"
+            },
+            {
+              "metric": "predict_linear(avg(container_memory_usage_bytes)[24h:1h], 7*24*3600)",
+              "label": "Predicted Memory Usage (7 days)"
+            }
+          ]
+        },
+        {
+          "id": "anomaly_detection",
+          "title": "Anomaly Detection",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "anomaly_detector_score{service=~\"splunk-mcp-.*\"}",
+              "label": "Anomaly Score by Service"
+            }
+          ],
+          "alert_rules": [
+            {
+              "condition": "anomaly_score > 0.8",
+              "severity": "warning",
+              "message": "Anomalous behavior detected"
+            }
+          ]
+        },
+        {
+          "id": "cost_optimization",
+          "title": "Cost Optimization Insights",
+          "type": "table",
+          "targets": [
+            {
+              "metric": "kubernetes_resource_cost_per_service",
+              "format": "table"
+            }
+          ]
+        },
+        {
+          "id": "sla_compliance_tracking",
+          "title": "SLA Compliance Tracking",
+          "type": "stat",
+          "targets": [
+            {
+              "metric": "sla_availability_percentage",
+              "label": "Availability SLA"
+            },
+            {
+              "metric": "sla_response_time_compliance",
+              "label": "Response Time SLA"
+            },
+            {
+              "metric": "sla_error_rate_compliance",
+              "label": "Error Rate SLA"
+            }
+          ]
+        }
+      ]
+    },
+    "security_operations": {
+      "dashboard_id": "security-operations",
+      "title": "Security Operations Center",
+      "description": "Security monitoring and threat detection",
+      "refresh_interval": "30s",
+      "panels": [
+        {
+          "id": "authentication_monitoring",
+          "title": "Authentication Monitoring",
+          "type": "graph",
+          "targets": [
+            {
+              "metric": "rate(splunk_mcp_auth_failures_total[5m])",
+              "label": "Authentication Failures"
+            },
+            {
+              "metric": "rate(splunk_mcp_suspicious_activity_total[5m])",
+              "label": "Suspicious Activity Events"
+            }
+          ],
+          "alert_rules": [
+            {
+              "condition": "auth_failure_rate > 10",
+              "severity": "critical",
+              "message": "High authentication failure rate - possible attack"
+            }
+          ]
+        },
+        {
+          "id": "access_patterns",
+          "title": "Access Pattern Analysis",
+          "type": "worldmap",
+          "targets": [
+            {
+              "metric": "splunk_mcp_requests_by_geo",
+              "label": "Requests by Geographic Location"
+            }
+          ]
+        },
+        {
+          "id": "vulnerability_status",
+          "title": "Vulnerability Status",
+          "type": "table",
+          "targets": [
+            {
+              "metric": "security_vulnerability_count",
+              "format": "table",
+              "columns": ["service", "critical", "high", "medium", "low"]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "automation_workflows": {
+    "auto_scaling": {
+      "enabled": true,
+      "triggers": [
+        {
+          "metric": "avg(rate(container_cpu_usage_seconds_total[5m])) > 0.8",
+          "action": "scale_up",
+          "cooldown": "300s"
+        },
+        {
+          "metric": "avg(rate(container_cpu_usage_seconds_total[5m])) < 0.2",
+          "action": "scale_down",
+          "cooldown": "600s"
+        }
+      ]
+    },
+    "incident_response": {
+      "enabled": true,
+      "escalation_matrix": [
+        {
+          "severity": "critical",
+          "immediate_actions": ["page_oncall", "create_incident", "gather_diagnostics"],
+          "escalation_time": "15m"
+        },
+        {
+          "severity": "warning",
+          "immediate_actions": ["create_ticket", "notify_team"],
+          "escalation_time": "1h"
+        }
+      ]
+    },
+    "capacity_management": {
+      "enabled": true,
+      "forecasting_horizon": "30d",
+      "actions": [
+        "recommend_scaling",
+        "cost_optimization",
+        "resource_rebalancing"
+      ]
+    }
+  },
+  "alerting_config": {
+    "notification_channels": [
+      {
+        "name": "operations_team",
+        "type": "slack",
+        "webhook_url": "${SLACK_OPS_WEBHOOK}",
+        "channel": "#operations"
+      },
+      {
+        "name": "security_team", 
+        "type": "slack",
+        "webhook_url": "${SLACK_SECURITY_WEBHOOK}",
+        "channel": "#security"
+      },
+      {
+        "name": "executive_team",
+        "type": "email",
+        "recipients": ["cto@company.com", "ops-director@company.com"]
+      }
+    ],
+    "alert_routing": {
+      "business_impact": "executive_team",
+      "security_events": "security_team",
+      "operational_issues": "operations_team"
+    }
+  }
+}
