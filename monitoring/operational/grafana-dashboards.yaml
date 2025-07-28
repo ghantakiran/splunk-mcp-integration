@@ -1,0 +1,605 @@
+# Grafana Dashboard Configurations for Operational Monitoring
+# These dashboards provide comprehensive operational intelligence and monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operational-dashboards
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: operational-dashboards
+data:
+  platform-operations-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Platform Operations Overview",
+        "description": "Executive-level operational metrics and KPIs for Splunk MCP Platform",
+        "tags": ["operational", "executive", "overview"],
+        "timezone": "UTC",
+        "refresh": "30s",
+        "time": {
+          "from": "now-6h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "Business Impact Metrics",
+            "type": "stat",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "splunk_mcp_active_users_total",
+                "legendFormat": "Active Users (24h)",
+                "refId": "A"
+              },
+              {
+                "expr": "increase(splunk_mcp_queries_successful_total[24h])",
+                "legendFormat": "Successful Queries/day",
+                "refId": "B"
+              },
+              {
+                "expr": "increase(splunk_mcp_dashboards_created_total[24h])",
+                "legendFormat": "Dashboards Created (24h)",
+                "refId": "C"
+              },
+              {
+                "expr": "avg(splunk_mcp_user_satisfaction_score)",
+                "legendFormat": "User Satisfaction Score",
+                "refId": "D"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                  "displayMode": "basic"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 80},
+                    {"color": "green", "value": 95}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Service Health Matrix",
+            "type": "heatmap",
+            "gridPos": {"h": 12, "w": 12, "x": 0, "y": 8},
+            "targets": [
+              {
+                "expr": "up{job=~\"splunk-mcp-.*\"}",
+                "legendFormat": "{{instance}}",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "calculate": false,
+              "cellGap": 2,
+              "cellValues": {},
+              "color": {
+                "exponent": 0.5,
+                "fill": "#FF0000",
+                "mode": "spectrum",
+                "reverse": false,
+                "scale": "exponential",
+                "scheme": "RdYlGn",
+                "steps": 64
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Request Flow Analysis",
+            "type": "graph",
+            "gridPos": {"h": 12, "w": 12, "x": 12, "y": 8},
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job=\"api-gateway\"}[5m])",
+                "legendFormat": "API Gateway Requests/sec",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(http_requests_total{job=\"nlp-engine\"}[5m])",
+                "legendFormat": "NLP Engine Requests/sec",
+                "refId": "B"
+              },
+              {
+                "expr": "rate(http_requests_total{job=\"visualization\"}[5m])",
+                "legendFormat": "Visualization Requests/sec",
+                "refId": "C"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Requests/sec",
+                "show": true
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Performance Trends",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "95th Percentile Response Time",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m])",
+                "legendFormat": "Error Rate",
+                "refId": "B"
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {
+                    "params": [0.05],
+                    "type": "gt"
+                  },
+                  "operator": {
+                    "type": "and"
+                  },
+                  "query": {
+                    "params": ["B", "5m", "now"]
+                  },
+                  "reducer": {
+                    "params": [],
+                    "type": "avg"
+                  },
+                  "type": "query"
+                }
+              ],
+              "executionErrorState": "alerting",
+              "for": "5m",
+              "frequency": "10s",
+              "handler": 1,
+              "name": "High Error Rate Alert",
+              "noDataState": "no_data",
+              "notifications": []
+            }
+          },
+          {
+            "id": 5,
+            "title": "Resource Utilization",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+            "targets": [
+              {
+                "expr": "avg(rate(container_cpu_usage_seconds_total{namespace=\"splunk-mcp-prod\"}[5m])) * 100",
+                "legendFormat": "CPU Usage %",
+                "refId": "A"
+              },
+              {
+                "expr": "avg(container_memory_usage_bytes{namespace=\"splunk-mcp-prod\"}) / avg(container_spec_memory_limit_bytes{namespace=\"splunk-mcp-prod\"}) * 100",
+                "legendFormat": "Memory Usage %",
+                "refId": "B"
+              },
+              {
+                "expr": "rate(container_network_receive_bytes_total{namespace=\"splunk-mcp-prod\"}[5m]) / 1024 / 1024",
+                "legendFormat": "Network I/O (MB/s)",
+                "refId": "C"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "Percentage / MB/s",
+                "max": 100,
+                "min": 0,
+                "show": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+  user-experience-monitoring.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "User Experience Monitoring",
+        "description": "User-centric operational metrics and experience indicators",
+        "tags": ["user-experience", "adoption", "satisfaction"],
+        "timezone": "UTC",
+        "refresh": "60s",
+        "time": {
+          "from": "now-24h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "User Journey Funnel",
+            "type": "bargauge",
+            "gridPos": {"h": 12, "w": 12, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "increase(splunk_mcp_user_login_total[1h])",
+                "legendFormat": "User Logins",
+                "refId": "A"
+              },
+              {
+                "expr": "increase(splunk_mcp_queries_initiated_total[1h])",
+                "legendFormat": "Queries Started",
+                "refId": "B"
+              },
+              {
+                "expr": "increase(splunk_mcp_queries_successful_total[1h])",
+                "legendFormat": "Queries Completed",
+                "refId": "C"
+              },
+              {
+                "expr": "increase(splunk_mcp_dashboards_created_total[1h])",
+                "legendFormat": "Dashboards Created",
+                "refId": "D"
+              }
+            ],
+            "options": {
+              "orientation": "vertical",
+              "displayMode": "gradient"
+            }
+          },
+          {
+            "id": 2,
+            "title": "User Satisfaction Trends",
+            "type": "graph",
+            "gridPos": {"h": 12, "w": 12, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "avg_over_time(splunk_mcp_user_satisfaction_score[1h])",
+                "legendFormat": "Satisfaction Score",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(splunk_mcp_feedback_negative_total[6h])",
+                "legendFormat": "Negative Feedback Rate",
+                "refId": "B"
+              },
+              {
+                "expr": "avg_over_time(splunk_mcp_session_duration_seconds[1h]) / 60",
+                "legendFormat": "Avg Session Duration (min)",
+                "refId": "C"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Feature Adoption Heatmap",
+            "type": "heatmap",
+            "gridPos": {"h": 10, "w": 24, "x": 0, "y": 12},
+            "targets": [
+              {
+                "expr": "increase(splunk_mcp_feature_usage_total[24h])",
+                "legendFormat": "{{feature}}-{{department}}",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "calculate": false,
+              "cellGap": 1,
+              "color": {
+                "mode": "spectrum",
+                "scheme": "Blues"
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Onboarding Metrics",
+            "type": "stat",
+            "gridPos": {"h": 6, "w": 24, "x": 0, "y": 22},
+            "targets": [
+              {
+                "expr": "avg(splunk_mcp_onboarding_completion_time_seconds) / 3600",
+                "legendFormat": "Avg Onboarding Time (hours)",
+                "refId": "A"
+              },
+              {
+                "expr": "increase(splunk_mcp_onboarding_completed_total[24h])",
+                "legendFormat": "Completions (24h)",
+                "refId": "B"
+              },
+              {
+                "expr": "splunk_mcp_onboarding_abandonment_rate * 100",
+                "legendFormat": "Abandonment Rate %",
+                "refId": "C"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+  operational-intelligence.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Operational Intelligence",
+        "description": "AI-powered operational insights and predictive analytics",
+        "tags": ["intelligence", "predictive", "optimization"],
+        "timezone": "UTC",
+        "refresh": "300s",
+        "time": {
+          "from": "now-7d",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "Capacity Forecasting",
+            "type": "graph",
+            "gridPos": {"h": 10, "w": 12, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "predict_linear(avg_over_time(rate(container_cpu_usage_seconds_total{namespace=\"splunk-mcp-prod\"}[1h])[24h:1h]), 7*24*3600) * 100",
+                "legendFormat": "Predicted CPU Usage % (7 days)",
+                "refId": "A"
+              },
+              {
+                "expr": "predict_linear(avg_over_time(container_memory_usage_bytes{namespace=\"splunk-mcp-prod\"}[1h])[24h:1h], 7*24*3600) / 1024 / 1024 / 1024",
+                "legendFormat": "Predicted Memory Usage GB (7 days)",
+                "refId": "B"
+              }
+            ],
+            "yAxes": [
+              {
+                "label": "CPU % / Memory GB"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Anomaly Detection",
+            "type": "graph",
+            "gridPos": {"h": 10, "w": 12, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "anomaly_detector_score{service=~\"splunk-mcp-.*\"}",
+                "legendFormat": "{{service}} Anomaly Score",
+                "refId": "A"
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {
+                    "params": [0.8],
+                    "type": "gt"
+                  },
+                  "query": {
+                    "params": ["A", "5m", "now"]
+                  },
+                  "reducer": {
+                    "type": "max"
+                  },
+                  "type": "query"
+                }
+              ],
+              "name": "Anomaly Detection Alert"
+            }
+          },
+          {
+            "id": 3,
+            "title": "Cost Optimization Dashboard",
+            "type": "table",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 10},
+            "targets": [
+              {
+                "expr": "kubernetes_resource_cost_per_service",
+                "format": "table",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showHeader": true
+            },
+            "fieldConfig": {
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "cost_per_hour"},
+                  "properties": [
+                    {
+                      "id": "unit",
+                      "value": "currencyUSD"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 4,
+            "title": "SLA Compliance Tracking",
+            "type": "stat",
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 18},
+            "targets": [
+              {
+                "expr": "sla_availability_percentage",
+                "legendFormat": "Availability SLA",
+                "refId": "A"
+              },
+              {
+                "expr": "sla_response_time_compliance",
+                "legendFormat": "Response Time SLA",
+                "refId": "B"
+              },
+              {
+                "expr": "sla_error_rate_compliance",
+                "legendFormat": "Error Rate SLA",
+                "refId": "C"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+
+  security-operations.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "Security Operations Center",
+        "description": "Security monitoring and threat detection for Splunk MCP Platform",
+        "tags": ["security", "threats", "monitoring"],
+        "timezone": "UTC",
+        "refresh": "30s",
+        "time": {
+          "from": "now-4h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "Authentication Events",
+            "type": "graph",
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "targets": [
+              {
+                "expr": "rate(splunk_mcp_auth_success_total[5m])",
+                "legendFormat": "Successful Logins/sec",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(splunk_mcp_auth_failures_total[5m])",
+                "legendFormat": "Failed Logins/sec",
+                "refId": "B"
+              },
+              {
+                "expr": "rate(splunk_mcp_suspicious_activity_total[5m])",
+                "legendFormat": "Suspicious Activity/sec",
+                "refId": "C"
+              }
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {
+                    "params": [10],
+                    "type": "gt"
+                  },
+                  "query": {
+                    "params": ["B", "5m", "now"]
+                  },
+                  "reducer": {
+                    "type": "avg"
+                  },
+                  "type": "query"
+                }
+              ],
+              "name": "High Authentication Failure Rate",
+              "message": "Possible brute force attack detected"
+            }
+          },
+          {
+            "id": 2,
+            "title": "Geographic Access Patterns",
+            "type": "worldmap",
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "targets": [
+              {
+                "expr": "splunk_mcp_requests_by_geo",
+                "legendFormat": "{{country}}",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showZoomControl": true,
+              "showAttribution": true
+            }
+          },
+          {
+            "id": 3,
+            "title": "Security Vulnerabilities",
+            "type": "table",
+            "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+            "targets": [
+              {
+                "expr": "security_vulnerability_count",
+                "format": "table",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "overrides": [
+                {
+                  "matcher": {"id": "byName", "options": "critical"},
+                  "properties": [
+                    {
+                      "id": "color",
+                      "value": {"mode": "fixed", "fixedColor": "red"}
+                    }
+                  ]
+                },
+                {
+                  "matcher": {"id": "byName", "options": "high"},
+                  "properties": [
+                    {
+                      "id": "color",
+                      "value": {"mode": "fixed", "fixedColor": "orange"}
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 4,
+            "title": "Compliance Status",
+            "type": "stat",
+            "gridPos": {"h": 6, "w": 24, "x": 0, "y": 18},
+            "targets": [
+              {
+                "expr": "security_compliance_score",
+                "legendFormat": "Security Compliance Score",
+                "refId": "A"
+              },
+              {
+                "expr": "data_protection_compliance",
+                "legendFormat": "Data Protection Compliance",
+                "refId": "B"
+              },
+              {
+                "expr": "access_control_compliance",
+                "legendFormat": "Access Control Compliance",
+                "refId": "C"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 80},
+                    {"color": "green", "value": 95}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
