@@ -1,588 +1,883 @@
 #!/usr/bin/env python3
 """
 Production Readiness Validation Script
-=====================================
-
-Comprehensive validation script to verify all components of the Splunk MCP Integration
-platform are production-ready. This script validates:
-
-1. Service health and availability
-2. Database connectivity and schema validation
-3. API endpoint functionality
-4. Security configurations
-5. Performance benchmarks
-6. Documentation completeness
-7. Kubernetes deployment readiness
-
-Usage:
-    python scripts/production-readiness-validation.py [--env development|staging|production]
+Comprehensive validation for Splunk MCP Integration Platform production deployment
 """
 
-import asyncio
-import aiohttp
-import asyncpg
-import aioredis
-import json
-import logging
 import os
-import subprocess
 import sys
+import json
 import time
+import subprocess
+import requests
 import yaml
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Tuple, Any
+import argparse
+import logging
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('validation-results.log'),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(),
+        logging.FileHandler(f'validation-{datetime.now().strftime("%Y%m%d-%H%M%S")}.log')
     ]
 )
 logger = logging.getLogger(__name__)
 
-@dataclass
-class ValidationResult:
-    """Container for validation results"""
-    component: str
-    status: str  # PASS, FAIL, WARNING
-    message: str
-    details: Optional[Dict] = None
-    execution_time: Optional[float] = None
-
-@dataclass
-class ServiceConfig:
-    """Service configuration"""
-    name: str
-    port: int
-    health_endpoint: str
-    required: bool = True
-
-class ProductionReadinessValidator:
+class ProductionValidator:
     """Main validation class for production readiness checks"""
     
-    def __init__(self, environment: str = "development"):
+    def __init__(self, config_file: str = None, environment: str = 'development'):
         self.environment = environment
-        self.results: List[ValidationResult] = []
-        self.start_time = time.time()
-        
-        # Service configurations
-        self.services = [
-            ServiceConfig("API Gateway", 8000, "/health"),
-            ServiceConfig("NLP Engine", 8001, "/health"),
-            ServiceConfig("Visualization", 8002, "/health"),
-            ServiceConfig("Alert Manager", 8003, "/health"),
-            ServiceConfig("Slack Bot", 8004, "/health"),
-            ServiceConfig("Teams Bot", 8005, "/health"),
-            ServiceConfig("Email Service", 8006, "/health"),
-            ServiceConfig("Webhook Service", 8007, "/health"),
-            ServiceConfig("BI Integration", 8008, "/health"),
-            ServiceConfig("PDF Export", 8009, "/health"),
-            ServiceConfig("PowerPoint Export", 8011, "/health"),
-            ServiceConfig("HTML Report", 8012, "/health"),
-            ServiceConfig("Word Export", 8013, "/health"),
-            ServiceConfig("CSV Export", 8014, "/health"),
-            ServiceConfig("JSON/XML Export", 8015, "/health"),
-            ServiceConfig("Report Scheduling", 8015, "/health"),
-            ServiceConfig("Secure Sharing", 8016, "/health"),
-            ServiceConfig("Frontend", 3000, "/", False),  # Frontend doesn't have health endpoint
-        ]
-        
-        # Database configuration
-        self.db_config = {
-            "host": os.getenv("POSTGRES_HOST", "localhost"),
-            "port": int(os.getenv("POSTGRES_PORT", "5432")),
-            "database": os.getenv("POSTGRES_DB", "splunk_mcp"),
-            "user": os.getenv("POSTGRES_USER", "splunk_mcp_user"),
-            "password": os.getenv("POSTGRES_PASSWORD", "splunk_mcp_password")
-        }
-        
-        # Redis configuration
-        self.redis_config = {
-            "host": os.getenv("REDIS_HOST", "localhost"),
-            "port": int(os.getenv("REDIS_PORT", "6379")),
-            "password": os.getenv("REDIS_PASSWORD", "redis_password")
-        }
-
-    async def validate_service_health(self, service: ServiceConfig) -> ValidationResult:
-        """Validate individual service health"""
-        start_time = time.time()
-        
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-                url = f"http://localhost:{service.port}{service.health_endpoint}"
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json() if service.name != "Frontend" else {}
-                        execution_time = time.time() - start_time
-                        
-                        return ValidationResult(
-                            component=f"{service.name} Health",
-                            status="PASS",
-                            message=f"Service healthy and responding",
-                            details={"response_time": execution_time, "data": data},
-                            execution_time=execution_time
-                        )
-                    else:
-                        return ValidationResult(
-                            component=f"{service.name} Health",
-                            status="FAIL",
-                            message=f"Health check failed with status {response.status}",
-                            execution_time=time.time() - start_time
-                        )
-        except Exception as e:
-            return ValidationResult(
-                component=f"{service.name} Health",
-                status="FAIL" if service.required else "WARNING",
-                message=f"Health check failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-
-    async def validate_database_connectivity(self) -> ValidationResult:
-        """Validate PostgreSQL database connectivity and basic schema"""
-        start_time = time.time()
-        
-        try:
-            conn = await asyncpg.connect(
-                host=self.db_config["host"],
-                port=self.db_config["port"],
-                database=self.db_config["database"],
-                user=self.db_config["user"],
-                password=self.db_config["password"]
-            )
-            
-            # Test basic query
-            result = await conn.fetchval("SELECT version()")
-            
-            # Check for key tables (sample from API Gateway)
-            tables = await conn.fetch("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                ORDER BY table_name
-            """)
-            
-            await conn.close()
-            
-            return ValidationResult(
-                component="PostgreSQL Database",
-                status="PASS",
-                message="Database connectivity successful",
-                details={
-                    "version": result,
-                    "table_count": len(tables),
-                    "tables": [row["table_name"] for row in tables[:10]]  # First 10 tables
-                },
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ValidationResult(
-                component="PostgreSQL Database",
-                status="FAIL",
-                message=f"Database connectivity failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-
-    async def validate_redis_connectivity(self) -> ValidationResult:
-        """Validate Redis connectivity and basic operations"""
-        start_time = time.time()
-        
-        try:
-            redis = aioredis.from_url(
-                f"redis://:{self.redis_config['password']}@{self.redis_config['host']}:{self.redis_config['port']}"
-            )
-            
-            # Test basic operations
-            await redis.set("health_check", "test_value", ex=60)
-            value = await redis.get("health_check")
-            await redis.delete("health_check")
-            
-            # Get Redis info
-            info = await redis.info()
-            
-            await redis.close()
-            
-            return ValidationResult(
-                component="Redis Cache",
-                status="PASS",
-                message="Redis connectivity successful",
-                details={
-                    "version": info.get("redis_version"),
-                    "connected_clients": info.get("connected_clients"),
-                    "used_memory_human": info.get("used_memory_human")
-                },
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ValidationResult(
-                component="Redis Cache",
-                status="FAIL",
-                message=f"Redis connectivity failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-
-    async def validate_api_endpoints(self) -> List[ValidationResult]:
-        """Validate critical API endpoints"""
-        results = []
-        
-        # Test API Gateway endpoints
-        endpoints = [
-            {"url": "http://localhost:8000/docs", "name": "API Documentation"},
-            {"url": "http://localhost:8000/api/v1/health", "name": "Health Check API"},
-            {"url": "http://localhost:8000/openapi.json", "name": "OpenAPI Specification"}
-        ]
-        
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
-            for endpoint in endpoints:
-                start_time = time.time()
-                try:
-                    async with session.get(endpoint["url"]) as response:
-                        if response.status == 200:
-                            results.append(ValidationResult(
-                                component=f"API Endpoint - {endpoint['name']}",
-                                status="PASS",
-                                message="Endpoint accessible",
-                                execution_time=time.time() - start_time
-                            ))
-                        else:
-                            results.append(ValidationResult(
-                                component=f"API Endpoint - {endpoint['name']}",
-                                status="FAIL",
-                                message=f"Endpoint returned status {response.status}",
-                                execution_time=time.time() - start_time
-                            ))
-                except Exception as e:
-                    results.append(ValidationResult(
-                        component=f"API Endpoint - {endpoint['name']}",
-                        status="FAIL",
-                        message=f"Endpoint validation failed: {str(e)}",
-                        execution_time=time.time() - start_time
-                    ))
-        
-        return results
-
-    def validate_kubernetes_manifests(self) -> ValidationResult:
-        """Validate Kubernetes deployment manifests"""
-        start_time = time.time()
-        
-        try:
-            k8s_path = Path("infrastructure/kubernetes")
-            if not k8s_path.exists():
-                return ValidationResult(
-                    component="Kubernetes Manifests",
-                    status="FAIL",
-                    message="Kubernetes infrastructure directory not found",
-                    execution_time=time.time() - start_time
-                )
-            
-            # Check for required directories
-            required_dirs = [
-                "deployments", "services", "configmaps", "secrets", 
-                "namespaces", "rbac", "network-policies", "hpa", "ingress"
-            ]
-            
-            missing_dirs = []
-            existing_files = {}
-            
-            for dir_name in required_dirs:
-                dir_path = k8s_path / dir_name
-                if dir_path.exists():
-                    yaml_files = list(dir_path.glob("*.yaml")) + list(dir_path.glob("*.yml"))
-                    existing_files[dir_name] = len(yaml_files)
-                else:
-                    missing_dirs.append(dir_name)
-            
-            if missing_dirs:
-                return ValidationResult(
-                    component="Kubernetes Manifests",
-                    status="WARNING",
-                    message=f"Missing directories: {missing_dirs}",
-                    details={"existing_files": existing_files},
-                    execution_time=time.time() - start_time
-                )
-            
-            return ValidationResult(
-                component="Kubernetes Manifests",
-                status="PASS",
-                message="All required Kubernetes directories present",
-                details={"manifest_counts": existing_files},
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ValidationResult(
-                component="Kubernetes Manifests",
-                status="FAIL",
-                message=f"Manifest validation failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-
-    def validate_documentation_completeness(self) -> ValidationResult:
-        """Validate documentation completeness"""
-        start_time = time.time()
-        
-        try:
-            required_docs = [
-                "README.md",
-                "CLAUDE.md", 
-                "PLANNING.md",
-                "TASKS.md",
-                "docs/project/completion-summary.md",
-                "docs/operations/deployment-handoff.md"
-            ]
-            
-            missing_docs = []
-            existing_docs = {}
-            
-            for doc in required_docs:
-                doc_path = Path(doc)
-                if doc_path.exists():
-                    existing_docs[doc] = doc_path.stat().st_size
-                else:
-                    missing_docs.append(doc)
-            
-            # Check service-specific documentation
-            service_dirs = list(Path("services").glob("*/"))
-            service_docs = {}
-            
-            for service_dir in service_dirs:
-                readme_path = service_dir / "README.md"
-                claude_path = service_dir / "CLAUDE.md"
-                service_docs[service_dir.name] = {
-                    "README.md": readme_path.exists(),
-                    "CLAUDE.md": claude_path.exists()
-                }
-            
-            if missing_docs:
-                return ValidationResult(
-                    component="Documentation Completeness",
-                    status="WARNING",
-                    message=f"Missing documentation: {missing_docs}",
-                    details={"existing_docs": existing_docs, "service_docs": service_docs},
-                    execution_time=time.time() - start_time
-                )
-            
-            return ValidationResult(
-                component="Documentation Completeness",
-                status="PASS",
-                message="All required documentation present",
-                details={"doc_counts": len(existing_docs), "service_docs": service_docs},
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ValidationResult(
-                component="Documentation Completeness",
-                status="FAIL",
-                message=f"Documentation validation failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-
-    def validate_environment_configuration(self) -> ValidationResult:
-        """Validate environment configuration completeness"""
-        start_time = time.time()
-        
-        try:
-            required_env_vars = [
-                "DATABASE_URL", "REDIS_URL", "JWT_SECRET_KEY", 
-                "OPENAI_API_KEY", "ANTHROPIC_API_KEY"
-            ]
-            
-            missing_vars = []
-            configured_vars = {}
-            
-            for var in required_env_vars:
-                value = os.getenv(var)
-                if value:
-                    configured_vars[var] = "✓ Configured"
-                else:
-                    missing_vars.append(var)
-            
-            # Check for .env.example files
-            env_examples = list(Path(".").glob("**/.env.example"))
-            
-            status = "PASS" if not missing_vars else "WARNING"
-            message = "Environment configuration complete" if not missing_vars else f"Missing environment variables: {missing_vars}"
-            
-            return ValidationResult(
-                component="Environment Configuration",
-                status=status,
-                message=message,
-                details={
-                    "configured_vars": configured_vars,
-                    "missing_vars": missing_vars,
-                    "env_example_files": [str(f) for f in env_examples]
-                },
-                execution_time=time.time() - start_time
-            )
-            
-        except Exception as e:
-            return ValidationResult(
-                component="Environment Configuration",
-                status="FAIL",
-                message=f"Environment validation failed: {str(e)}",
-                execution_time=time.time() - start_time
-            )
-
-    async def run_all_validations(self) -> Dict:
-        """Run all validation checks"""
-        logger.info(f"Starting production readiness validation for environment: {self.environment}")
-        
-        # Service health checks
-        logger.info("Validating service health...")
-        for service in self.services:
-            result = await self.validate_service_health(service)
-            self.results.append(result)
-        
-        # Database connectivity
-        logger.info("Validating database connectivity...")
-        db_result = await self.validate_database_connectivity()
-        self.results.append(db_result)
-        
-        # Redis connectivity
-        logger.info("Validating Redis connectivity...")
-        redis_result = await self.validate_redis_connectivity()
-        self.results.append(redis_result)
-        
-        # API endpoints
-        logger.info("Validating API endpoints...")
-        api_results = await self.validate_api_endpoints()
-        self.results.extend(api_results)
-        
-        # Kubernetes manifests
-        logger.info("Validating Kubernetes manifests...")
-        k8s_result = self.validate_kubernetes_manifests()
-        self.results.append(k8s_result)
-        
-        # Documentation
-        logger.info("Validating documentation completeness...")
-        docs_result = self.validate_documentation_completeness()
-        self.results.append(docs_result)
-        
-        # Environment configuration
-        logger.info("Validating environment configuration...")
-        env_result = self.validate_environment_configuration()
-        self.results.append(env_result)
-        
-        return self.generate_report()
-
-    def generate_report(self) -> Dict:
-        """Generate comprehensive validation report"""
-        total_time = time.time() - self.start_time
-        
-        # Categorize results
-        passed = [r for r in self.results if r.status == "PASS"]
-        failed = [r for r in self.results if r.status == "FAIL"]
-        warnings = [r for r in self.results if r.status == "WARNING"]
-        
-        # Calculate overall status
-        if failed:
-            overall_status = "FAIL"
-        elif warnings:
-            overall_status = "WARNING"
-        else:
-            overall_status = "PASS"
-        
-        report = {
-            "validation_summary": {
-                "environment": self.environment,
-                "timestamp": datetime.now().isoformat(),
-                "total_execution_time": round(total_time, 2),
-                "overall_status": overall_status
-            },
-            "statistics": {
-                "total_checks": len(self.results),
-                "passed": len(passed),
-                "failed": len(failed),
-                "warnings": len(warnings),
-                "success_rate": round((len(passed) / len(self.results)) * 100, 1)
-            },
-            "detailed_results": [asdict(result) for result in self.results],
-            "summary_by_status": {
-                "PASS": [r.component for r in passed],
-                "FAIL": [r.component for r in failed],
-                "WARNING": [r.component for r in warnings]
+        self.config = self.load_config(config_file)
+        self.namespace = self.config.get('namespace', 'splunk-mcp-prod')
+        self.results = {
+            'timestamp': datetime.now().isoformat(),
+            'environment': environment,
+            'checks': {},
+            'summary': {
+                'total': 0,
+                'passed': 0,
+                'failed': 0,
+                'warnings': 0
             }
         }
         
-        return report
-
-    def save_report(self, report: Dict, filename: str = None):
-        """Save validation report to file"""
-        if filename is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"production-readiness-report-{timestamp}.json"
+    def load_config(self, config_file: str) -> Dict:
+        """Load validation configuration"""
+        # Default config file location relative to script
+        if not config_file:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            config_file = os.path.join(script_dir, 'validation-config.yaml')
         
-        with open(filename, 'w') as f:
-            json.dump(report, f, indent=2, default=str)
+        default_config = {
+            'namespace': 'splunk-mcp-prod' if self.environment == 'production' else f'splunk-mcp-{self.environment}',
+            'domain': f'splunk-mcp.your-domain.com' if self.environment == 'production' else f'{self.environment}.splunk-mcp.your-domain.com',
+            'monitoring_namespace': 'monitoring',
+            'timeout': 300,
+            'required_services': [
+                'api-gateway', 'nlp-engine', 'visualization', 'alert-manager',
+                'slack-bot', 'teams-bot', 'email-service', 'webhook-service',
+                'pdf-export', 'powerpoint-export', 'word-export', 'csv-export',
+                'secure-sharing', 'report-scheduling', 'frontend'
+            ],
+            'required_infrastructure': ['postgresql', 'redis'],
+            'required_replicas': {
+                'api-gateway': 3 if self.environment == 'production' else 1,
+                'nlp-engine': 2 if self.environment == 'production' else 1,
+                'visualization': 2 if self.environment == 'production' else 1,
+                'alert-manager': 2 if self.environment == 'production' else 1
+            },
+            'health_endpoints': {
+                'api-gateway': 8000,
+                'nlp-engine': 8001,
+                'visualization': 8002,
+                'alert-manager': 8003
+            }
+        }
         
-        logger.info(f"Validation report saved to: {filename}")
-        return filename
-
-async def main():
-    """Main entry point"""
-    import argparse
+        if config_file and os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                user_config = yaml.safe_load(f)
+                # Use environment-specific config if available
+                if 'validation_config' in user_config and 'environments' in user_config['validation_config']:
+                    env_config = user_config['validation_config']['environments'].get(self.environment, {})
+                    if env_config:
+                        default_config.update(env_config)
+                
+                # Also include general config
+                if 'validation_config' in user_config:
+                    for key, value in user_config['validation_config'].items():
+                        if key != 'environments':
+                            default_config[key] = value
+                
+        return default_config
     
-    parser = argparse.ArgumentParser(description="Production Readiness Validation")
-    parser.add_argument("--env", choices=["development", "staging", "production"], 
-                       default="development", help="Environment to validate")
-    parser.add_argument("--output", help="Output file for validation report")
-    parser.add_argument("--verbose", action="store_true", help="Verbose output")
+    def run_kubectl(self, args: List[str]) -> Tuple[bool, str]:
+        """Execute kubectl command and return result"""
+        try:
+            cmd = ['kubectl'] + args
+            result = subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True, 
+                timeout=self.config['timeout']
+            )
+            return result.returncode == 0, result.stdout.strip()
+        except subprocess.TimeoutExpired:
+            return False, "Command timed out"
+        except Exception as e:
+            return False, str(e)
+    
+    def check_kubernetes_access(self) -> Dict:
+        """Validate Kubernetes cluster access"""
+        logger.info("Checking Kubernetes cluster access...")
+        
+        # Skip Kubernetes checks for development environment
+        if self.environment == 'development':
+            return {
+                'status': 'PASS',
+                'message': 'Kubernetes checks skipped for development environment',
+                'details': 'Development environment uses local Docker containers'
+            }
+        
+        # Check cluster info
+        success, output = self.run_kubectl(['cluster-info'])
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Cannot access Kubernetes cluster',
+                'details': output
+            }
+        
+        # Check namespace exists
+        success, output = self.run_kubectl(['get', 'namespace', self.namespace])
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': f'Namespace {self.namespace} not found',
+                'details': output
+            }
+        
+        # Check permissions
+        success, output = self.run_kubectl(['auth', 'can-i', 'get', 'pods', '-n', self.namespace])
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Insufficient permissions',
+                'details': output
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'Kubernetes access verified',
+            'details': 'Cluster accessible, namespace exists, permissions verified'
+        }
+    
+    def check_infrastructure_services(self) -> Dict:
+        """Check core infrastructure services (PostgreSQL, Redis)"""
+        logger.info("Checking infrastructure services...")
+        
+        results = {}
+        
+        # For development environment, check local services via Docker
+        if self.environment == 'development':
+            for service in self.config['required_infrastructure']:
+                try:
+                    if service == 'postgresql':
+                        # Check if PostgreSQL is accessible
+                        result = subprocess.run(['docker', 'ps', '--filter', 'name=postgres', '--format', '{{.Names}}'], 
+                                              capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            results[service] = {
+                                'status': 'PASS',
+                                'message': f'{service} container is running',
+                                'details': f'Container: {result.stdout.strip()}'
+                            }
+                        else:
+                            results[service] = {
+                                'status': 'FAIL',
+                                'message': f'{service} container not found',
+                                'details': 'Check if docker-compose is running'
+                            }
+                    elif service == 'redis':
+                        # Check if Redis is accessible
+                        result = subprocess.run(['docker', 'ps', '--filter', 'name=redis', '--format', '{{.Names}}'], 
+                                              capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            results[service] = {
+                                'status': 'PASS',
+                                'message': f'{service} container is running',
+                                'details': f'Container: {result.stdout.strip()}'
+                            }
+                        else:
+                            results[service] = {
+                                'status': 'FAIL',
+                                'message': f'{service} container not found',
+                                'details': 'Check if docker-compose is running'
+                            }
+                except Exception as e:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'{service} check failed',
+                        'details': str(e)
+                    }
+        else:
+            # Production/Staging: Check Kubernetes pods
+            for service in self.config['required_infrastructure']:
+                success, output = self.run_kubectl([
+                    'get', 'pods', '-n', self.namespace, 
+                    '-l', f'app={service}', '--no-headers'
+                ])
+                
+                if not success:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'Cannot get {service} pods',
+                        'details': output
+                    }
+                    continue
+                
+                if not output:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'No {service} pods found',
+                        'details': 'Service not deployed'
+                    }
+                    continue
+                
+                # Check if pods are running
+                running_pods = [line for line in output.split('\n') if 'Running' in line]
+                total_pods = len(output.split('\n'))
+                
+                if len(running_pods) == total_pods and total_pods > 0:
+                    results[service] = {
+                        'status': 'PASS',
+                        'message': f'{service} is healthy',
+                        'details': f'{len(running_pods)}/{total_pods} pods running'
+                    }
+                else:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'{service} has issues',
+                        'details': f'{len(running_pods)}/{total_pods} pods running'
+                    }
+        
+        # Overall status
+        failed_services = [k for k, v in results.items() if v['status'] == 'FAIL']
+        if failed_services:
+            return {
+                'status': 'FAIL',
+                'message': f'Infrastructure services failed: {", ".join(failed_services)}',
+                'details': results
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'All infrastructure services healthy',
+            'details': results
+        }
+    
+    def check_application_services(self) -> Dict:
+        """Check application services deployment and health"""
+        logger.info("Checking application services...")
+        
+        results = {}
+        
+        for service in self.config['required_services']:
+            # Check deployment exists
+            success, output = self.run_kubectl([
+                'get', 'deployment', service, '-n', self.namespace, '--no-headers'
+            ])
+            
+            if not success:
+                results[service] = {
+                    'status': 'FAIL',
+                    'message': f'{service} deployment not found',
+                    'details': output
+                }
+                continue
+            
+            # Check pod status
+            success, output = self.run_kubectl([
+                'get', 'pods', '-n', self.namespace,
+                '-l', f'app={service}', '--no-headers'
+            ])
+            
+            if not success or not output:
+                results[service] = {
+                    'status': 'FAIL',
+                    'message': f'{service} pods not found',
+                    'details': output
+                }
+                continue
+            
+            # Analyze pod status
+            pod_lines = output.split('\n')
+            running_pods = [line for line in pod_lines if 'Running' in line and '1/1' in line]
+            total_pods = len(pod_lines)
+            
+            # Check if meets replica requirements
+            required_replicas = self.config['required_replicas'].get(service, 1)
+            if len(running_pods) >= required_replicas:
+                results[service] = {
+                    'status': 'PASS',
+                    'message': f'{service} is healthy',
+                    'details': f'{len(running_pods)}/{total_pods} pods running (required: {required_replicas})'
+                }
+            else:
+                results[service] = {
+                    'status': 'FAIL',
+                    'message': f'{service} insufficient replicas',
+                    'details': f'{len(running_pods)}/{total_pods} pods running (required: {required_replicas})'
+                }
+        
+        # Overall status
+        failed_services = [k for k, v in results.items() if v['status'] == 'FAIL']
+        if failed_services:
+            return {
+                'status': 'FAIL',
+                'message': f'Application services failed: {", ".join(failed_services)}',
+                'details': results
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'All application services healthy',
+            'details': results
+        }
+    
+    def check_health_endpoints(self) -> Dict:
+        """Check service health endpoints"""
+        logger.info("Checking service health endpoints...")
+        
+        results = {}
+        
+        for service, port in self.config['health_endpoints'].items():
+            logger.info(f"Testing health endpoint for {service}...")
+            
+            # Test health endpoint
+            success, output = self.run_kubectl([
+                'exec', '-n', self.namespace, f'deployment/{service}', '--',
+                'wget', '--quiet', '--tries=3', '--timeout=10', '--spider',
+                f'http://localhost:{port}/health'
+            ])
+            
+            if success:
+                results[service] = {
+                    'status': 'PASS',
+                    'message': f'{service} health endpoint responding',
+                    'details': f'Health check passed on port {port}'
+                }
+            else:
+                results[service] = {
+                    'status': 'FAIL',
+                    'message': f'{service} health endpoint failed',
+                    'details': output
+                }
+        
+        # Overall status
+        failed_endpoints = [k for k, v in results.items() if v['status'] == 'FAIL']
+        if failed_endpoints:
+            return {
+                'status': 'FAIL',
+                'message': f'Health endpoints failed: {", ".join(failed_endpoints)}',
+                'details': results
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'All health endpoints responding',
+            'details': results
+        }
+    
+    def check_database_connectivity(self) -> Dict:
+        """Check database connectivity and health"""
+        logger.info("Checking database connectivity...")
+        
+        # Test PostgreSQL connectivity
+        success, output = self.run_kubectl([
+            'exec', '-n', self.namespace, 'deployment/api-gateway', '--',
+            'python', '-c',
+            'import psycopg2, os; psycopg2.connect(os.environ["DATABASE_URL"]).close(); print("Database OK")'
+        ])
+        
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Database connectivity failed',
+                'details': output
+            }
+        
+        # Test Redis connectivity
+        success, output = self.run_kubectl([
+            'exec', '-n', self.namespace, 'deployment/api-gateway', '--',
+            'python', '-c',
+            'import redis, os; redis.from_url(os.environ["REDIS_URL"]).ping(); print("Redis OK")'
+        ])
+        
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Redis connectivity failed',
+                'details': output
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'Database connectivity verified',
+            'details': 'PostgreSQL and Redis connections successful'
+        }
+    
+    def check_ssl_certificates(self) -> Dict:
+        """Check SSL certificate validity"""
+        logger.info("Checking SSL certificates...")
+        
+        domain = self.config['domain']
+        
+        try:
+            # Check certificate via openssl
+            cmd = f'echo | openssl s_client -servername {domain} -connect {domain}:443 2>/dev/null | openssl x509 -noout -dates'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                cert_info = result.stdout
+                return {
+                    'status': 'PASS',
+                    'message': 'SSL certificate is valid',
+                    'details': cert_info
+                }
+            else:
+                return {
+                    'status': 'FAIL',
+                    'message': 'SSL certificate check failed',
+                    'details': result.stderr
+                }
+        except Exception as e:
+            return {
+                'status': 'FAIL',
+                'message': 'SSL certificate check error',
+                'details': str(e)
+            }
+    
+    def check_external_access(self) -> Dict:
+        """Check external access to the platform"""
+        logger.info("Checking external access...")
+        
+        domain = self.config['domain']
+        url = f'https://{domain}/health'
+        
+        try:
+            response = requests.get(url, timeout=30, verify=True)
+            if response.status_code == 200:
+                return {
+                    'status': 'PASS',
+                    'message': 'External access verified',
+                    'details': f'HTTP {response.status_code} from {url}'
+                }
+            else:
+                return {
+                    'status': 'FAIL',
+                    'message': f'External access failed with HTTP {response.status_code}',
+                    'details': response.text
+                }
+        except Exception as e:
+            return {
+                'status': 'FAIL',
+                'message': 'External access error',
+                'details': str(e)
+            }
+    
+    def check_monitoring_stack(self) -> Dict:
+        """Check monitoring and alerting systems"""
+        logger.info("Checking monitoring stack...")
+        
+        monitoring_ns = self.config['monitoring_namespace']
+        components = ['prometheus', 'grafana', 'alertmanager']
+        results = {}
+        
+        for component in components:
+            success, output = self.run_kubectl([
+                'get', 'pods', '-n', monitoring_ns,
+                '-l', f'app.kubernetes.io/name={component}', '--no-headers'
+            ])
+            
+            if success and output:
+                running_pods = [line for line in output.split('\n') if 'Running' in line]
+                total_pods = len(output.split('\n'))
+                
+                if len(running_pods) == total_pods:
+                    results[component] = {
+                        'status': 'PASS',
+                        'message': f'{component} is healthy',
+                        'details': f'{len(running_pods)} pods running'
+                    }
+                else:
+                    results[component] = {
+                        'status': 'FAIL',
+                        'message': f'{component} has issues',
+                        'details': f'{len(running_pods)}/{total_pods} pods running'
+                    }
+            else:
+                results[component] = {
+                    'status': 'FAIL',
+                    'message': f'{component} not found',
+                    'details': output
+                }
+        
+        # Overall status
+        failed_components = [k for k, v in results.items() if v['status'] == 'FAIL']
+        if failed_components:
+            return {
+                'status': 'FAIL',
+                'message': f'Monitoring components failed: {", ".join(failed_components)}',
+                'details': results
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'Monitoring stack healthy',
+            'details': results
+        }
+    
+    def check_secrets_and_config(self) -> Dict:
+        """Check required secrets and configuration"""
+        logger.info("Checking secrets and configuration...")
+        
+        required_secrets = ['app-secrets', 'splunk-secrets', 'ai-secrets']
+        required_configmaps = ['app-config']
+        results = {}
+        
+        # Check secrets
+        for secret in required_secrets:
+            success, output = self.run_kubectl([
+                'get', 'secret', secret, '-n', self.namespace, '--no-headers'
+            ])
+            
+            if success:
+                results[f'secret-{secret}'] = {
+                    'status': 'PASS',
+                    'message': f'Secret {secret} exists',
+                    'details': 'Secret found'
+                }
+            else:
+                results[f'secret-{secret}'] = {
+                    'status': 'FAIL',
+                    'message': f'Secret {secret} missing',
+                    'details': output
+                }
+        
+        # Check configmaps
+        for configmap in required_configmaps:
+            success, output = self.run_kubectl([
+                'get', 'configmap', configmap, '-n', self.namespace, '--no-headers'
+            ])
+            
+            if success:
+                results[f'configmap-{configmap}'] = {
+                    'status': 'PASS',
+                    'message': f'ConfigMap {configmap} exists',
+                    'details': 'ConfigMap found'
+                }
+            else:
+                results[f'configmap-{configmap}'] = {
+                    'status': 'FAIL',
+                    'message': f'ConfigMap {configmap} missing',
+                    'details': output
+                }
+        
+        # Overall status
+        failed_configs = [k for k, v in results.items() if v['status'] == 'FAIL']
+        if failed_configs:
+            return {
+                'status': 'FAIL',
+                'message': f'Configuration failed: {", ".join(failed_configs)}',
+                'details': results
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': 'All secrets and configuration present',
+            'details': results
+        }
+    
+    def check_network_policies(self) -> Dict:
+        """Check network security policies"""
+        logger.info("Checking network policies...")
+        
+        success, output = self.run_kubectl([
+            'get', 'networkpolicy', '-n', self.namespace, '--no-headers'
+        ])
+        
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Cannot check network policies',
+                'details': output
+            }
+        
+        if not output:
+            return {
+                'status': 'WARN',
+                'message': 'No network policies found',
+                'details': 'Consider implementing network policies for security'
+            }
+        
+        policy_count = len(output.split('\n'))
+        
+        return {
+            'status': 'PASS',
+            'message': f'Network policies configured ({policy_count} policies)',
+            'details': output
+        }
+    
+    def check_resource_limits(self) -> Dict:
+        """Check resource limits and requests"""
+        logger.info("Checking resource limits...")
+        
+        results = {}
+        
+        for service in ['api-gateway', 'nlp-engine', 'visualization', 'alert-manager']:
+            success, output = self.run_kubectl([
+                'get', 'deployment', service, '-n', self.namespace,
+                '-o', 'jsonpath={.spec.template.spec.containers[0].resources}'
+            ])
+            
+            if success and output:
+                try:
+                    resources = json.loads(output) if output != '{}' else {}
+                    if 'limits' in resources and 'requests' in resources:
+                        results[service] = {
+                            'status': 'PASS',
+                            'message': f'{service} has resource limits',
+                            'details': resources
+                        }
+                    else:
+                        results[service] = {
+                            'status': 'WARN',
+                            'message': f'{service} missing resource limits',
+                            'details': 'Consider adding resource limits'
+                        }
+                except:
+                    results[service] = {
+                        'status': 'WARN',
+                        'message': f'{service} resource check failed',
+                        'details': output
+                    }
+            else:
+                results[service] = {
+                    'status': 'FAIL',
+                    'message': f'{service} deployment not found',
+                    'details': output
+                }
+        
+        # Count warnings and failures
+        warnings = sum(1 for v in results.values() if v['status'] == 'WARN')
+        failures = sum(1 for v in results.values() if v['status'] == 'FAIL')
+        
+        if failures > 0:
+            status = 'FAIL'
+        elif warnings > 0:
+            status = 'WARN'
+        else:
+            status = 'PASS'
+        
+        return {
+            'status': status,
+            'message': f'Resource limits check: {failures} failures, {warnings} warnings',
+            'details': results
+        }
+    
+    def check_backup_system(self) -> Dict:
+        """Check backup system configuration"""
+        logger.info("Checking backup system...")
+        
+        # Check for backup CronJobs
+        success, output = self.run_kubectl([
+            'get', 'cronjob', '-n', self.namespace, '--no-headers'
+        ])
+        
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Cannot check backup jobs',
+                'details': output
+            }
+        
+        backup_jobs = [line for line in output.split('\n') if 'backup' in line.lower()]
+        
+        if not backup_jobs:
+            return {
+                'status': 'WARN',
+                'message': 'No backup jobs found',
+                'details': 'Consider implementing automated backups'
+            }
+        
+        return {
+            'status': 'PASS',
+            'message': f'Backup system configured ({len(backup_jobs)} jobs)',
+            'details': backup_jobs
+        }
+    
+    def check_autoscaling(self) -> Dict:
+        """Check autoscaling configuration"""
+        logger.info("Checking autoscaling...")
+        
+        success, output = self.run_kubectl([
+            'get', 'hpa', '-n', self.namespace, '--no-headers'
+        ])
+        
+        if not success:
+            return {
+                'status': 'FAIL',
+                'message': 'Cannot check autoscaling',
+                'details': output
+            }
+        
+        if not output:
+            return {
+                'status': 'WARN',
+                'message': 'No HPA configured',
+                'details': 'Consider implementing horizontal pod autoscaling'
+            }
+        
+        hpa_count = len(output.split('\n'))
+        
+        return {
+            'status': 'PASS',
+            'message': f'Autoscaling configured ({hpa_count} HPAs)',
+            'details': output
+        }
+    
+    def run_validation(self) -> Dict:
+        """Run all validation checks"""
+        logger.info("Starting production readiness validation...")
+        
+        checks = [
+            ('kubernetes_access', self.check_kubernetes_access),
+            ('infrastructure_services', self.check_infrastructure_services),
+            ('application_services', self.check_application_services),
+            ('health_endpoints', self.check_health_endpoints),
+            ('database_connectivity', self.check_database_connectivity),
+            ('ssl_certificates', self.check_ssl_certificates),
+            ('external_access', self.check_external_access),
+            ('monitoring_stack', self.check_monitoring_stack),
+            ('secrets_and_config', self.check_secrets_and_config),
+            ('network_policies', self.check_network_policies),
+            ('resource_limits', self.check_resource_limits),
+            ('backup_system', self.check_backup_system),
+            ('autoscaling', self.check_autoscaling)
+        ]
+        
+        for check_name, check_function in checks:
+            logger.info(f"Running check: {check_name}")
+            try:
+                result = check_function()
+                self.results['checks'][check_name] = result
+                
+                # Update summary
+                self.results['summary']['total'] += 1
+                if result['status'] == 'PASS':
+                    self.results['summary']['passed'] += 1
+                elif result['status'] == 'FAIL':
+                    self.results['summary']['failed'] += 1
+                elif result['status'] == 'WARN':
+                    self.results['summary']['warnings'] += 1
+                    
+            except Exception as e:
+                logger.error(f"Check {check_name} failed with exception: {e}")
+                self.results['checks'][check_name] = {
+                    'status': 'FAIL',
+                    'message': f'Check failed with exception',
+                    'details': str(e)
+                }
+                self.results['summary']['total'] += 1
+                self.results['summary']['failed'] += 1
+        
+        # Determine overall status
+        if self.results['summary']['failed'] > 0:
+            self.results['overall_status'] = 'NOT_READY'
+        elif self.results['summary']['warnings'] > 0:
+            self.results['overall_status'] = 'READY_WITH_WARNINGS'
+        else:
+            self.results['overall_status'] = 'PRODUCTION_READY'
+        
+        return self.results
+    
+    def generate_report(self, output_file: str = None) -> str:
+        """Generate validation report"""
+        if not output_file:
+            output_file = f'production-validation-{datetime.now().strftime("%Y%m%d-%H%M%S")}.json'
+        
+        with open(output_file, 'w') as f:
+            json.dump(self.results, f, indent=2)
+        
+        logger.info(f"Validation report saved to: {output_file}")
+        return output_file
+    
+    def print_summary(self):
+        """Print validation summary to console"""
+        print("\n" + "="*60)
+        print("PRODUCTION READINESS VALIDATION SUMMARY")
+        print("="*60)
+        print(f"Timestamp: {self.results['timestamp']}")
+        print(f"Namespace: {self.namespace}")
+        print(f"Overall Status: {self.results['overall_status']}")
+        print()
+        print(f"Total Checks: {self.results['summary']['total']}")
+        print(f"Passed: {self.results['summary']['passed']}")
+        print(f"Failed: {self.results['summary']['failed']}")
+        print(f"Warnings: {self.results['summary']['warnings']}")
+        print()
+        
+        # Print detailed results
+        for check_name, result in self.results['checks'].items():
+            status_icon = "✅" if result['status'] == 'PASS' else "❌" if result['status'] == 'FAIL' else "⚠️"
+            print(f"{status_icon} {check_name}: {result['message']}")
+        
+        print("\n" + "="*60)
+        
+        if self.results['overall_status'] == 'PRODUCTION_READY':
+            print("🎉 SYSTEM IS PRODUCTION READY!")
+        elif self.results['overall_status'] == 'READY_WITH_WARNINGS':
+            print("⚠️  SYSTEM IS READY BUT HAS WARNINGS - REVIEW RECOMMENDED")
+        else:
+            print("❌ SYSTEM IS NOT PRODUCTION READY - ISSUES MUST BE RESOLVED")
+        
+        print("="*60)
+
+def main():
+    """Main function"""
+    parser = argparse.ArgumentParser(description='Validate Splunk MCP Platform production readiness')
+    parser.add_argument('--config', '-c', help='Configuration file path')
+    parser.add_argument('--output', '-o', help='Output report file')
+    parser.add_argument('--namespace', '-n', help='Kubernetes namespace')
+    parser.add_argument('--domain', '-d', help='Platform domain')
+    parser.add_argument('--env', help='Environment (development|staging|production)', default='development')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     
     args = parser.parse_args()
     
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    # Initialize validator
-    validator = ProductionReadinessValidator(args.env)
-    
     try:
-        # Run all validations
-        report = await validator.run_all_validations()
+        # Create validator
+        validator = ProductionValidator(args.config, args.env)
         
-        # Save report
-        report_file = validator.save_report(report, args.output)
+        # Override config with command line arguments
+        if args.namespace:
+            validator.namespace = args.namespace
+            validator.config['namespace'] = args.namespace
+        if args.domain:
+            validator.config['domain'] = args.domain
+        
+        # Run validation
+        results = validator.run_validation()
+        
+        # Generate report
+        report_file = validator.generate_report(args.output)
         
         # Print summary
-        print(f"\n{'='*60}")
-        print(f"PRODUCTION READINESS VALIDATION REPORT")
-        print(f"{'='*60}")
-        print(f"Environment: {report['validation_summary']['environment'].upper()}")
-        print(f"Overall Status: {report['validation_summary']['overall_status']}")
-        print(f"Total Checks: {report['statistics']['total_checks']}")
-        print(f"Success Rate: {report['statistics']['success_rate']}%")
-        print(f"Execution Time: {report['validation_summary']['total_execution_time']}s")
-        print(f"\nResults:")
-        print(f"  ✅ PASSED: {report['statistics']['passed']}")
-        print(f"  ❌ FAILED: {report['statistics']['failed']}")
-        print(f"  ⚠️  WARNINGS: {report['statistics']['warnings']}")
-        
-        if report['statistics']['failed'] > 0:
-            print(f"\nFailed Components:")
-            for component in report['summary_by_status']['FAIL']:
-                print(f"  - {component}")
-        
-        if report['statistics']['warnings'] > 0:
-            print(f"\nWarning Components:")
-            for component in report['summary_by_status']['WARNING']:
-                print(f"  - {component}")
-        
-        print(f"\nDetailed report saved to: {report_file}")
-        print(f"{'='*60}")
+        validator.print_summary()
         
         # Exit with appropriate code
-        sys.exit(0 if report['validation_summary']['overall_status'] == "PASS" else 1)
-        
+        if results['overall_status'] == 'NOT_READY':
+            sys.exit(1)
+        elif results['overall_status'] == 'READY_WITH_WARNINGS':
+            sys.exit(2)
+        else:
+            sys.exit(0)
+            
+    except KeyboardInterrupt:
+        logger.info("Validation interrupted by user")
+        sys.exit(130)
     except Exception as e:
-        logger.error(f"Validation failed with error: {str(e)}")
+        logger.error(f"Validation failed with error: {e}")
         sys.exit(1)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    main()
