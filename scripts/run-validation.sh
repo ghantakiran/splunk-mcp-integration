@@ -130,11 +130,11 @@ if [ -f "$REPORT_FILE" ]; then
     echo -e "${BLUE}Generating summary report...${NC}"
     
     # Extract key metrics from JSON report
-    TOTAL_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['statistics']['total_checks'])")
-    PASSED_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['statistics']['passed'])")
-    FAILED_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['statistics']['failed'])")
-    WARNING_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['statistics']['warnings'])")
-    SUCCESS_RATE=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['statistics']['success_rate'])")
+    TOTAL_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['summary']['total'])")
+    PASSED_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['summary']['passed'])")
+    FAILED_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['summary']['failed'])")
+    WARNING_CHECKS=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data['summary']['warnings'])")
+    SUCCESS_RATE=$(cat "$REPORT_FILE" | python3 -c "import sys, json; data=json.load(sys.stdin); print(round((data['summary']['passed'] / data['summary']['total']) * 100, 1) if data['summary']['total'] > 0 else 0)")
     
     # Create summary text report
     SUMMARY_FILE="$OUTPUT_DIR/validation-summary-$ENVIRONMENT-$TIMESTAMP.txt"

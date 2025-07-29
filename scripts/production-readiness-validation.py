@@ -30,11 +30,13 @@ logger = logging.getLogger(__name__)
 class ProductionValidator:
     """Main validation class for production readiness checks"""
     
-    def __init__(self, config_file: str = None):
+    def __init__(self, config_file: str = None, environment: str = 'development'):
+        self.environment = environment
         self.config = self.load_config(config_file)
         self.namespace = self.config.get('namespace', 'splunk-mcp-prod')
         self.results = {
             'timestamp': datetime.now().isoformat(),
+            'environment': environment,
             'checks': {},
             'summary': {
                 'total': 0,
@@ -46,9 +48,14 @@ class ProductionValidator:
         
     def load_config(self, config_file: str) -> Dict:
         """Load validation configuration"""
+        # Default config file location relative to script
+        if not config_file:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            config_file = os.path.join(script_dir, 'validation-config.yaml')
+        
         default_config = {
-            'namespace': 'splunk-mcp-prod',
-            'domain': 'splunk-mcp.your-domain.com',
+            'namespace': 'splunk-mcp-prod' if self.environment == 'production' else f'splunk-mcp-{self.environment}',
+            'domain': f'splunk-mcp.your-domain.com' if self.environment == 'production' else f'{self.environment}.splunk-mcp.your-domain.com',
             'monitoring_namespace': 'monitoring',
             'timeout': 300,
             'required_services': [
@@ -59,10 +66,10 @@ class ProductionValidator:
             ],
             'required_infrastructure': ['postgresql', 'redis'],
             'required_replicas': {
-                'api-gateway': 3,
-                'nlp-engine': 2,
-                'visualization': 2,
-                'alert-manager': 2
+                'api-gateway': 3 if self.environment == 'production' else 1,
+                'nlp-engine': 2 if self.environment == 'production' else 1,
+                'visualization': 2 if self.environment == 'production' else 1,
+                'alert-manager': 2 if self.environment == 'production' else 1
             },
             'health_endpoints': {
                 'api-gateway': 8000,
@@ -75,7 +82,17 @@ class ProductionValidator:
         if config_file and os.path.exists(config_file):
             with open(config_file, 'r') as f:
                 user_config = yaml.safe_load(f)
-                default_config.update(user_config)
+                # Use environment-specific config if available
+                if 'validation_config' in user_config and 'environments' in user_config['validation_config']:
+                    env_config = user_config['validation_config']['environments'].get(self.environment, {})
+                    if env_config:
+                        default_config.update(env_config)
+                
+                # Also include general config
+                if 'validation_config' in user_config:
+                    for key, value in user_config['validation_config'].items():
+                        if key != 'environments':
+                            default_config[key] = value
                 
         return default_config
     
@@ -98,6 +115,14 @@ class ProductionValidator:
     def check_kubernetes_access(self) -> Dict:
         """Validate Kubernetes cluster access"""
         logger.info("Checking Kubernetes cluster access...")
+        
+        # Skip Kubernetes checks for development environment
+        if self.environment == 'development':
+            return {
+                'status': 'PASS',
+                'message': 'Kubernetes checks skipped for development environment',
+                'details': 'Development environment uses local Docker containers'
+            }
         
         # Check cluster info
         success, output = self.run_kubectl(['cluster-info'])
@@ -138,44 +163,88 @@ class ProductionValidator:
         
         results = {}
         
-        for service in self.config['required_infrastructure']:
-            success, output = self.run_kubectl([
-                'get', 'pods', '-n', self.namespace, 
-                '-l', f'app={service}', '--no-headers'
-            ])
-            
-            if not success:
-                results[service] = {
-                    'status': 'FAIL',
-                    'message': f'Cannot get {service} pods',
-                    'details': output
-                }
-                continue
-            
-            if not output:
-                results[service] = {
-                    'status': 'FAIL',
-                    'message': f'No {service} pods found',
-                    'details': 'Service not deployed'
-                }
-                continue
-            
-            # Check if pods are running
-            running_pods = [line for line in output.split('\n') if 'Running' in line]
-            total_pods = len(output.split('\n'))
-            
-            if len(running_pods) == total_pods and total_pods > 0:
-                results[service] = {
-                    'status': 'PASS',
-                    'message': f'{service} is healthy',
-                    'details': f'{len(running_pods)}/{total_pods} pods running'
-                }
-            else:
-                results[service] = {
-                    'status': 'FAIL',
-                    'message': f'{service} has issues',
-                    'details': f'{len(running_pods)}/{total_pods} pods running'
-                }
+        # For development environment, check local services via Docker
+        if self.environment == 'development':
+            for service in self.config['required_infrastructure']:
+                try:
+                    if service == 'postgresql':
+                        # Check if PostgreSQL is accessible
+                        result = subprocess.run(['docker', 'ps', '--filter', 'name=postgres', '--format', '{{.Names}}'], 
+                                              capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            results[service] = {
+                                'status': 'PASS',
+                                'message': f'{service} container is running',
+                                'details': f'Container: {result.stdout.strip()}'
+                            }
+                        else:
+                            results[service] = {
+                                'status': 'FAIL',
+                                'message': f'{service} container not found',
+                                'details': 'Check if docker-compose is running'
+                            }
+                    elif service == 'redis':
+                        # Check if Redis is accessible
+                        result = subprocess.run(['docker', 'ps', '--filter', 'name=redis', '--format', '{{.Names}}'], 
+                                              capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0 and result.stdout.strip():
+                            results[service] = {
+                                'status': 'PASS',
+                                'message': f'{service} container is running',
+                                'details': f'Container: {result.stdout.strip()}'
+                            }
+                        else:
+                            results[service] = {
+                                'status': 'FAIL',
+                                'message': f'{service} container not found',
+                                'details': 'Check if docker-compose is running'
+                            }
+                except Exception as e:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'{service} check failed',
+                        'details': str(e)
+                    }
+        else:
+            # Production/Staging: Check Kubernetes pods
+            for service in self.config['required_infrastructure']:
+                success, output = self.run_kubectl([
+                    'get', 'pods', '-n', self.namespace, 
+                    '-l', f'app={service}', '--no-headers'
+                ])
+                
+                if not success:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'Cannot get {service} pods',
+                        'details': output
+                    }
+                    continue
+                
+                if not output:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'No {service} pods found',
+                        'details': 'Service not deployed'
+                    }
+                    continue
+                
+                # Check if pods are running
+                running_pods = [line for line in output.split('\n') if 'Running' in line]
+                total_pods = len(output.split('\n'))
+                
+                if len(running_pods) == total_pods and total_pods > 0:
+                    results[service] = {
+                        'status': 'PASS',
+                        'message': f'{service} is healthy',
+                        'details': f'{len(running_pods)}/{total_pods} pods running'
+                    }
+                else:
+                    results[service] = {
+                        'status': 'FAIL',
+                        'message': f'{service} has issues',
+                        'details': f'{len(running_pods)}/{total_pods} pods running'
+                    }
         
         # Overall status
         failed_services = [k for k, v in results.items() if v['status'] == 'FAIL']
@@ -767,6 +836,7 @@ def main():
     parser.add_argument('--output', '-o', help='Output report file')
     parser.add_argument('--namespace', '-n', help='Kubernetes namespace')
     parser.add_argument('--domain', '-d', help='Platform domain')
+    parser.add_argument('--env', help='Environment (development|staging|production)', default='development')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     
     args = parser.parse_args()
@@ -776,7 +846,7 @@ def main():
     
     try:
         # Create validator
-        validator = ProductionValidator(args.config)
+        validator = ProductionValidator(args.config, args.env)
         
         # Override config with command line arguments
         if args.namespace:

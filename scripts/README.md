@@ -4,7 +4,78 @@ This directory contains utility scripts for the Splunk MCP Integration project.
 
 ## Available Scripts
 
-### monitor_claude_files.py
+### Production Readiness Validation
+
+#### production-readiness-validation.py
+Comprehensive production readiness validation for all environments.
+
+**Usage:**
+```bash
+python3 scripts/production-readiness-validation.py --env development
+python3 scripts/production-readiness-validation.py --env production --verbose
+```
+
+**Features:**
+- Environment-specific validation (development, staging, production)
+- Kubernetes cluster validation for production environments
+- Docker container validation for development
+- Service health checks and endpoint validation
+- Database and Redis connectivity tests
+- Security and compliance validation
+- Comprehensive JSON reporting
+
+#### simple-validation.py
+Quick project structure and implementation verification.
+
+**Usage:**
+```bash
+python3 scripts/simple-validation.py
+```
+
+**Features:**
+- Project structure validation
+- Service implementation status
+- Documentation completeness checks
+- Frontend implementation verification
+- Basic infrastructure configuration validation
+
+#### run-validation.sh
+Automated validation runner with environment management.
+
+**Usage:**
+```bash
+./scripts/run-validation.sh --env development
+./scripts/run-validation.sh --env production --verbose
+```
+
+**Features:**
+- Automatic service startup for development
+- Environment-specific configuration
+- Report generation and summarization
+- Colored output and status indicators
+
+#### validation-config.yaml
+Configuration file for validation parameters and thresholds.
+
+### Performance Testing
+
+#### production-performance-testing.py
+Load testing and performance validation for production readiness.
+
+#### performance-test-config.yaml
+Configuration for performance testing parameters.
+
+### Security & Deployment
+
+#### production-security-hardening.sh
+Security hardening script for production environments.
+
+#### production-deployment.sh
+Automated production deployment script.
+
+### Monitoring & Analysis
+
+#### monitor_claude_files.py
 Monitors CLAUDE.md files across the project to ensure they stay within manageable token limits.
 
 **Usage:**
@@ -29,6 +100,14 @@ python scripts/monitor_claude_files.py
 - `services/*/CLAUDE.md` (service-specific files)
 - `frontend/CLAUDE.md` (frontend documentation)
 - `infrastructure/CLAUDE.md` (infrastructure documentation)
+
+#### test_coverage_analysis.py
+Analyzes test coverage across all services.
+
+### Environment Validation
+
+#### validate-env-config.py
+Validates environment configuration and secrets.
 
 ## Adding New Scripts
 
