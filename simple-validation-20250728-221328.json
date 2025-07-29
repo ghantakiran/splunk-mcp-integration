@@ -1,0 +1,169 @@
+{
+  "timestamp": "2025-07-28T22:13:28.615342",
+  "validation_type": "simple",
+  "environment": "development",
+  "checks": {
+    "project_structure": {
+      "status": "PASS",
+      "message": "Project structure check: 0 failures",
+      "details": {
+        "CLAUDE.md": {
+          "status": "PASS",
+          "message": "CLAUDE.md exists"
+        },
+        "PLANNING.md": {
+          "status": "PASS",
+          "message": "PLANNING.md exists"
+        },
+        "TASKS.md": {
+          "status": "PASS",
+          "message": "TASKS.md exists"
+        },
+        "docker-compose.yml": {
+          "status": "PASS",
+          "message": "docker-compose.yml exists"
+        },
+        "Makefile": {
+          "status": "PASS",
+          "message": "Makefile exists"
+        }
+      }
+    },
+    "documentation": {
+      "status": "PASS",
+      "message": "Documentation check: 0 failures",
+      "details": {
+        "docs/project": {
+          "status": "PASS",
+          "message": "docs/project contains 4 documentation files",
+          "details": "4 files"
+        },
+        "docs/operations": {
+          "status": "PASS",
+          "message": "docs/operations contains 3 documentation files",
+          "details": "3 files"
+        },
+        "docs/user": {
+          "status": "PASS",
+          "message": "docs/user contains 9 documentation files",
+          "details": "9 files"
+        }
+      }
+    },
+    "services": {
+      "status": "FAIL",
+      "message": "Services check: 6 failures, 1 warnings",
+      "details": {
+        "api-gateway": {
+          "status": "WARN",
+          "message": "api-gateway service incomplete",
+          "details": "Missing: main.py"
+        },
+        "nlp-engine": {
+          "status": "PASS",
+          "message": "nlp-engine service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "visualization": {
+          "status": "PASS",
+          "message": "visualization service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "alert-manager": {
+          "status": "PASS",
+          "message": "alert-manager service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "slack-bot": {
+          "status": "PASS",
+          "message": "slack-bot service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "teams-bot": {
+          "status": "PASS",
+          "message": "teams-bot service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "email-service": {
+          "status": "PASS",
+          "message": "email-service service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "webhook-service": {
+          "status": "PASS",
+          "message": "webhook-service service implemented",
+          "details": "Has Dockerfile, requirements.txt, and main.py"
+        },
+        "pdf-export": {
+          "status": "FAIL",
+          "message": "pdf-export service not found",
+          "details": "Service directory missing"
+        },
+        "powerpoint-export": {
+          "status": "FAIL",
+          "message": "powerpoint-export service not found",
+          "details": "Service directory missing"
+        },
+        "word-export": {
+          "status": "FAIL",
+          "message": "word-export service not found",
+          "details": "Service directory missing"
+        },
+        "csv-export": {
+          "status": "FAIL",
+          "message": "csv-export service not found",
+          "details": "Service directory missing"
+        },
+        "secure-sharing": {
+          "status": "FAIL",
+          "message": "secure-sharing service not found",
+          "details": "Service directory missing"
+        },
+        "report-scheduling": {
+          "status": "FAIL",
+          "message": "report-scheduling service not found",
+          "details": "Service directory missing"
+        }
+      }
+    },
+    "frontend": {
+      "status": "FAIL",
+      "message": "Frontend check: 1 failures",
+      "details": {
+        "package.json": {
+          "status": "PASS",
+          "message": "package.json exists"
+        },
+        "src/App.js": {
+          "status": "FAIL",
+          "message": "src/App.js missing"
+        },
+        "public/index.html": {
+          "status": "PASS",
+          "message": "public/index.html exists"
+        }
+      }
+    },
+    "infrastructure_configs": {
+      "status": "WARN",
+      "message": "Infrastructure configs: 1 missing optional files",
+      "details": {
+        "infrastructure/docker/docker-compose.yml": {
+          "status": "WARN",
+          "message": "infrastructure/docker/docker-compose.yml missing (optional)"
+        },
+        "infrastructure/kubernetes/README.md": {
+          "status": "PASS",
+          "message": "infrastructure/kubernetes/README.md exists"
+        }
+      }
+    }
+  },
+  "summary": {
+    "total": 5,
+    "passed": 2,
+    "failed": 2,
+    "warnings": 1
+  },
+  "overall_status": "NOT_READY"
+}
