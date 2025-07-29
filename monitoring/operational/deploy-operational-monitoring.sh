@@ -1,10 +1,10 @@
 #!/bin/bash
-"""
-Operational Monitoring Deployment Script
-=======================================
-Deploy comprehensive operational monitoring, dashboards, and automation
-for the Splunk MCP Integration platform
-"""
+################################################################################
+# Operational Monitoring Deployment Script
+# =========================================
+# Deploy comprehensive operational monitoring, dashboards, and automation
+# for the Splunk MCP Integration platform
+################################################################################
 
 set -euo pipefail
 
