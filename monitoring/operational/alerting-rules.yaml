@@ -1,0 +1,424 @@
+# Comprehensive Alerting Rules for Operational Monitoring
+# These rules provide intelligent alerting for business impact, performance, and operational issues
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: operational-alerting-rules
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+    app: operational-monitoring
+spec:
+  groups:
+  - name: business_impact_alerts
+    interval: 30s
+    rules:
+    - alert: CriticalBusinessImpact
+      expr: |
+        (
+          (splunk_mcp:error_rate_5xx > 0.1) or
+          (splunk_mcp:sla_availability < 95) or
+          (splunk_mcp:user_satisfaction_score < 3.0)
+        )
+      for: 2m
+      labels:
+        severity: critical
+        category: business_impact
+        escalation: immediate
+      annotations:
+        summary: "Critical business impact detected"
+        description: |
+          Critical business impact metrics detected:
+          - Error Rate: {{ with query "splunk_mcp:error_rate_5xx" }}{{ . | first | value | humanizePercentage }}{{ end }}
+          - Availability: {{ with query "splunk_mcp:sla_availability" }}{{ . | first | value | humanizePercentage }}{{ end }}
+          - Satisfaction: {{ with query "splunk_mcp:user_satisfaction_score" }}{{ . | first | value }}{{ end }}/5.0
+        runbook_url: "https://docs.company.com/runbooks/business-impact"
+        dashboard_url: "http://grafana:3000/d/platform-ops-overview"
+
+    - alert: UserExperienceDegradation
+      expr: |
+        (
+          (splunk_mcp:response_time_95th > 10) or
+          (rate(user_feedback_negative_total[1h]) > 0.1) or
+          (splunk_mcp:query_success_rate < 0.9)
+        )
+      for: 5m
+      labels:
+        severity: warning
+        category: user_experience
+        escalation: 30m
+      annotations:
+        summary: "User experience degradation detected"
+        description: |
+          User experience metrics indicate degradation:
+          - Response Time 95th: {{ $value }}s
+          - Query Success Rate: {{ with query "splunk_mcp:query_success_rate" }}{{ . | first | value | humanizePercentage }}{{ end }}
+        runbook_url: "https://docs.company.com/runbooks/user-experience"
+
+    - alert: LowDailyActiveUsers
+      expr: splunk_mcp:daily_active_users < 50
+      for: 1h
+      labels:
+        severity: warning
+        category: adoption
+        escalation: 4h
+      annotations:
+        summary: "Daily active users below threshold"
+        description: "Only {{ $value }} active users today (target: 50+)"
+        runbook_url: "https://docs.company.com/runbooks/user-adoption"
+
+  - name: performance_alerts
+    interval: 15s
+    rules:
+    - alert: HighLatency
+      expr: splunk_mcp:response_time_95th > 5
+      for: 5m
+      labels:
+        severity: warning
+        category: performance
+        escalation: 15m
+      annotations:
+        summary: "High response time detected"
+        description: "95th percentile response time is {{ $value }}s (threshold: 5s)"
+        runbook_url: "https://docs.company.com/runbooks/high-latency"
+        impact: "User queries taking longer than expected"
+
+    - alert: CriticalLatency
+      expr: splunk_mcp:response_time_95th > 15
+      for: 2m
+      labels:
+        severity: critical
+        category: performance
+        escalation: immediate
+      annotations:
+        summary: "Critical response time detected"
+        description: "95th percentile response time is {{ $value }}s (critical threshold: 15s)"
+        runbook_url: "https://docs.company.com/runbooks/critical-latency"
+        impact: "Severe user experience degradation"
+
+    - alert: HighThroughputDrop
+      expr: |
+        (
+          rate(http_requests_total{job="api-gateway"}[5m]) < 
+          rate(http_requests_total{job="api-gateway"}[5m] offset 1h) * 0.5
+        )
+      for: 10m
+      labels:
+        severity: warning
+        category: performance
+        escalation: 20m
+      annotations:
+        summary: "Significant throughput drop detected"
+        description: "Request rate has dropped by more than 50% compared to 1 hour ago"
+        runbook_url: "https://docs.company.com/runbooks/throughput-drop"
+
+    - alert: DatabaseSlowQueries
+      expr: |
+        histogram_quantile(0.95, 
+          rate(database_query_duration_seconds_bucket[5m])
+        ) > 2.0
+      for: 10m
+      labels:
+        severity: warning
+        category: database
+        escalation: 30m
+      annotations:
+        summary: "Database queries running slowly"
+        description: "95th percentile database query time is {{ $value }}s"
+        runbook_url: "https://docs.company.com/runbooks/slow-database"
+
+  - name: resource_alerts
+    interval: 60s
+    rules:
+    - alert: HighCPUUtilization
+      expr: splunk_mcp:cpu_utilization_avg > 80
+      for: 10m
+      labels:
+        severity: warning
+        category: resource
+        escalation: 1h
+        automation: scale_up
+      annotations:
+        summary: "High CPU utilization across platform"
+        description: "Average CPU utilization is {{ $value }}% (threshold: 80%)"
+        runbook_url: "https://docs.company.com/runbooks/high-cpu"
+        recommendation: "Consider auto-scaling or resource optimization"
+
+    - alert: CriticalCPUUtilization
+      expr: splunk_mcp:cpu_utilization_avg > 95
+      for: 5m
+      labels:
+        severity: critical
+        category: resource
+        escalation: immediate
+        automation: scale_up_urgent
+      annotations:
+        summary: "Critical CPU utilization"
+        description: "Average CPU utilization is {{ $value }}% (critical threshold: 95%)"
+        runbook_url: "https://docs.company.com/runbooks/critical-cpu"
+        recommendation: "Immediate scaling required"
+
+    - alert: HighMemoryUtilization
+      expr: splunk_mcp:memory_utilization_avg > 85
+      for: 5m
+      labels:
+        severity: warning
+        category: resource
+        escalation: 30m
+        automation: scale_up
+      annotations:
+        summary: "High memory utilization"
+        description: "Average memory utilization is {{ $value }}% (threshold: 85%)"
+        runbook_url: "https://docs.company.com/runbooks/high-memory"
+
+    - alert: DiskSpaceWarning
+      expr: |
+        (
+          node_filesystem_avail_bytes{mountpoint="/"} / 
+          node_filesystem_size_bytes{mountpoint="/"} * 100
+        ) < 20
+      for: 15m
+      labels:
+        severity: warning
+        category: resource
+        escalation: 2h
+      annotations:
+        summary: "Disk space running low"
+        description: "Available disk space is {{ $value }}%"
+        runbook_url: "https://docs.company.com/runbooks/disk-space"
+
+  - name: availability_alerts
+    interval: 30s
+    rules:
+    - alert: ServiceDown
+      expr: up{job=~"splunk-mcp-.*"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        category: availability
+        escalation: immediate
+        automation: restart_service
+      annotations:
+        summary: "Service {{ $labels.job }} is down"
+        description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute"
+        runbook_url: "https://docs.company.com/runbooks/service-down"
+        impact: "Service unavailable to users"
+
+    - alert: MultipleServicesDown
+      expr: count(up{job=~"splunk-mcp-.*"} == 0) >= 3
+      for: 30s
+      labels:
+        severity: critical
+        category: availability
+        escalation: immediate
+      annotations:
+        summary: "Multiple services are down"
+        description: "{{ $value }} services are currently down"
+        runbook_url: "https://docs.company.com/runbooks/multiple-services-down"
+        impact: "Platform severely degraded or unavailable"
+
+    - alert: PodCrashLooping
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="splunk-mcp-prod"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        category: availability
+        escalation: 30m
+      annotations:
+        summary: "Pod {{ $labels.pod }} is crash looping"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently"
+        runbook_url: "https://docs.company.com/runbooks/crash-looping"
+
+  - name: capacity_alerts
+    interval: 300s
+    rules:
+    - alert: CPUCapacityForecast
+      expr: splunk_mcp:capacity_forecast_cpu_7d > 90
+      for: 1h
+      labels:
+        severity: warning
+        category: capacity
+        escalation: 24h
+      annotations:
+        summary: "CPU capacity will be exceeded in 7 days"
+        description: "Predicted CPU utilization will reach {{ $value }}% in 7 days"
+        runbook_url: "https://docs.company.com/runbooks/capacity-planning"
+        recommendation: "Plan resource scaling or optimization"
+
+    - alert: MemoryCapacityForecast
+      expr: splunk_mcp:capacity_forecast_memory_7d > 90
+      for: 1h
+      labels:
+        severity: warning
+        category: capacity
+        escalation: 24h
+      annotations:
+        summary: "Memory capacity will be exceeded in 7 days"
+        description: "Predicted memory utilization will reach {{ $value }}% in 7 days"
+        runbook_url: "https://docs.company.com/runbooks/capacity-planning"
+
+    - alert: StorageCapacityForecast
+      expr: |
+        predict_linear(
+          node_filesystem_avail_bytes{mountpoint="/"}[24h], 
+          7*24*3600
+        ) / 1024 / 1024 / 1024 < 10
+      for: 2h
+      labels:
+        severity: critical
+        category: capacity
+        escalation: 8h
+      annotations:
+        summary: "Storage capacity will be exceeded in 7 days"
+        description: "Predicted available storage will be {{ $value }}GB in 7 days"
+        runbook_url: "https://docs.company.com/runbooks/storage-capacity"
+
+  - name: sla_alerts
+    interval: 60s
+    rules:
+    - alert: SLAAvailabilityBreach
+      expr: splunk_mcp:sla_availability < 99.5
+      for: 5m
+      labels:
+        severity: critical
+        category: sla
+        escalation: immediate
+      annotations:
+        summary: "SLA availability breach"
+        description: "Platform availability is {{ $value }}% (SLA: 99.5%)"
+        runbook_url: "https://docs.company.com/runbooks/sla-breach"
+        impact: "SLA breach - customer impact"
+
+    - alert: SLAResponseTimeBreach
+      expr: splunk_mcp:sla_response_time_compliance < 95
+      for: 10m
+      labels:
+        severity: warning
+        category: sla
+        escalation: 1h
+      annotations:
+        summary: "SLA response time breach"
+        description: "Response time SLA compliance is {{ $value }}% (SLA: 95%)"
+        runbook_url: "https://docs.company.com/runbooks/sla-response-time"
+
+    - alert: SLAErrorRateBreach
+      expr: splunk_mcp:sla_error_rate_compliance < 99
+      for: 15m
+      labels:
+        severity: warning
+        category: sla
+        escalation: 2h
+      annotations:
+        summary: "SLA error rate breach"
+        description: "Error rate SLA compliance is {{ $value }}% (SLA: 99%)"
+        runbook_url: "https://docs.company.com/runbooks/sla-error-rate"
+
+  - name: security_alerts
+    interval: 30s
+    rules:
+    - alert: HighAuthenticationFailures
+      expr: rate(auth_failures_total{platform="splunk-mcp"}[5m]) > 10
+      for: 2m
+      labels:
+        severity: critical
+        category: security
+        escalation: immediate
+      annotations:
+        summary: "High authentication failure rate - possible attack"
+        description: "Authentication failure rate is {{ $value }}/sec (threshold: 10/sec)"
+        runbook_url: "https://docs.company.com/runbooks/auth-failures"
+        impact: "Possible brute force attack or credential stuffing"
+
+    - alert: SuspiciousActivity
+      expr: rate(suspicious_activity_total{platform="splunk-mcp"}[5m]) > 5
+      for: 1m
+      labels:
+        severity: critical
+        category: security
+        escalation: immediate
+      annotations:
+        summary: "Suspicious activity detected"
+        description: "Suspicious activity rate is {{ $value }}/sec"
+        runbook_url: "https://docs.company.com/runbooks/suspicious-activity"
+
+    - alert: UnauthorizedAccessAttempt
+      expr: rate(unauthorized_access_total{platform="splunk-mcp"}[5m]) > 1
+      for: 3m
+      labels:
+        severity: warning
+        category: security
+        escalation: 15m
+      annotations:
+        summary: "Unauthorized access attempts detected"
+        description: "{{ $value }} unauthorized access attempts per second"
+        runbook_url: "https://docs.company.com/runbooks/unauthorized-access"
+
+    - alert: SecurityVulnerabilityDetected
+      expr: security_vulnerability_count{severity="critical"} > 0
+      for: 1m
+      labels:
+        severity: critical
+        category: security
+        escalation: immediate
+      annotations:
+        summary: "Critical security vulnerability detected"
+        description: "{{ $value }} critical security vulnerabilities found"
+        runbook_url: "https://docs.company.com/runbooks/security-vulnerabilities"
+
+  - name: automation_alerts
+    interval: 120s
+    rules:
+    - alert: AutomationFailure
+      expr: automation_success_rate{platform="splunk-mcp"} < 0.9
+      for: 10m
+      labels:
+        severity: warning
+        category: automation
+        escalation: 1h
+      annotations:
+        summary: "Automation success rate low"
+        description: "Automation success rate is {{ $value | humanizePercentage }} (threshold: 90%)"
+        runbook_url: "https://docs.company.com/runbooks/automation-failure"
+
+    - alert: AutoScalingIneffective
+      expr: |
+        increase(kubernetes_autoscaling_events_total{reason="FailedGetResourceMetric"}[30m]) > 5
+      for: 15m
+      labels:
+        severity: warning
+        category: automation
+        escalation: 2h
+      annotations:
+        summary: "Auto-scaling not working effectively"
+        description: "Auto-scaling has failed to get metrics {{ $value }} times in 30 minutes"
+        runbook_url: "https://docs.company.com/runbooks/autoscaling-issues"
+
+  - name: data_quality_alerts
+    interval: 300s
+    rules:
+    - alert: DataIngestionFailure
+      expr: rate(data_ingestion_errors_total{platform="splunk-mcp"}[10m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        category: data_quality
+        escalation: 30m
+      annotations:
+        summary: "Data ingestion failure rate high"
+        description: "Data ingestion error rate is {{ $value | humanizePercentage }}"
+        runbook_url: "https://docs.company.com/runbooks/data-ingestion"
+
+    - alert: QueryResultInconsistency
+      expr: query_result_inconsistency_rate{platform="splunk-mcp"} > 0.05
+      for: 10m
+      labels:
+        severity: warning
+        category: data_quality
+        escalation: 1h
+      annotations:
+        summary: "Query result inconsistency detected"
+        description: "{{ $value | humanizePercentage }} of queries returning inconsistent results"
+        runbook_url: "https://docs.company.com/runbooks/query-inconsistency"

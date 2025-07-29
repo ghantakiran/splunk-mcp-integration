@@ -1,0 +1,456 @@
+# Backup Configuration Templates
+# ============================
+# Comprehensive backup configuration templates for different scenarios
+# and environments in the Splunk MCP Integration platform
+
+# Production Environment Full Backup Configuration
+production_full_backup:
+  name: "Production Full System Backup"
+  description: "Comprehensive backup for production environment including all services and data"
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  backup_types:
+    - DATABASE
+    - REDIS
+    - KUBERNETES
+    - APPLICATION_DATA
+    - CONFIGURATION
+    - SECRETS
+    - VOLUMES
+  
+  storage_backends:
+    primary:
+      type: "s3"
+      config:
+        bucket: "splunk-mcp-backups-prod"
+        region: "us-east-1"
+        encryption: "AES256"
+        storage_class: "STANDARD_IA"
+    
+    secondary:
+      type: "gcs"
+      config:
+        bucket: "splunk-mcp-backups-secondary"
+        project_id: "splunk-mcp-prod"
+        storage_class: "NEARLINE"
+  
+  retention_policy:
+    daily_backups: 30    # Keep 30 daily backups
+    weekly_backups: 12   # Keep 12 weekly backups
+    monthly_backups: 12  # Keep 12 monthly backups
+    yearly_backups: 5    # Keep 5 yearly backups
+  
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+    key_rotation_days: 90
+  
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 6
+  
+  verification:
+    enabled: true
+    checksum_algorithm: "SHA256"
+    integrity_check: true
+    test_restore: true
+    test_restore_frequency: "weekly"
+  
+  notification:
+    on_success: ["email", "slack"]
+    on_failure: ["email", "slack", "pagerduty"]
+    recipients:
+      email: ["ops-team@company.com", "backup-admin@company.com"]
+      slack_channel: "#backup-alerts"
+  
+  performance:
+    parallel_operations: 4
+    bandwidth_limit_mbps: 100
+    timeout_minutes: 240
+
+# Development Environment Backup Configuration
+development_backup:
+  name: "Development Environment Backup"
+  description: "Lightweight backup for development environment"
+  schedule: "0 6 * * 1-5"  # Weekdays at 6 AM
+  backup_types:
+    - DATABASE
+    - REDIS
+    - CONFIGURATION
+  
+  storage_backends:
+    primary:
+      type: "local"
+      config:
+        path: "/opt/backups/development"
+        cleanup_older_than_days: 7
+  
+  retention_policy:
+    daily_backups: 7     # Keep 7 daily backups
+    weekly_backups: 4    # Keep 4 weekly backups
+  
+  encryption:
+    enabled: false
+  
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 3
+  
+  verification:
+    enabled: true
+    checksum_algorithm: "MD5"
+    integrity_check: true
+    test_restore: false
+  
+  notification:
+    on_failure: ["email"]
+    recipients:
+      email: ["dev-team@company.com"]
+
+# Critical Data Only Backup (High Frequency)
+critical_data_backup:
+  name: "Critical Data Backup"
+  description: "High-frequency backup of critical data only"
+  schedule: "0 */6 * * *"  # Every 6 hours
+  backup_types:
+    - DATABASE
+    - REDIS
+  
+  storage_backends:
+    primary:
+      type: "s3"
+      config:
+        bucket: "splunk-mcp-critical-backups"
+        region: "us-east-1"
+        encryption: "AES256"
+        storage_class: "STANDARD"
+  
+  retention_policy:
+    hourly_backups: 48   # Keep 48 hourly backups (2 days)
+    daily_backups: 14    # Keep 14 daily backups
+    weekly_backups: 8    # Keep 8 weekly backups
+  
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+  
+  compression:
+    enabled: true
+    algorithm: "lz4"     # Fast compression for frequent backups
+    level: 1
+  
+  verification:
+    enabled: true
+    checksum_algorithm: "SHA256"
+    integrity_check: true
+    test_restore: false
+  
+  notification:
+    on_failure: ["email", "slack"]
+    recipients:
+      email: ["dba-team@company.com"]
+      slack_channel: "#database-alerts"
+  
+  performance:
+    parallel_operations: 2
+    bandwidth_limit_mbps: 50
+    timeout_minutes: 60
+
+# Disaster Recovery Backup Configuration
+disaster_recovery_backup:
+  name: "Disaster Recovery Backup"
+  description: "Cross-region backup for disaster recovery purposes"
+  schedule: "0 3 * * 0"  # Weekly on Sunday at 3 AM
+  backup_types:
+    - FULL_SYSTEM
+  
+  storage_backends:
+    primary:
+      type: "s3"
+      config:
+        bucket: "splunk-mcp-dr-backups"
+        region: "us-west-2"  # Different region for DR
+        encryption: "AES256"
+        storage_class: "GLACIER"
+    
+    secondary:
+      type: "azure"
+      config:
+        container: "splunk-mcp-dr-secondary"
+        storage_account: "splunkmcpdr"
+        tier: "Cool"
+  
+  retention_policy:
+    weekly_backups: 52   # Keep 52 weekly backups (1 year)
+    monthly_backups: 24  # Keep 24 monthly backups (2 years)
+    yearly_backups: 10   # Keep 10 yearly backups
+  
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+    key_rotation_days: 30
+  
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 9  # Maximum compression for long-term storage
+  
+  verification:
+    enabled: true
+    checksum_algorithm: "SHA512"
+    integrity_check: true
+    test_restore: true
+    test_restore_frequency: "monthly"
+  
+  notification:
+    on_success: ["email"]
+    on_failure: ["email", "slack", "pagerduty"]
+    recipients:
+      email: ["disaster-recovery@company.com", "ciso@company.com"]
+      slack_channel: "#disaster-recovery"
+  
+  performance:
+    parallel_operations: 6
+    bandwidth_limit_mbps: 200
+    timeout_minutes: 480  # 8 hours for full system backup
+
+# Configuration-Only Backup (High Frequency)
+configuration_backup:
+  name: "Configuration Backup"
+  description: "Backup of Kubernetes configurations and application settings"
+  schedule: "0 */2 * * *"  # Every 2 hours
+  backup_types:
+    - KUBERNETES
+    - CONFIGURATION
+    - SECRETS
+  
+  storage_backends:
+    primary:
+      type: "git"
+      config:
+        repository: "git@github.com:company/splunk-mcp-config-backups.git"
+        branch: "backup-configs"
+        commit_message_template: "Automated config backup - {timestamp}"
+  
+  retention_policy:
+    hourly_backups: 72   # Keep 72 hourly backups (3 days)
+    daily_backups: 30    # Keep 30 daily backups
+    monthly_backups: 12  # Keep 12 monthly backups
+  
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+  
+  compression:
+    enabled: false  # Git handles compression
+  
+  verification:
+    enabled: true
+    checksum_algorithm: "SHA256"
+    integrity_check: true
+    test_restore: false
+  
+  notification:
+    on_failure: ["email"]
+    recipients:
+      email: ["platform-team@company.com"]
+
+# Test Environment Backup Configuration
+test_backup:
+  name: "Test Environment Backup"
+  description: "Backup for testing and validation purposes"
+  schedule: "manual"  # Manual trigger only
+  backup_types:
+    - DATABASE
+    - APPLICATION_DATA
+  
+  storage_backends:
+    primary:
+      type: "local"
+      config:
+        path: "/tmp/test-backups"
+        cleanup_older_than_days: 1
+  
+  retention_policy:
+    daily_backups: 1     # Keep only 1 backup
+  
+  encryption:
+    enabled: false
+  
+  compression:
+    enabled: false
+  
+  verification:
+    enabled: false
+  
+  notification:
+    on_failure: ["email"]
+    recipients:
+      email: ["test-team@company.com"]
+
+# Compliance Backup Configuration
+compliance_backup:
+  name: "Compliance Backup"
+  description: "Long-term backup for compliance and regulatory requirements"
+  schedule: "0 1 1 * *"  # Monthly on the 1st at 1 AM
+  backup_types:
+    - DATABASE
+    - APPLICATION_DATA
+    - CONFIGURATION
+  
+  storage_backends:
+    primary:
+      type: "s3"
+      config:
+        bucket: "splunk-mcp-compliance-backups"
+        region: "us-east-1"
+        encryption: "AES256"
+        storage_class: "GLACIER_IR"
+    
+    secondary:
+      type: "local"
+      config:
+        path: "/archive/compliance-backups"
+        encryption: true
+  
+  retention_policy:
+    monthly_backups: 84  # Keep 84 monthly backups (7 years)
+    yearly_backups: 10   # Keep 10 yearly backups
+  
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+    key_rotation_days: 365
+  
+  compression:
+    enabled: true
+    algorithm: "gzip"
+    level: 9
+  
+  verification:
+    enabled: true
+    checksum_algorithm: "SHA512"
+    integrity_check: true
+    test_restore: true
+    test_restore_frequency: "quarterly"
+  
+  metadata:
+    compliance_tags:
+      - "SOX"
+      - "GDPR"
+      - "HIPAA"
+      - "SOC2"
+    legal_hold: false
+    audit_trail: true
+  
+  notification:
+    on_success: ["email"]
+    on_failure: ["email", "pagerduty"]
+    recipients:
+      email: ["compliance@company.com", "legal@company.com"]
+
+# Emergency Backup Configuration
+emergency_backup:
+  name: "Emergency Backup"
+  description: "Fast backup for emergency situations"
+  schedule: "manual"  # Triggered manually during emergencies
+  backup_types:
+    - DATABASE
+    - REDIS
+    - CONFIGURATION
+  
+  storage_backends:
+    primary:
+      type: "s3"
+      config:
+        bucket: "splunk-mcp-emergency-backups"
+        region: "us-east-1"
+        encryption: "AES256"
+        storage_class: "STANDARD"
+  
+  retention_policy:
+    daily_backups: 30    # Keep 30 daily backups
+  
+  encryption:
+    enabled: true
+    algorithm: "AES-256-GCM"
+  
+  compression:
+    enabled: true
+    algorithm: "lz4"     # Fast compression
+    level: 1
+  
+  verification:
+    enabled: false  # Skip verification for speed
+  
+  notification:
+    on_success: ["email", "slack"]
+    on_failure: ["email", "slack", "pagerduty"]
+    recipients:
+      email: ["incident-response@company.com"]
+      slack_channel: "#incident-response"
+  
+  performance:
+    parallel_operations: 8
+    bandwidth_limit_mbps: 500  # No bandwidth limit for emergency
+    timeout_minutes: 30
+
+# Common Settings and Defaults
+common_settings:
+  # Default notification settings
+  default_notifications:
+    success_threshold: 95  # Only notify if success rate < 95%
+    failure_escalation_minutes: 30
+    retry_attempts: 3
+    retry_delay_minutes: 15
+  
+  # Security settings
+  security:
+    require_encryption_in_transit: true
+    require_encryption_at_rest: true
+    minimum_key_length: 256
+    allowed_algorithms: ["AES-256-GCM", "ChaCha20-Poly1305"]
+  
+  # Performance defaults
+  performance_defaults:
+    default_parallel_operations: 3
+    default_bandwidth_limit_mbps: 100
+    default_timeout_minutes: 120
+    max_concurrent_backups: 5
+  
+  # Monitoring and alerting
+  monitoring:
+    metrics_retention_days: 90
+    performance_monitoring: true
+    cost_tracking: true
+    sla_monitoring: true
+  
+  # Disaster recovery settings
+  disaster_recovery:
+    minimum_cross_region_backups: 1
+    maximum_rpo_hours: 24
+    maximum_rto_hours: 4
+    backup_testing_frequency: "monthly"
+
+# Template Selection Guidelines
+template_guidelines:
+  production:
+    recommended_template: "production_full_backup"
+    additional_templates: ["critical_data_backup", "disaster_recovery_backup"]
+    
+  staging:
+    recommended_template: "development_backup"
+    additional_templates: ["configuration_backup"]
+    
+  development:
+    recommended_template: "development_backup"
+    additional_templates: ["test_backup"]
+    
+  compliance_environments:
+    recommended_template: "compliance_backup"
+    additional_templates: ["production_full_backup", "disaster_recovery_backup"]
+    
+  emergency_situations:
+    recommended_template: "emergency_backup"
+    use_case: "When immediate backup is needed during incidents"

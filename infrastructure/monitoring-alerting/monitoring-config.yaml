@@ -1,0 +1,424 @@
+# Comprehensive Monitoring Configuration for Splunk MCP Integration Platform
+# ========================================================================
+
+# Environment-specific configurations
+environments:
+  production:
+    namespace: "splunk-mcp-monitoring-prod"
+    prometheus:
+      retention: "30d"
+      storage: "500Gi"
+      cpu_limit: "4"
+      memory_limit: "16Gi"
+      replicas: 3
+    grafana:
+      storage: "50Gi"
+      cpu_limit: "2"
+      memory_limit: "4Gi"
+      replicas: 2
+    alertmanager:
+      storage: "20Gi"
+      replicas: 3
+    resource_multiplier: 1.0
+    high_availability: true
+    
+  staging:
+    namespace: "splunk-mcp-monitoring-staging"
+    prometheus:
+      retention: "15d"
+      storage: "200Gi"
+      cpu_limit: "2"
+      memory_limit: "8Gi"
+      replicas: 2
+    grafana:
+      storage: "20Gi"
+      cpu_limit: "1"
+      memory_limit: "2Gi"
+      replicas: 1
+    alertmanager:
+      storage: "10Gi"
+      replicas: 2
+    resource_multiplier: 0.6
+    high_availability: true
+    
+  development:
+    namespace: "splunk-mcp-monitoring-dev"
+    prometheus:
+      retention: "7d"
+      storage: "50Gi"
+      cpu_limit: "1"
+      memory_limit: "4Gi"
+      replicas: 1
+    grafana:
+      storage: "10Gi"
+      cpu_limit: "500m"
+      memory_limit: "1Gi"
+      replicas: 1
+    alertmanager:
+      storage: "5Gi"
+      replicas: 1
+    resource_multiplier: 0.3
+    high_availability: false
+
+# Notification channels configuration
+notification_channels:
+  email:
+    smtp_host: "smtp.company.com"
+    smtp_port: 587
+    smtp_from: "alerts@splunk-mcp.company.com"
+    smtp_auth_username: "alerts@splunk-mcp.company.com"
+    recipients:
+      critical: "platform-oncall@company.com,leadership@company.com"
+      warning: "platform-team@company.com"
+      info: "monitoring@company.com"
+      
+  slack:
+    webhook_urls:
+      critical: "${SLACK_CRITICAL_WEBHOOK_URL}"
+      warning: "${SLACK_WARNING_WEBHOOK_URL}"
+      info: "${SLACK_INFO_WEBHOOK_URL}"
+      security: "${SLACK_SECURITY_WEBHOOK_URL}"
+    channels:
+      critical: "#platform-alerts-critical"
+      warning: "#platform-alerts-warning"
+      info: "#platform-info"
+      security: "#security-alerts"
+      
+  pagerduty:
+    api_key: "${PAGERDUTY_API_KEY}"
+    service_keys:
+      critical: "${PAGERDUTY_CRITICAL_SERVICE_KEY}"
+      infrastructure: "${PAGERDUTY_INFRA_SERVICE_KEY}"
+      security: "${PAGERDUTY_SECURITY_SERVICE_KEY}"
+      
+  teams:
+    webhook_url: "${TEAMS_WEBHOOK_URL}"
+    channels:
+      general: "Platform Operations"
+      critical: "Critical Alerts"
+
+# Service discovery configuration
+service_discovery:
+  namespaces:
+    - "splunk-mcp-prod"
+    - "splunk-mcp-staging"
+    - "splunk-mcp-dev"
+    - "kube-system"
+    - "ingress-nginx"
+    
+  scrape_configs:
+    core_services:
+      - api-gateway
+      - nlp-engine
+      - visualization
+      - alert-manager
+    integration_services:
+      - slack-bot
+      - teams-bot
+      - email-service
+      - webhook-service
+      - bi-integration
+    export_services:
+      - pdf-export
+      - powerpoint-export
+      - html-report
+      - word-export
+      - csv-export
+      - json-xml-export
+    platform_services:
+      - secure-sharing
+      - report-scheduling
+      - frontend
+    infrastructure:
+      - postgresql
+      - redis
+      - ingress-nginx
+
+# Alert rules configuration
+alert_rules:
+  groups:
+    - name: "infrastructure-critical"
+      rules:
+        - alert: "NodeDown"
+          expr: "up{job=\"kubernetes-nodes\"} == 0"
+          for: "1m"
+          severity: "critical"
+          summary: "Node is down"
+          description: "Node {{$labels.instance}} has been down for more than 1 minute"
+          
+        - alert: "HighCPUUsage"
+          expr: "100 - (avg by (instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100) > 85"
+          for: "10m"
+          severity: "warning"
+          summary: "High CPU usage"
+          description: "CPU usage is above 85% for more than 10 minutes on {{$labels.instance}}"
+          
+        - alert: "HighMemoryUsage"
+          expr: "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90"
+          for: "5m"
+          severity: "critical"
+          summary: "High memory usage"
+          description: "Memory usage is above 90% for more than 5 minutes on {{$labels.instance}}"
+          
+        - alert: "DiskSpaceLow"
+          expr: "(node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 15"
+          for: "5m"
+          severity: "warning"
+          summary: "Disk space running low"
+          description: "Disk space is below 15% on {{$labels.instance}} filesystem {{$labels.mountpoint}}"
+          
+        - alert: "DiskSpaceCritical"
+          expr: "(node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 5"
+          for: "1m"
+          severity: "critical"
+          summary: "Disk space critically low"
+          description: "Disk space is below 5% on {{$labels.instance}} filesystem {{$labels.mountpoint}}"
+
+    - name: "kubernetes-critical"
+      rules:
+        - alert: "PodCrashLooping"
+          expr: "rate(kube_pod_container_status_restarts_total[15m]) > 0"
+          for: "5m"
+          severity: "critical"
+          summary: "Pod is crash looping"
+          description: "Pod {{$labels.pod}} in namespace {{$labels.namespace}} is crash looping"
+          
+        - alert: "PodNotReady"
+          expr: "kube_pod_status_ready{condition=\"false\"} == 1"
+          for: "10m"
+          severity: "warning"
+          summary: "Pod not ready"
+          description: "Pod {{$labels.pod}} in namespace {{$labels.namespace}} has been not ready for more than 10 minutes"
+          
+        - alert: "DeploymentReplicasMismatch"
+          expr: "kube_deployment_spec_replicas != kube_deployment_status_available_replicas"
+          for: "15m"
+          severity: "warning"
+          summary: "Deployment replicas mismatch"
+          description: "Deployment {{$labels.deployment}} in namespace {{$labels.namespace}} has {{$value}} replicas available, expected {{$labels.spec_replicas}}"
+
+    - name: "application-performance"
+      rules:
+        - alert: "HighErrorRate"
+          expr: "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service) > 0.05"
+          for: "5m"
+          severity: "warning"
+          summary: "High error rate"
+          description: "Error rate is above 5% for service {{$labels.service}}"
+          
+        - alert: "HighResponseTime"
+          expr: "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)) > 2"
+          for: "10m"
+          severity: "warning"
+          summary: "High response time"
+          description: "95th percentile response time is above 2 seconds for service {{$labels.service}}"
+          
+        - alert: "ServiceDown"
+          expr: "up{job=~\".*-service\"} == 0"
+          for: "1m"
+          severity: "critical"
+          summary: "Service is down"
+          description: "Service {{$labels.job}} has been down for more than 1 minute"
+
+    - name: "database-alerts"
+      rules:
+        - alert: "PostgreSQLDown"
+          expr: "pg_up == 0"
+          for: "1m"
+          severity: "critical"
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is not responding"
+          
+        - alert: "HighDatabaseConnections"
+          expr: "pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80"
+          for: "5m"
+          severity: "warning"
+          summary: "High database connections"
+          description: "Database connections are above 80% of maximum"
+          
+        - alert: "RedisDown"
+          expr: "redis_up == 0"
+          for: "1m"
+          severity: "critical"
+          summary: "Redis is down"
+          description: "Redis cache server is not responding"
+          
+        - alert: "HighRedisMemoryUsage"
+          expr: "redis_memory_used_bytes / redis_memory_max_bytes * 100 > 90"
+          for: "5m"
+          severity: "warning"
+          summary: "High Redis memory usage"
+          description: "Redis memory usage is above 90%"
+
+    - name: "business-metrics"
+      rules:
+        - alert: "LowUserActivity"
+          expr: "sum(rate(user_sessions_total[1h])) < 10"
+          for: "1h"
+          severity: "info"
+          summary: "Low user activity"
+          description: "User activity is below normal levels"
+          
+        - alert: "HighQueryFailureRate"
+          expr: "sum(rate(splunk_queries_failed_total[5m])) / sum(rate(splunk_queries_total[5m])) > 0.1"
+          for: "10m"
+          severity: "warning"
+          summary: "High query failure rate"
+          description: "Query failure rate is above 10%"
+          
+        - alert: "UserSatisfactionLow"
+          expr: "avg(user_satisfaction_score) < 3.5"
+          for: "30m"
+          severity: "warning"
+          summary: "Low user satisfaction"
+          description: "User satisfaction score is below 3.5"
+
+    - name: "security-alerts"
+      rules:
+        - alert: "HighFailedLoginAttempts"
+          expr: "sum(rate(auth_failures_total[5m])) > 5"
+          for: "5m"
+          severity: "warning"
+          summary: "High failed login attempts"
+          description: "Failed login attempts are above normal threshold"
+          
+        - alert: "SuspiciousActivity"
+          expr: "sum(rate(security_events_total[5m])) > 2"
+          for: "1m"
+          severity: "critical"
+          summary: "Suspicious security activity"
+          description: "Suspicious security activity detected"
+          
+        - alert: "SSLCertificateExpiring"
+          expr: "(probe_ssl_earliest_cert_expiry - time()) / 86400 < 30"
+          for: "1h"
+          severity: "warning"
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate will expire in less than 30 days"
+
+# Dashboard configuration
+dashboards:
+  system_overview:
+    title: "Splunk MCP - System Overview"
+    description: "High-level system health and performance metrics"
+    refresh_interval: "30s"
+    time_range: "1h"
+    tags: ["overview", "system"]
+    
+  application_performance:
+    title: "Splunk MCP - Application Performance"
+    description: "Application-specific performance and health metrics"
+    refresh_interval: "15s"
+    time_range: "1h"
+    tags: ["application", "performance"]
+    
+  business_kpis:
+    title: "Splunk MCP - Business KPIs"
+    description: "Business metrics and key performance indicators"
+    refresh_interval: "1m"
+    time_range: "24h"
+    tags: ["business", "kpi"]
+    
+  security_monitoring:
+    title: "Splunk MCP - Security Monitoring"
+    description: "Security-related metrics and alerts"
+    refresh_interval: "30s"
+    time_range: "1h"
+    tags: ["security", "monitoring"]
+    
+  infrastructure_health:
+    title: "Splunk MCP - Infrastructure Health"
+    description: "Infrastructure and resource utilization metrics"
+    refresh_interval: "30s"
+    time_range: "1h"
+    tags: ["infrastructure", "health"]
+
+# Retention and storage policies
+retention_policies:
+  metrics:
+    short_term: "7d"      # High resolution metrics
+    medium_term: "30d"    # Medium resolution metrics
+    long_term: "1y"       # Low resolution metrics for trends
+  logs:
+    application: "30d"
+    security: "90d"
+    audit: "7y"
+  alerts:
+    active: "30d"
+    resolved: "90d"
+
+# Performance tuning
+performance:
+  prometheus:
+    scrape_interval: "15s"
+    evaluation_interval: "15s"
+    query_timeout: "2m"
+    max_samples_return: 50000000
+    
+  grafana:
+    query_timeout: "60s"
+    max_data_points: 1000
+    
+  recording_rules:
+    - name: "splunk_mcp:request_rate"
+      expr: "sum(rate(http_requests_total[5m])) by (service)"
+      
+    - name: "splunk_mcp:error_rate"
+      expr: "sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service)"
+      
+    - name: "splunk_mcp:response_time_95th"
+      expr: "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))"
+
+# Security configuration
+security:
+  rbac:
+    enable_cluster_admin: false
+    enable_namespace_admin: true
+    enable_read_only: true
+    
+  network_policies:
+    enabled: true
+    default_deny: true
+    allow_monitoring_namespace: true
+    
+  encryption:
+    at_rest: true
+    in_transit: true
+    
+  authentication:
+    type: "oauth2"  # or "basic", "ldap"
+    provider: "grafana"
+    
+  audit_logging:
+    enabled: true
+    retention_days: 90
+
+# Integration settings
+integrations:
+  splunk:
+    enable_metrics_forwarding: true
+    hec_endpoint: "${SPLUNK_HEC_ENDPOINT}"
+    hec_token: "${SPLUNK_HEC_TOKEN}"
+    
+  kubernetes:
+    enable_cluster_monitoring: true
+    enable_node_monitoring: true
+    enable_pod_monitoring: true
+    
+  cloud_providers:
+    aws:
+      enable_cloudwatch_integration: false
+    gcp:
+      enable_stackdriver_integration: false
+    azure:
+      enable_monitor_integration: false
+
+# Backup and disaster recovery
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: "30d"
+  storage:
+    type: "s3"  # or "gcs", "azure"
+    bucket: "splunk-mcp-monitoring-backups"
+    encryption: true

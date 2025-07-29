@@ -1,0 +1,313 @@
+# AlertManager Configuration for Splunk MCP Integration Platform
+# ==============================================================
+
+global:
+  # Global configuration for alert notifications
+  smtp_smarthost: 'smtp.company.com:587'
+  smtp_from: 'alerts@splunk-mcp.company.com'
+  smtp_auth_username: 'alerts@splunk-mcp.company.com'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+# Routing tree for alerts
+route:
+  # Default receiver for all alerts
+  receiver: 'default-notifications'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 24h
+  
+  # Specific routes for different alert types
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+      routes:
+        # Infrastructure critical alerts
+        - match:
+            category: infrastructure
+          receiver: 'infrastructure-critical'
+        # Security critical alerts
+        - match:
+            category: security
+          receiver: 'security-critical'
+        # Kubernetes critical alerts
+        - match:
+            category: kubernetes
+          receiver: 'platform-critical'
+
+    # Warning alerts - regular notification
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 2m
+      group_interval: 10m
+      repeat_interval: 12h
+
+    # Info alerts - summary notification
+    - match:
+        severity: info
+      receiver: 'info-alerts'
+      group_wait: 10m
+      group_interval: 1h
+      repeat_interval: 24h
+
+    # Business metrics - separate channel
+    - match:
+        category: business
+      receiver: 'business-alerts'
+      group_wait: 5m
+      group_interval: 30m
+      repeat_interval: 24h
+
+    # Data quality alerts
+    - match:
+        category: data-quality
+      receiver: 'data-quality-alerts'
+      group_wait: 5m
+      group_interval: 15m
+      repeat_interval: 6h
+
+# Inhibition rules to prevent alert flooding
+inhibit_rules:
+  # If a service is down, don't send high response time alerts
+  - source_match:
+      alertname: ServiceDown
+    target_match:
+      alertname: HighResponseTime
+    equal: ['job', 'instance']
+
+  # If a node is down, don't send pod alerts for that node
+  - source_match:
+      alertname: NodeNotReady
+    target_match_re:
+      alertname: Pod.*
+    equal: ['instance']
+
+  # If database is down, don't send connection alerts
+  - source_match:
+      alertname: DatabaseConnectionFailure
+    target_match:
+      alertname: HighDatabaseConnections
+    equal: ['instance']
+
+# Notification receivers
+receivers:
+  # Default notification channel
+  - name: 'default-notifications'
+    email_configs:
+      - to: 'platform-team@company.com'
+        subject: '[Splunk MCP] Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Severity:** {{ .Labels.severity }}
+          **Category:** {{ .Labels.category }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+
+  # Critical alerts - multiple channels
+  - name: 'critical-alerts'
+    # Email notifications
+    email_configs:
+      - to: 'platform-oncall@company.com'
+        subject: '[CRITICAL] Splunk MCP Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          🚨 **CRITICAL ALERT** 🚨
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Service:** {{ .Labels.job }}
+          **Instance:** {{ .Labels.instance }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          
+          **Action Required:** Immediate investigation and resolution needed.
+          {{ end }}
+
+    # Slack notifications
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#platform-alerts'
+        title: '🚨 Critical Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          **{{ .Annotations.summary }}**
+          {{ .Annotations.description }}
+          *Service:* {{ .Labels.job }} | *Severity:* {{ .Labels.severity }}
+          <{{ .Annotations.runbook_url }}|View Runbook>
+          {{ end }}
+        short_fields: true
+
+    # PagerDuty integration
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+  # Infrastructure critical alerts
+  - name: 'infrastructure-critical'
+    email_configs:
+      - to: 'infrastructure-team@company.com,platform-oncall@company.com'
+        subject: '[INFRA CRITICAL] {{ .GroupLabels.alertname }}'
+        body: |
+          🔥 **INFRASTRUCTURE CRITICAL ALERT** 🔥
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Component:** {{ .Labels.job }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#infrastructure-alerts'
+        title: '🔥 Infrastructure Critical: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          **{{ .Annotations.summary }}**
+          {{ .Annotations.description }}
+          {{ end }}
+
+  # Security critical alerts
+  - name: 'security-critical'
+    email_configs:
+      - to: 'security-team@company.com,platform-oncall@company.com'
+        subject: '[SECURITY CRITICAL] {{ .GroupLabels.alertname }}'
+        body: |
+          🛡️ **SECURITY CRITICAL ALERT** 🛡️
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          
+          **IMMEDIATE ACTION REQUIRED**
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_SECURITY_WEBHOOK_URL}'
+        channel: '#security-alerts'
+        title: '🛡️ Security Critical: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          **{{ .Annotations.summary }}**
+          {{ .Annotations.description }}
+          {{ end }}
+
+  # Platform critical alerts
+  - name: 'platform-critical'
+    email_configs:
+      - to: 'platform-team@company.com'
+        subject: '[PLATFORM CRITICAL] {{ .GroupLabels.alertname }}'
+        body: |
+          ⚠️ **PLATFORM CRITICAL ALERT** ⚠️
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Component:** {{ .Labels.job }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+
+  # Warning alerts
+  - name: 'warning-alerts'
+    email_configs:
+      - to: 'platform-team@company.com'
+        subject: '[WARNING] Splunk MCP: {{ .GroupLabels.alertname }}'
+        body: |
+          ⚠️ **WARNING ALERT** ⚠️
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Service:** {{ .Labels.job }}
+          **Severity:** {{ .Labels.severity }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#platform-warnings'
+        title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ end }}
+
+  # Info alerts
+  - name: 'info-alerts'
+    email_configs:
+      - to: 'platform-team@company.com'
+        subject: '[INFO] Splunk MCP: {{ .GroupLabels.alertname }}'
+        body: |
+          ℹ️ **INFORMATION ALERT** ℹ️
+          
+          {{ range .Alerts }}
+          **Alert:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+
+  # Business alerts
+  - name: 'business-alerts'
+    email_configs:
+      - to: 'business-team@company.com,platform-team@company.com'
+        subject: '[BUSINESS] Splunk MCP Metrics: {{ .GroupLabels.alertname }}'
+        body: |
+          📊 **BUSINESS METRICS ALERT** 📊
+          
+          {{ range .Alerts }}
+          **Metric:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+
+  # Data quality alerts
+  - name: 'data-quality-alerts'
+    email_configs:
+      - to: 'data-team@company.com,platform-team@company.com'
+        subject: '[DATA QUALITY] Splunk MCP: {{ .GroupLabels.alertname }}'
+        body: |
+          📈 **DATA QUALITY ALERT** 📈
+          
+          {{ range .Alerts }}
+          **Issue:** {{ .Annotations.summary }}
+          **Description:** {{ .Annotations.description }}
+          **Source:** {{ .Labels.source }}
+          **Time:** {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+
+# Templates for customizing alert messages
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Time intervals for grouping and throttling
+time_intervals:
+  - name: business-hours
+    time_intervals:
+      - times:
+        - start_time: '09:00'
+          end_time: '17:00'
+        weekdays: ['monday:friday']
+
+  - name: off-hours
+    time_intervals:
+      - times:
+        - start_time: '17:00'
+          end_time: '09:00'
+        weekdays: ['monday:friday']
+      - weekdays: ['saturday', 'sunday']

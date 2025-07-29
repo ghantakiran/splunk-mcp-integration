@@ -1,0 +1,325 @@
+# Prometheus Configuration for Splunk MCP Integration Platform
+# ============================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: 'splunk-mcp-production'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+      timeout: 30s
+      api_version: v2
+
+# Rules files
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Kubernetes API server
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - default
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+  # Kubernetes nodes
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+      - role: node
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+
+  # Kubernetes pods
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - splunk-mcp-prod
+            - monitoring
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+  # Core Services - API Gateway
+  - job_name: 'api-gateway'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: api-gateway
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Core Services - NLP Engine
+  - job_name: 'nlp-engine'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: nlp-engine
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Core Services - Visualization
+  - job_name: 'visualization'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: visualization
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Core Services - Alert Manager
+  - job_name: 'alert-manager'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: alert-manager
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Integration Services
+  - job_name: 'integration-services'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: (slack-bot|teams-bot|email-service|webhook-service|bi-integration)
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Export Services
+  - job_name: 'export-services'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: (pdf-export|powerpoint-export|html-report|word-export|csv-export|json-xml-export)
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Platform Services
+  - job_name: 'platform-services'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: (secure-sharing|report-scheduling)
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Frontend Application
+  - job_name: 'frontend'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: frontend
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # PostgreSQL Database
+  - job_name: 'postgresql'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: postgresql
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Redis Cache
+  - job_name: 'redis'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - splunk-mcp-prod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: redis
+      - source_labels: [__meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: metrics
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Node Exporter
+  - job_name: 'node-exporter'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+            - monitoring
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: node-exporter
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Ingress Controller
+  - job_name: 'ingress-nginx'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - ingress-nginx
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+        action: replace
+        target_label: __scheme__
+        regex: (https?)
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+    scrape_interval: 30s
+
+  # External Services Health Check
+  - job_name: 'external-health'
+    static_configs:
+      - targets:
+        - 'splunk-mcp.your-domain.com:443'
+    metrics_path: /health
+    scheme: https
+    scrape_interval: 60s
+    scrape_timeout: 30s
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 50GB
+    wal-compression: true
