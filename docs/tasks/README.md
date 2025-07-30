@@ -12,6 +12,7 @@ This directory contains the project task breakdown split into logical modules fo
 
 ### Task Management
 - [Task Priorities](./priorities.md) - Priority levels, estimation guidelines, and dependency management
+- [Milestone Tracking](./milestones.md) - Major milestones, deliverables, and success criteria
 - [Progress Tracking](./progress-tracking.md) - Sprint-based tracking methodology and milestone management
 
 ### Specialized Areas
