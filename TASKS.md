@@ -18,12 +18,12 @@ The comprehensive task breakdown has been split into focused modules for better 
 ### Task Management
 - **[Task Priorities](./docs/tasks/priorities.md)** - Priority levels, estimation guidelines, and dependency management
 - **[Milestone Tracking](./docs/tasks/milestones.md)** - Major milestones, deliverables, and success criteria
-- **[Progress Tracking](./docs/tasks/progress.md)** - Current status, completed tasks, and upcoming priorities
+- **[Progress Tracking](./docs/tasks/progress-tracking.md)** - Sprint-based tracking methodology and milestone management
 
 ### Specialized Areas
-- **[Documentation Tasks](./docs/tasks/documentation.md)** - Technical writing, user guides, and training materials
-- **[Testing Tasks](./docs/tasks/testing.md)** - Quality assurance, performance testing, and security validation
-- **[Deployment Tasks](./docs/tasks/deployment.md)** - Infrastructure setup, CI/CD, and production deployment
+- **[Documentation Guidelines](./docs/tasks/documentation-guidelines.md)** - Technical writing, user guides, and training materials
+- **[Testing Strategy](./docs/tasks/testing-strategy.md)** - Quality assurance, performance testing, and security validation
+- **[Deployment Strategy](./docs/tasks/deployment-strategy.md)** - Infrastructure setup, CI/CD, and production deployment
 
 ## Project Overview
 
