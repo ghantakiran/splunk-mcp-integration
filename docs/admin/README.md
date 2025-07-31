@@ -54,7 +54,7 @@ The Splunk MCP Integration Platform consists of:
 
 **Platform Services (3):**
 - Secure Sharing (Port 8016) - Content sharing and permissions
-- Report Scheduling (Port 8015) - Automated report delivery
+- Report Scheduling (Port 8010) - Automated report delivery
 - WebSocket Service - Real-time communication
 
 **Frontend & Infrastructure:**

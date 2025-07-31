@@ -66,7 +66,7 @@ The platform consists of **19 backend microservices** organized into logical gro
 
 **Platform Services:**
 - **Secure Sharing** (Port 8016) - Enterprise sharing with permissions
-- **Report Scheduling** (Port 8015) - Automated report delivery
+- **Report Scheduling** (Port 8010) - Automated report delivery
 - **WebSocket Service** - Real-time communication
 
 **Infrastructure:**

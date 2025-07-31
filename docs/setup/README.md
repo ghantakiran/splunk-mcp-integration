@@ -144,7 +144,7 @@ The platform consists of 21 backend services plus React frontend:
 - JSON/XML Export (8015) - Structured data export
 
 **Platform Services (5):**
-- Report Scheduling (8015) - Automated reports
+- Report Scheduling (8010) - Automated reports
 - Secure Sharing (8016) - Secure file sharing
 - WebSocket Service - Real-time communication
 - Cloud Services - Splunk Cloud integration
