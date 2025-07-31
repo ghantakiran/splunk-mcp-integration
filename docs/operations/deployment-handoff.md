@@ -377,7 +377,7 @@ kubectl get ingress -n splunk-mcp-prod
 - Word Export: 8013
 - CSV Export: 8014
 - JSON/XML Export: 8015
-- Report Scheduling: 8015
+- Report Scheduling: 8010
 - Secure Sharing: 8016
 - Frontend: 3000
 
