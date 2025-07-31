@@ -67,6 +67,8 @@ By project completion, users will be able to:
 
 ## Related Documents
 - [System Architecture](./architecture.md) - Technical architecture and design
-- [Resource Planning](./resources.md) - Team and infrastructure requirements
-- [Risk Management](./risks.md) - Risk assessment and mitigation strategies
-- [Development Methodology](./methodology.md) - Development approach and processes
+- [Task Management](../tasks/README.md) - Task organization, priorities, and milestone tracking
+- [Milestone Tracking](../tasks/milestones.md) - Comprehensive milestone framework and progress tracking
+- [Project Summary](../project/summary.md) - Executive project overview and completion status
+- [Comprehensive Test Report](../../COMPREHENSIVE_TEST_EXECUTION_REPORT.md) - Complete testing validation and coverage
+- [Final Project Handoff](../../FINAL_PROJECT_HANDOFF.md) - Production deployment readiness documentation

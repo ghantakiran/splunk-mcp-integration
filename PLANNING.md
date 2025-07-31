@@ -12,10 +12,10 @@ The comprehensive planning documentation has been split into focused modules for
 ### Core Planning Documents
 - **[Project Vision](./docs/planning/vision.md)** - Executive vision, strategic objectives, and success metrics
 - **[System Architecture](./docs/planning/architecture.md)** - High-level architecture, technology stack, and design patterns
-- **[Development Methodology](./docs/planning/methodology.md)** - Development approach, team structure, and processes
-- **[Resource Planning](./docs/planning/resources.md)** - Team allocation, infrastructure requirements, and timeline
-- **[Risk Management](./docs/planning/risks.md)** - Risk assessment, mitigation strategies, and contingency plans
-- **[Success Metrics](./docs/planning/metrics.md)** - KPIs, measurement strategies, and success criteria
+- **[Task Management](./docs/tasks/README.md)** - Task organization, priorities, and milestone tracking
+- **[Testing Strategy](./docs/tasks/testing-strategy.md)** - Quality assurance and testing framework
+- **[Deployment Strategy](./docs/tasks/deployment-strategy.md)** - Infrastructure and deployment procedures
+- **[Documentation Guidelines](./docs/tasks/documentation-guidelines.md)** - Technical writing and documentation standards
 
 ### Quick Reference Summary
 
@@ -47,8 +47,10 @@ Transform Splunk Enterprise into an intelligent, conversational analytics platfo
 ## Related Documentation
 - [Complete Task Breakdown](./docs/tasks/README.md) - Detailed project tasks by phase
 - [Project Implementation Status](./docs/project/status.md) - Current implementation progress
-- [Service Architecture Overview](./docs/project/services.md) - Microservices architecture details
+- [Project Summary](./docs/project/summary.md) - Executive project overview and completion status
 - [User Documentation](./docs/user/README.md) - End-user guides and tutorials
+- [Comprehensive Test Report](./COMPREHENSIVE_TEST_EXECUTION_REPORT.md) - Complete testing validation and coverage
+- [Final Project Handoff](./FINAL_PROJECT_HANDOFF.md) - Production deployment readiness documentation
 
 ---
 

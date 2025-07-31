@@ -214,6 +214,9 @@
 
 ## Related Documents
 - [Project Vision](./vision.md) - Executive vision and strategic objectives
-- [Development Methodology](./methodology.md) - Development approach and processes
-- [Resource Planning](./resources.md) - Team and infrastructure requirements
-- [Risk Management](./risks.md) - Risk assessment and mitigation strategies
+- [Task Management](../tasks/README.md) - Task organization, priorities, and milestone tracking
+- [Testing Strategy](../tasks/testing-strategy.md) - Quality assurance and testing framework
+- [Deployment Strategy](../tasks/deployment-strategy.md) - Infrastructure and deployment procedures
+- [Project Summary](../project/summary.md) - Executive project overview and completion status
+- [Comprehensive Test Report](../../COMPREHENSIVE_TEST_EXECUTION_REPORT.md) - Complete testing validation and coverage
+- [Final Project Handoff](../../FINAL_PROJECT_HANDOFF.md) - Production deployment readiness documentation
