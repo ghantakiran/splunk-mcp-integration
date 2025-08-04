@@ -40,7 +40,7 @@ By the end of this program, administrators will be able to:
 ### 1.1 System Architecture Overview
 
 #### Microservices Architecture
-The platform consists of **19 backend microservices** organized into logical groups:
+The platform consists of **21 backend microservices** organized into logical groups:
 
 **Core Services:**
 - **API Gateway** (Port 8000) - Main entry point, authentication, rate limiting
